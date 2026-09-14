@@ -1,0 +1,65 @@
+{
+  "schema_version": "triaid.open_validation.v1",
+  "submission_id": "2026-09-14_reproduce_schema-smoke",
+  "track": "REPRODUCE",
+  "title": "Open-validation schema smoke test",
+  "submitter": {
+    "name_or_handle": "TRIAID Research Team",
+    "organization": "",
+    "independent_of_triaid_authors": false,
+    "conflicts_or_relationships": "author-side schema QA only"
+  },
+  "target": {
+    "artifact_name": "TRIAID Paper 1 v1.0.0",
+    "artifact_sha256": "fc84ab5acb5e0ce776560ae293286b8a1a63292087c70b65ed8622c9f8043983",
+    "claim_or_test": "Validation-result schema and validator execute successfully",
+    "frozen_protocol_or_section": "Open Validation Program v1.0"
+  },
+  "design": {
+    "confirmatory": false,
+    "protocol_frozen_before_locked_outcomes": false,
+    "changes_from_canonical_target": [],
+    "outcomes_seen_before_changes": false,
+    "matched_baselines": [],
+    "failure_criteria": []
+  },
+  "environment": {
+    "os": "CI",
+    "hardware": "not material",
+    "python": "3.x",
+    "dependencies": "Python standard library only",
+    "commands": [
+      "python validation/validate_result.py validation/example_result.json"
+    ]
+  },
+  "data": {
+    "source": "none",
+    "public_or_shareable": true,
+    "provenance": "synthetic metadata only",
+    "permissions_or_ethics": "not applicable",
+    "split_or_holdout": "not applicable"
+  },
+  "result": {
+    "verdict": "PASS",
+    "evidence_level": 3,
+    "summary": "Engineering QA of the submission validator only; no scientific claim tested.",
+    "metrics": {
+      "validator_exit_code": 0
+    },
+    "negative_results": [],
+    "deviations": [],
+    "baseline_outcome": "NOT_TESTED"
+  },
+  "claim_impact": {
+    "suggested": "NO_CHANGE",
+    "scope": "engineering QA only",
+    "reason": "Does not test a TRIAID scientific claim."
+  },
+  "artifacts": [],
+  "checksums": {},
+  "declarations": {
+    "no_private_or_unauthorized_data": true,
+    "no_post_outcome_relabeling_as_confirmatory": true,
+    "evidence_level_not_overstated": true
+  }
+}
