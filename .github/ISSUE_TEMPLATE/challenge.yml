@@ -1,0 +1,78 @@
+name: Challenge TRIAID
+description: Submit a counterexample, proof objection, stronger baseline, failure regime, or claim-narrowing result.
+title: "[CHALLENGE] "
+labels: ["open-validation", "challenge"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The challenge track exists to make TRIAID easier to falsify. Stronger baselines and clean failures are first-class results.
+  - type: input
+    id: target
+    attributes:
+      label: Exact target
+      description: Artifact SHA plus theorem/section/script/claim.
+    validations:
+      required: true
+  - type: dropdown
+    id: challenge_type
+    attributes:
+      label: Challenge type
+      multiple: true
+      options:
+        - Mathematical/proof objection
+        - Counterexample
+        - Stronger matched baseline
+        - Reproducibility defect
+        - Finite-sample failure
+        - Claim/evidence overreach
+        - Simpler alternative explanation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: attack
+    attributes:
+      label: Challenge construction
+      description: Explain the attack, assumptions, and why it tests the stated target fairly.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Information/budget matching
+      description: If comparing methods, explain how data, split, state budget, action budget, horizon, and compute were matched.
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Result
+      options: [FAIL, PARTIAL, INCONCLUSIVE, OUT_OF_SCOPE, PASS]
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Reproducible evidence
+      description: Link code, data provenance, logs, result JSON, figures, hashes, or derivations.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Suggested claim impact
+      description: State the narrowest justified impact, e.g. NO_CHANGE, NARROWS_CLAIM, FALSIFIES_COMPONENT, REQUIRES_CORRECTION, NO_INCREMENTAL_VALUE.
+    validations:
+      required: true
+  - type: checkboxes
+    id: declarations
+    attributes:
+      label: Declarations
+      options:
+        - label: I preserved negative and null results relevant to this challenge.
+          required: true
+        - label: I did not weaken a comparator merely to improve TRIAID's relative outcome.
+          required: true
+        - label: I am not submitting private, identifying, or unauthorized data.
+          required: true

@@ -1,0 +1,62 @@
+name: Reproduce a frozen result
+description: Report an independent reproduction or reproducibility failure against an exact frozen TRIAID artifact.
+title: "[REPRODUCE] "
+labels: ["open-validation", "reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for independently checking TRIAID. Negative results are welcome. Bind the report to an exact artifact hash and disclose every deviation from the frozen target.
+  - type: input
+    id: artifact
+    attributes:
+      label: Frozen artifact and SHA-256
+      placeholder: "TRIAID Paper 1 v1.0.0 — fc84ab5a..."
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim or test reproduced
+      description: Identify the theorem, figure, script, CI check, or numerical result.
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Result
+      options: [PASS, FAIL, PARTIAL, INCONCLUSIVE, OUT_OF_SCOPE]
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and exact commands
+      description: OS, hardware, Python, dependency versions, BLAS/toolchain, and commands.
+    validations:
+      required: true
+  - type: textarea
+    id: deviations
+    attributes:
+      label: Deviations from the frozen target
+      description: Write "none" if there were none.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and artifacts
+      description: Link logs, result JSON, patches, checksums, figures, or a fork/commit.
+    validations:
+      required: true
+  - type: checkboxes
+    id: declarations
+    attributes:
+      label: Declarations
+      options:
+        - label: I have not hidden a failed frozen run by changing thresholds or exclusions after seeing its outcome.
+          required: true
+        - label: I am not submitting private, identifying, or unauthorized data.
+          required: true
+        - label: I have stated the evidence scope conservatively.
+          required: true

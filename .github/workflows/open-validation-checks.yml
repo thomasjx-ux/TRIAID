@@ -1,0 +1,36 @@
+name: open-validation-checks
+
+on:
+  push:
+    paths:
+      - "validation/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "OPEN_VALIDATION.md"
+      - "CONTRIBUTING.md"
+  pull_request:
+    paths:
+      - "validation/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "OPEN_VALIDATION.md"
+      - "CONTRIBUTING.md"
+
+jobs:
+  validate-submissions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate example record
+        run: python validation/validate_result.py validation/example_result.json
+      - name: Validate submitted result records
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for f in validation/results/*.json; do
+            python validation/validate_result.py "$f"
+          done

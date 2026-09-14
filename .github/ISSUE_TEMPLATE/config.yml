@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Open Validation Program
+    url: https://github.com/thomasjx-ux/TRIAID/blob/main/OPEN_VALIDATION.md
+    about: Read the validation tracks, evidence ladder, and frozen-protocol rules before submitting.

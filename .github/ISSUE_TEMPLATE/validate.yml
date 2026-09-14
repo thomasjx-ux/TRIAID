@@ -1,0 +1,88 @@
+name: Validate in a new environment or domain
+description: Test a frozen TRIAID question or protocol on new public/sandboxed data, systems, or authorized real environments.
+title: "[VALIDATE] "
+labels: ["open-validation", "external-validation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New domains are fresh membership tests, not proof of universality. Confirmatory results require a protocol frozen before locked outcomes.
+  - type: input
+    id: target
+    attributes:
+      label: TRIAID target being tested
+      description: Exact artifact/protocol and hash where applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Declared response contract
+      description: Observations, interventions/actions, response target, horizon, metric, constraints, and evidence regime.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data/system provenance and authorization
+      description: Source, public/shareable status, permissions, holdout, and leakage controls. Do not include sensitive data.
+    validations:
+      required: true
+  - type: dropdown
+    id: frozen
+    attributes:
+      label: Was the confirmatory protocol frozen before locked outcomes?
+      options:
+        - Yes
+        - No — exploratory only
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: baselines
+    attributes:
+      label: Strongest credible matched baselines
+      description: Describe information/budget matching and failure criteria.
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence_level
+    attributes:
+      label: Claimed evidence level
+      options:
+        - "0 — Conceptual analogy"
+        - "1 — Conditional mathematical result"
+        - "2 — Constructed/same-generator synthetic"
+        - "3 — Independent synthetic/engineering QA"
+        - "4 — Reconstructed external trajectory"
+        - "5 — Recovered real artifact"
+        - "6 — Prospective raw/lightly-redacted real trajectory"
+        - "7 — Prospective intervention with verified actuation and recovery"
+        - "8 — Independent replication"
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Result
+      options: [PASS, FAIL, PARTIAL, INCONCLUSIVE, OUT_OF_SCOPE]
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifacts and exact results
+      description: Link protocol, code, logs, structured result JSON, figures, and hashes.
+    validations:
+      required: true
+  - type: checkboxes
+    id: declarations
+    attributes:
+      label: Declarations
+      options:
+        - label: I will not describe this result using a stronger evidence class than the design supports.
+          required: true
+        - label: I am authorized to use the submitted data/system and am not publishing sensitive or identifying material.
+          required: true
+        - label: If the result is confirmatory, I did not change the frozen protocol after inspecting locked outcomes.
+          required: true

@@ -1,0 +1,61 @@
+{
+  "schema_version": "triaid.open_validation.v1",
+  "submission_id": "YYYY-MM-DD_track_short-name",
+  "track": "REPRODUCE",
+  "title": "Short descriptive title",
+  "submitter": {
+    "name_or_handle": "",
+    "organization": "",
+    "independent_of_triaid_authors": true,
+    "conflicts_or_relationships": "none declared"
+  },
+  "target": {
+    "artifact_name": "TRIAID Paper 1 v1.0.0",
+    "artifact_sha256": "fc84ab5acb5e0ce776560ae293286b8a1a63292087c70b65ed8622c9f8043983",
+    "claim_or_test": "",
+    "frozen_protocol_or_section": ""
+  },
+  "design": {
+    "confirmatory": true,
+    "protocol_frozen_before_locked_outcomes": true,
+    "changes_from_canonical_target": [],
+    "outcomes_seen_before_changes": false,
+    "matched_baselines": [],
+    "failure_criteria": []
+  },
+  "environment": {
+    "os": "",
+    "hardware": "",
+    "python": "",
+    "dependencies": "",
+    "commands": []
+  },
+  "data": {
+    "source": "",
+    "public_or_shareable": true,
+    "provenance": "",
+    "permissions_or_ethics": "not applicable",
+    "split_or_holdout": ""
+  },
+  "result": {
+    "verdict": "INCONCLUSIVE",
+    "evidence_level": 0,
+    "summary": "",
+    "metrics": {},
+    "negative_results": [],
+    "deviations": [],
+    "baseline_outcome": "NOT_TESTED"
+  },
+  "claim_impact": {
+    "suggested": "NO_CHANGE",
+    "scope": "",
+    "reason": ""
+  },
+  "artifacts": [],
+  "checksums": {},
+  "declarations": {
+    "no_private_or_unauthorized_data": true,
+    "no_post_outcome_relabeling_as_confirmatory": true,
+    "evidence_level_not_overstated": true
+  }
+}
