@@ -1,0 +1,22 @@
+{
+  "schema": "triaid.c7.external_result.v0.1",
+  "decision": "",
+  "replicator": {"team": "", "contact_or_public_id": "", "independent_of_triaid_team": null},
+  "implementation": {"language": "", "runtime_version": "", "source_sha256": "", "notes": ""},
+  "overall": {
+    "triaid": {"safe_recovery": null, "unsafe": null, "premature": null, "cost": null, "collateral": null, "utility": null},
+    "static": {"safe_recovery": null, "unsafe": null, "premature": null, "cost": null, "collateral": null, "utility": null},
+    "graph": {"safe_recovery": null, "unsafe": null, "premature": null, "cost": null, "collateral": null, "utility": null},
+    "no_prop": {"safe_recovery": null, "unsafe": null, "premature": null, "cost": null, "collateral": null, "utility": null},
+    "generic_mpc": {"safe_recovery": null, "unsafe": null, "premature": null, "cost": null, "collateral": null, "utility": null}
+  },
+  "paired_safe_recovery_differences": {
+    "static": {"mean": null}, "graph": {"mean": null}, "no_prop": {"mean": null}, "generic_mpc": {"mean": null}
+  },
+  "family": {},
+  "gates": {
+    "G1_safety": null, "G2_static_sep": null, "G3_graph_sep": null, "G4_prop_necessity": null,
+    "G5_mpc_tie": null, "G6_common_mode": null, "G7_actuation_verify": null, "G8_recovery_cert": null,
+    "G9_stale_restraint": null, "G10_accounting": null
+  }
+}
