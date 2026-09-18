@@ -1,0 +1,29 @@
+{
+  "claim": "After domain-local recalibration in the frozen constructed supply-chain environment, the decision-interface structure containing propagation/context, certifiability/selective action, verified actuation, re-observation, and recovery certification survives against simpler controls and propagation ablation, while not claiming superiority over a strong generic MPC planner.",
+  "closure_rule": {
+    "external_reproduction": "An external team runs author artifacts and reproduces the frozen metrics/gates. This is valuable but does not by itself close strict C7.",
+    "independent_replication": "An external team uses an independently written implementation from the frozen specification and case banks, reports code hash and environment, and reproduces all controlling gate decisions without author interpretation. This closes constructed-level C7 replication if no material author code is reused."
+  },
+  "controlling_gates": {
+    "G10_accounting": "cost and collateral present for every policy-episode",
+    "G1_safety": "triaid unsafe <= 0.05",
+    "G2_static_sep": "triaid safe_recovery - static >= 0.20",
+    "G3_graph_sep": "triaid safe_recovery - graph >= 0.08",
+    "G4_prop_necessity": "triaid safe_recovery - no_prop >= 0.08",
+    "G5_mpc_tie": "abs(triaid safe_recovery - generic_mpc) <= 0.04",
+    "G6_common_mode": "common_mode triaid safe_recovery - no_prop >= 0.25",
+    "G7_actuation_verify": "actuation_mismatch triaid unsafe <=0.05 and graph unsafe - triaid unsafe >=0.15",
+    "G8_recovery_cert": "recovery_mismatch graph premature - triaid premature >=0.30",
+    "G9_stale_restraint": "stale_info triaid unsafe <= graph unsafe"
+  },
+  "not_claimed": [
+    "real supply-chain efficacy",
+    "zero-calibration transfer",
+    "TRIAID planner superiority",
+    "proprietary MPC novelty"
+  ],
+  "parent_confirmatory_seed": 1416852663,
+  "parent_protocol_sha256": "547374b7f3361283bc74b0c8689034c61cd0524dcc33f2a8320ea65529e600d2",
+  "schema": "triaid.c7.replication_contract.v0.1",
+  "stage": "C7 independent replication preparation"
+}
