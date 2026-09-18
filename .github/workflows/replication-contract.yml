@@ -1,0 +1,42 @@
+name: TRIAID Replication Contract CI
+
+on:
+  push:
+    paths:
+      - "replication/**"
+      - ".github/workflows/replication-contract.yml"
+  pull_request:
+    paths:
+      - "replication/**"
+      - ".github/workflows/replication-contract.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate replication contract files
+        run: |
+          python -m py_compile replication/VERIFY_EXTERNAL_RESULT_001.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          required=[
+            "replication/README.md",
+            "replication/FROZEN_CLAIM_001.json",
+            "replication/INDEPENDENT_IMPLEMENTATION_SPEC_001.md",
+            "replication/EXTERNAL_RESULT_TEMPLATE_001.json",
+            "replication/EXTERNAL_REPLICATION_REPORT_TEMPLATE_001.md",
+            "replication/VERIFY_EXTERNAL_RESULT_001.py",
+          ]
+          missing=[p for p in required if not Path(p).is_file()]
+          assert not missing, missing
+          claim=json.load(open("replication/FROZEN_CLAIM_001.json"))
+          template=json.load(open("replication/EXTERNAL_RESULT_TEMPLATE_001.json"))
+          assert claim
+          assert template
+          print("REPLICATION_CONTRACT_STATIC_PASS")
+          PY
