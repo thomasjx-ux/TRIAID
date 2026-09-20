@@ -58,6 +58,8 @@ assert health["ok"] is True
 assert health["storage_backend"]=="supabase"
 assert health["storage_durability"]=="PERSISTENT"
 assert health["storage_persistence_confirmed"] is True
+assert health["decision_automation_enabled"] is True
+assert health["broker_execution_enabled"] is False
 
 openapi=call("GET","/openapi.json")
 paths=set(openapi.get("paths") or {})
@@ -84,6 +86,8 @@ expected_paths={
     "/api/market-data/transitions",
     "/api/market-data/snapshot/{market_id}/{mode}",
     "/api/market-data/refresh/{market_id}/{mode}",
+    "/api/decision-scheduler/status",
+    "/api/decision-scheduler/events",
 }
 missing=sorted(expected_paths-paths)
 assert not missing,f"missing OpenAPI paths: {missing}"
@@ -126,6 +130,13 @@ assert evo.get("active_version")
 
 md=call("GET","/api/market-data/status")
 assert md["automation_enabled"] is False  # temporary smoke server only
+assert md["decision_scheduler"]["enabled"] is True
+assert md["decision_scheduler"]["broker_execution_enabled"] is False
+decision_status=call("GET","/api/decision-scheduler/status")
+assert decision_status["enabled"] is True
+assert decision_status["broker_execution_enabled"] is False
+decision_events=call("GET","/api/decision-scheduler/events?limit=5")
+assert isinstance(decision_events,list)
 caps=call("GET","/api/market-data/capabilities")
 assert caps["US"]["DAILY"]["supported"] is True
 assert caps["CN"]["DAILY"]["supported"] is True
