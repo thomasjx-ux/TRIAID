@@ -273,6 +273,16 @@ class EvolutionLabEngine:
 
         market=reference.market.model_copy(deep=True)
         source_ts=transition.get("source_latest_ts")
+        mean_return=float(transition.get("mean_return") or 0.0)
+        advancers=int(transition.get("advancers") or 0)
+        decliners=int(transition.get("decliners") or 0)
+        if mean_return<0 and decliners>advancers:
+            transition_regime="intraday_risk_off"
+        elif mean_return>0 and advancers>decliners:
+            transition_regime="intraday_risk_on"
+        else:
+            transition_regime="intraday_mixed"
+        market.regime=transition_regime
         market.snapshot_id=f"{market_id}:{mode.upper()}:TRANSITION:{source_ts}"
         market.as_of=str(source_ts)
         market.metadata=dict(market.metadata or {})
@@ -281,6 +291,8 @@ class EvolutionLabEngine:
             "decision_trigger":"STATE_TRANSITION",
             "transition_mode":mode.upper(),
             "transition_source_latest_ts":source_ts,
+            "transition_regime":transition_regime,
+            "intraday_policy":"RISK_REDUCTION_ALLOWED_RISK_INCREASE_REQUIRES_DAILY_EVIDENCE",
             "transition_features":{
                 "mean_return":transition.get("mean_return"),
                 "mean_abs_return":transition.get("mean_abs_return"),
@@ -308,6 +320,7 @@ class EvolutionLabEngine:
             "source_latest_ts":source_ts,
             "reference_run_id":reference.run_id,
             "core_version":decision.core_version,
+            "transition_regime":transition_regime,
             "weights_before":decision.weights_before,
             "weights_after":decision.weights_after,
             "weight_change_l1_vs_reference":l1,
