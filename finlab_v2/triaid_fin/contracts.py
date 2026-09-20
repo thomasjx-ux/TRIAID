@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -52,7 +52,7 @@ class MarketSnapshot(BaseModel):
     as_of: str
     snapshot_id: str
     regime: Optional[str] = None
-    metadata: Dict[str, float | int | str | bool | None] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RunRequest(BaseModel):
@@ -82,6 +82,7 @@ class TriaidDecision(BaseModel):
     weights_before: Dict[str, float]
     weights_after: Dict[str, float]
     reasons: Dict[str, BilingualText]
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class EvaluationResult(BaseModel):
@@ -90,6 +91,9 @@ class EvaluationResult(BaseModel):
     triaid_return: Optional[float] = None
     excess_return: Optional[float] = None
     trading_cost: float = 0.0
+    strategy_realized_returns: Dict[str, float] = Field(default_factory=dict)
+    baseline_contributions: Dict[str, float] = Field(default_factory=dict)
+    triaid_contributions: Dict[str, float] = Field(default_factory=dict)
 
 
 class AuditReceipt(BaseModel):
@@ -103,13 +107,18 @@ class RunRecord(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     status: Literal[
         "CREATED",
+        "FETCHING_DATA",
         "DECISION_READY_AWAITING_OUTCOME",
         "VERIFIED",
+        "NO_NEW_DATA",
         "FAILED",
     ] = "CREATED"
     module_manifest: Dict[str, str]
     market: MarketSnapshot
+    strategy_states: List[StrategyState] = Field(default_factory=list)
     strategy_group: Optional[StrategyGroup] = None
     triaid_decision: Optional[TriaidDecision] = None
     evaluation: Optional[EvaluationResult] = None
     audit: Optional[AuditReceipt] = None
+    previous_run_id: Optional[str] = None
+    diagnostic_summary: Dict[str, Any] = Field(default_factory=dict)
