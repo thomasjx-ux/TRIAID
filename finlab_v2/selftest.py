@@ -25,10 +25,13 @@ def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",rec
 try:
     engine=EvolutionLabEngine()
 
-    assert engine.status()["strategy_registry_count"]==29
-    zh=engine.strategy_population.strategy_cards("zh")
-    en=engine.strategy_population.strategy_cards("en")
+    assert engine.status()["strategy_registry_count"]==33
+    zh=engine.strategy_population.strategy_cards("zh","US")
+    en=engine.strategy_population.strategy_cards("en","US")
+    cn=engine.strategy_population.strategy_cards("zh","CN")
     assert len(zh)==29 and len(en)==29
+    assert len(cn)==33
+    assert {x["strategy_id"] for x in cn if x["strategy_id"].startswith("C")}=={"C29_SIZE_REL20","C30_SIZE_REL63","C32_VOL_BREAKOUT20","C36_BREADTH_ACCEL"}
     assert zh[0]["name"]!=en[0]["name"]
 
     request=RunRequest(
@@ -103,6 +106,13 @@ try:
     assert reloaded.evolution_status()["active_version"]==candidate
     assert before!=candidate
 
+    incubator=state("C29_SIZE_REL20",0.20,0.20,0.03)
+    incubator.metrics["latest_return"]=0.01
+    tracked=reloaded.population_state.apply("CN",[incubator])[0]
+    assert tracked.lifecycle=="shadow"
+    assert tracked.metrics["shadow_live_days"]==1.0
+    assert tracked.shadow_evidence_pass is False
+
     hard_failure=state("P04_TREND50",0.2)
     hard_failure.hard_failure=True
     assert reloaded.strategy_population.recommend_lifecycle(hard_failure,"US")=="frozen"
@@ -127,6 +137,6 @@ try:
 
     print("TRIAID_FIN_V2_SELFTEST_PASS")
     print(reloaded.module_manifest)
-    print({"strategy_registry_count":reloaded.status()["strategy_registry_count"],"active_core":reloaded.evolution_status()["active_version"]})
+    print({"strategy_registry_count":reloaded.status()["strategy_registry_count"],"us_strategy_count":len(reloaded.strategy_population.strategy_cards("zh","US")),"cn_strategy_count":len(reloaded.strategy_population.strategy_cards("zh","CN")),"active_core":reloaded.evolution_status()["active_version"]})
 finally:
     shutil.rmtree(tmp,ignore_errors=True)
