@@ -194,13 +194,13 @@ def make_profile():
     )
 
 
-def simulate(panel,history,start,end):
+def simulate(panel,history,start,end,state_cache,allowed_ids):
     selector=StrategyPopulationModule();selector.configure_market(make_profile())
     prev=None;returns=[];cash_days=0
     for t in range(start,end):
-        states=states_at(history,t)
+        states=[s for s in state_cache[t] if s.strategy_id in allowed_ids]
         group=selector.select("CN",states,12,previous_group=prev,base_cost_bps=panel.spec.base_cost_bps)
-        realized={pid:history[pid][t+1] for pid in history}
+        realized={pid:history[pid][t+1] for pid in allowed_ids}
         turnover=sum(abs(group.weights.get(k,0)-((prev.weights if prev else {}).get(k,0))) for k in set(group.weights)|set(prev.weights if prev else {}))
         gross=sum(w*realized.get(k,0) for k,w in group.weights.items())
         returns.append(gross-turnover*panel.spec.base_cost_bps/10000)
@@ -222,6 +222,9 @@ cand=candidate_history(panel)
 start=max(300,len(panel.ts)-504)
 end=len(panel.ts)-1
 split=start+int((end-start)*0.70)
+all_history=dict(base);all_history.update(cand)
+all_ids=set(all_history)
+state_cache={t:states_at(all_history,t) for t in range(start,end)}
 
 # Candidate standalone / novelty diagnostics are computed only on development data.
 candidate_diag={}
@@ -236,15 +239,16 @@ for pid in CANDIDATES:
 # Greedy universe expansion using development only.
 selected=[]
 current=dict(base)
-current_dev,_=simulate(panel,current,start,split)
+current_ids=set(base)
+current_dev,_=simulate(panel,all_history,start,split,state_cache,current_ids)
 current_score=metrics(current_dev)["annualized_return"]
 steps=[]
 remaining=list(CANDIDATES)
 while remaining:
     trials=[]
     for pid in remaining:
-        h=dict(current);h[pid]=cand[pid]
-        rs,_=simulate(panel,h,start,split)
+        trial_ids=set(current_ids)|{pid}
+        rs,_=simulate(panel,all_history,start,split,state_cache,trial_ids)
         trials.append((metrics(rs)["annualized_return"],pid))
     best_score,best_pid=max(trials)
     improvement=best_score-current_score
@@ -252,14 +256,16 @@ while remaining:
         break
     selected.append(best_pid);remaining.remove(best_pid)
     current[best_pid]=cand[best_pid]
+    current_ids.add(best_pid)
     steps.append({"strategy":best_pid,"development_ann_return":best_score,"improvement":improvement})
     current_score=best_score
 
 # Freeze selection, then touch holdout once.
-base_dev,base_dev_cash=simulate(panel,base,start,split)
-expanded_dev,expanded_dev_cash=simulate(panel,current,start,split)
-base_hold,base_hold_cash=simulate(panel,base,split,end)
-expanded_hold,expanded_hold_cash=simulate(panel,current,split,end)
+base_ids=set(base)
+base_dev,base_dev_cash=simulate(panel,all_history,start,split,state_cache,base_ids)
+expanded_dev,expanded_dev_cash=simulate(panel,all_history,start,split,state_cache,current_ids)
+base_hold,base_hold_cash=simulate(panel,all_history,split,end,state_cache,base_ids)
+expanded_hold,expanded_hold_cash=simulate(panel,all_history,split,end,state_cache,current_ids)
 
 report={
     "market":"CN",
