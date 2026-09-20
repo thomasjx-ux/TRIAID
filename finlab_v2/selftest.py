@@ -31,7 +31,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.4"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.5"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -118,7 +118,11 @@ try:
     providers=engine.market_data_provider_status()
     storage=engine.store.status()
     assert storage["backend"]["backend"]=="file"
+    assert storage["backend"]["version"]=="file-storage-backend@0.2.0"
     assert storage["durability"] in {"EPHEMERAL","PERSISTENT"}
+    assert storage["backend"]["volume"]["expected_mount"]=="/data"
+    assert storage["backend"]["volume"]["expected_mount_is_mounted"] is False
+    assert storage["backend"]["persistence_probe"]["confirmed_across_deployments"] is False
     assert providers["registry"]["version"]=="provider-registry@0.2.0"
     assert providers["registry"]["routes"]["US:DAILY"]=="research_bars"
     assert providers["registry"]["routes"]["US:QUOTE_L1"]=="us_l1_quotes"
