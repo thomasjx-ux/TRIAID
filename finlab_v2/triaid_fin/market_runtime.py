@@ -19,9 +19,9 @@ class MarketDataAutomation:
         self.last_phase:dict[str,str]={}
         self.frequency_policy=FrequencyPolicy(engine.store)
 
-    def refresh_plan(self,market_id:str)->dict[str,int]:
+    def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
-        phase=session_phase(market)
+        phase=phase.upper()
         if phase=="OPEN":
             return {
                 "INTRADAY":self.frequency_policy.interval(market,"INTRADAY"),
@@ -43,6 +43,10 @@ class MarketDataAutomation:
         if phase=="POSTCLOSE":
             return {"DAILY":self.frequency_policy.interval(market,"DAILY")}
         return {"DAILY":max(3600,self.frequency_policy.interval(market,"DAILY"))}
+
+    def refresh_plan(self,market_id:str)->dict[str,int]:
+        market=market_id.upper()
+        return self.refresh_plan_for_phase(market,session_phase(market))
 
     async def run(self)->None:
         while True:
