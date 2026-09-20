@@ -14,7 +14,8 @@ from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.frequency_policy import FrequencyPolicy
 from triaid_fin.market_data import session_phase
 from triaid_fin.market_runtime import MarketDataAutomation
-from triaid_fin.trading_calendar import trading_day_info, official_session_phase, calendar_status
+from triaid_fin.trading_calendar import trading_day_info, official_session_phase, calendar_status, install_synced_calendar
+from triaid_fin.trading_calendar_sync import parse_nyse_calendar, parse_cn_notice
 
 
 def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",recent=None):
@@ -34,7 +35,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.8.1"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.8.2"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -84,9 +85,64 @@ try:
         datetime(2027,1,4,10,0,tzinfo=ZoneInfo("Asia/Shanghai")),
     )=="CALENDAR_UNAVAILABLE"
     cal=calendar_status()
-    assert cal["version"]=="official-trading-calendar@0.1.0"
+    assert cal["version"]=="official-trading-calendar@0.2.0"
     assert cal["markets"]["US"]["coverage_years"]==[2026,2027,2028]
     assert cal["markets"]["CN"]["coverage_years"]==[2026]
+
+    nyse_fixture="""
+    <table>
+      <tr><th>Holiday</th><th>2026</th><th>2027</th><th>2028</th></tr>
+      <tr><td>New Year’s Day</td><td>Thursday, January 1</td><td>Friday, January 1</td><td>—</td></tr>
+      <tr><td>Martin Luther King, Jr. Day</td><td>Monday, January 19</td><td>Monday, January 18</td><td>Monday, January 17</td></tr>
+      <tr><td>Washington's Birthday</td><td>Monday, February 16</td><td>Monday, February 15</td><td>Monday, February 21</td></tr>
+      <tr><td>Good Friday</td><td>Friday, April 3</td><td>Friday, March 26</td><td>Friday, April 14</td></tr>
+      <tr><td>Memorial Day</td><td>Monday, May 25</td><td>Monday, May 31</td><td>Monday, May 29</td></tr>
+      <tr><td>Juneteenth</td><td>Friday, June 19</td><td>Friday, June 18</td><td>Monday, June 19</td></tr>
+      <tr><td>Independence Day</td><td>Friday, July 3</td><td>Monday, July 5</td><td>Tuesday, July 4</td></tr>
+      <tr><td>Labor Day</td><td>Monday, September 7</td><td>Monday, September 6</td><td>Monday, September 4</td></tr>
+      <tr><td>Thanksgiving Day</td><td>Thursday, November 26</td><td>Thursday, November 25</td><td>Thursday, November 23</td></tr>
+      <tr><td>Christmas Day</td><td>Friday, December 25</td><td>Friday, December 24</td><td>Monday, December 25</td></tr>
+    </table>
+    Each market will close early at 1:00 p.m. on Friday, November 27, 2026.
+    """
+    nyse_parsed=parse_nyse_calendar(nyse_fixture)
+    assert len(nyse_parsed[2026]["closed"])==10
+    assert nyse_parsed[2026]["early_close"]["2026-11-27"]=="13:00"
+
+    cn_fixture="""
+    <h1>关于2027年部分节假日休市安排的通知</h1>
+    元旦：1月1日至1月3日休市。
+    春节：2月5日至2月13日休市。
+    清明节：4月3日至4月5日休市。
+    劳动节：5月1日至5月5日休市。
+    端午节：6月9日至6月11日休市。
+    中秋节：9月15日至9月17日休市。
+    国庆节：10月1日至10月7日休市。
+    """
+    cn_parsed=parse_cn_notice(cn_fixture,2027)
+    assert datetime(2027,10,1).date() in cn_parsed
+    assert len(cn_parsed)>=30
+
+    install_synced_calendar({
+        "version":"official-trading-calendar-sync@selftest",
+        "markets":{
+            "CN":{
+                "years":{
+                    "2027":{
+                        "validated":True,
+                        "validated_at":"2026-12-20T00:00:00+00:00",
+                        "validation":"SELFTEST_DUAL_OFFICIAL_MATCH",
+                        "closed":[d.isoformat() for d in sorted(cn_parsed)],
+                        "early_close":{},
+                        "sources":[{"name":"SSE"},{"name":"SZSE"}],
+                    }
+                }
+            }
+        }
+    })
+    assert trading_day_info("CN","2027-10-01")["calendar_origin"]=="SYNCED_OFFICIAL"
+    assert trading_day_info("CN","2027-10-01")["is_trading_day"] is False
+    install_synced_calendar({})
     assert runtime.refresh_plan_for_phase("CN","PREOPEN")=={"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","OPEN")=={"INTRADAY":300,"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","BREAK")=={"REALTIME":300}
