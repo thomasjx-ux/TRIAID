@@ -186,6 +186,15 @@ class FileStorageBackend:
                 for path in sorted(base.glob(pattern))
             ]
 
+    def list_texts(self,prefix:str,suffix:str="")->dict[str,str]:
+        out={}
+        for name in self.list_names(prefix,suffix):
+            try:
+                out[name]=self.read_text(name)
+            except Exception:
+                continue
+        return out
+
     def list_files(self,prefix:str,suffix:str="")->list[Path]:
         return [self.root/name for name in self.list_names(prefix,suffix)]
 
@@ -293,6 +302,19 @@ class SupabaseStorageBackend:
             "suffix":suffix,
         })
         return [str(x) for x in (result.get("keys") or [])]
+
+    def list_texts(self,prefix:str,suffix:str="")->dict[str,str]:
+        result=self._call({
+            "action":"read_objects",
+            "prefix":prefix,
+            "suffix":suffix,
+        })
+        objects=result.get("objects") or []
+        return {
+            str(row.get("key")):str(row.get("content") or "")
+            for row in objects
+            if isinstance(row,dict) and row.get("key")
+        }
 
     def status(self)->dict:
         return {
