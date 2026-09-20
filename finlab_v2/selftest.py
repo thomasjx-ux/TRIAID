@@ -122,10 +122,10 @@ try:
     assert providers["registry"]["version"]=="provider-registry@0.2.0"
     assert providers["registry"]["routes"]["US:DAILY"]=="research_bars"
     assert providers["registry"]["routes"]["US:QUOTE_L1"]=="us_l1_quotes"
-    assert providers["registry"]["chains"]["US:DAILY"]==["research_bars","eastmoney_backup"]
-    assert providers["registry"]["chains"]["US:INTRADAY"]==["research_bars","eastmoney_backup"]
-    assert providers["registry"]["chains"]["CN:DAILY"]==["research_bars","eastmoney_backup"]
-    assert providers["registry"]["chains"]["CN:REALTIME"]==["research_bars","eastmoney_backup"]
+    assert providers["registry"]["chains"]["US:DAILY"]==["research_bars","sina_us_backup"]
+    assert providers["registry"]["chains"]["US:INTRADAY"]==["research_bars","sina_us_backup"]
+    assert providers["registry"]["chains"]["CN:DAILY"]==["research_bars","tencent_cn_backup"]
+    assert providers["registry"]["chains"]["CN:REALTIME"]==["research_bars","tencent_cn_backup"]
     assert providers["registry"]["chains"]["US:PREOPEN"]==["research_bars"]
     assert products["US"]["BAR_DAILY"]["available"] is True
     assert products["US"]["BAR_INTRADAY"]["available"] is True
