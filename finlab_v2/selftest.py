@@ -56,8 +56,9 @@ try:
     assert decision.audit and decision.audit.passed
     assert decision.strategy_group
     assert "P16_REV5" not in decision.strategy_group.members
-    assert not ({"P00_BUY_HOLD","P09_SHOCK_GUARD"} <= set(decision.strategy_group.members))
     assert decision.strategy_group.diagnostics["optimizer"]=="marginal-group-value-v1"
+    assert engine.strategy_population.config_for("US").redundancy_penalty==0.0
+    assert engine.strategy_population.config_for("US").near_duplicate_corr>1.0
     assert all(w>=0 for w in decision.strategy_group.weights.values())
     assert sum(decision.strategy_group.weights.values())<=1.0000001
     assert max(decision.strategy_group.weights.values())<=1.0000001
