@@ -44,6 +44,7 @@ class StrategyState(BaseModel):
     horizon_multiples: float = 0.0
     independent_decisions: int = 0
     metrics: Dict[str, float] = Field(default_factory=dict)
+    recent_returns: List[float] = Field(default_factory=list)
     selection_reason: Optional[BilingualText] = None
 
 
@@ -74,6 +75,7 @@ class StrategyGroup(BaseModel):
     members: List[str]
     weights: Dict[str, float]
     reasons: Dict[str, BilingualText]
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TriaidDecision(BaseModel):
