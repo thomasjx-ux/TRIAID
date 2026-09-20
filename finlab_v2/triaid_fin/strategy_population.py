@@ -73,7 +73,7 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.1"
+    version = "strategy-population@0.5.2"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -128,9 +128,12 @@ class StrategyPopulationModule:
     def definition(self, strategy_id: str) -> StrategyDefinition | None:
         return self._registry.get(strategy_id)
 
-    def strategy_cards(self, lang: str = "zh") -> List[dict]:
+    def strategy_cards(self, lang: str = "zh", market_id: str | None = None) -> List[dict]:
         cards = []
+        market_key=market_id.upper() if market_id else None
         for item in self.definitions():
+            if market_key and market_key not in {m.upper() for m in item.market_support}:
+                continue
             cards.append(
                 {
                     "strategy_id": item.strategy_id,
