@@ -55,26 +55,31 @@ def make_profiles(market):
         ("balanced",(0.25,0.25,0.25,0.25)),
         ("long",(0.20,0.25,0.25,0.30)),
     ]
+    plan=[
+        ("default",8),("default",10),("default",12),
+        ("short",10),("short",12),
+        ("balanced",10),("balanced",12),
+        ("long",12),
+    ]
+    by_label=dict(weight_sets)
     profiles=[]
-    for label,weights in weight_sets:
-        for size in (8,10,12):
-            for uncertainty in (0.0,0.25):
-                profiles.append(StrategyRuleProfile(
-                    version=f"CAL-{market}-{label}-{size}-u{uncertainty}",
-                    market_id=market,
-                    window_weights=weights,
-                    max_group_size=size,
-                    max_weight=0.28,
-                    entry_confirm_days=entry,
-                    exit_confirm_days=exit_,
-                    cooldown_days=cooldown,
-                    near_duplicate_corr=1.01,
-                    family_cap=12,
-                    redundancy_penalty=0.0,
-                    uncertainty_penalty=uncertainty,
-                    switch_hurdle_bps=0.0,
-                    switch_uncertainty_fraction=0.0,
-                ))
+    for label,size in plan:
+        profiles.append(StrategyRuleProfile(
+            version=f"CAL-{market}-{label}-{size}",
+            market_id=market,
+            window_weights=by_label[label],
+            max_group_size=size,
+            max_weight=0.28,
+            entry_confirm_days=entry,
+            exit_confirm_days=exit_,
+            cooldown_days=cooldown,
+            near_duplicate_corr=1.01,
+            family_cap=12,
+            redundancy_penalty=0.0,
+            uncertainty_penalty=0.0,
+            switch_hurdle_bps=0.0,
+            switch_uncertainty_fraction=0.0,
+        ))
     return profiles
 
 
