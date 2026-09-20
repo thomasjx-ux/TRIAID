@@ -144,6 +144,22 @@ def market_data_capabilities(market_id:str|None=None)->dict:
     return get_market_data_hub().capabilities(market_id)
 
 
+def market_data_product_capabilities(market_id:str|None=None)->dict:
+    return get_market_data_hub().product_capabilities(market_id)
+
+
+def market_data_provider_status()->dict:
+    return get_market_data_hub().provider_status()
+
+
+def market_data_latest_quotes(market_id:str,symbols:list[str]|tuple[str,...])->dict:
+    return get_market_data_hub().latest_quotes(market_id,symbols)
+
+
+def market_data_instrument_series(market_id:str,symbol:str,mode:str="DAILY")->dict:
+    return get_market_data_hub().instrument_series(market_id,symbol,mode)
+
+
 
 def _ret(xs:list[float])->list[float]:
     out=[0.0]*len(xs)
