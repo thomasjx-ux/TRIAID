@@ -157,7 +157,7 @@ assert calendar["version"]=="official-trading-calendar@0.2.0"
 assert calendar["markets"]["US"]["coverage_years"]==[2026,2027,2028]
 assert calendar["markets"]["CN"]["coverage_years"]==[2026]
 calendar_sync=call("GET","/api/market-data/trading-calendar-sync")
-assert calendar_sync["version"]=="official-trading-calendar-sync@0.1.0"
+assert calendar_sync["version"]=="official-trading-calendar-sync@0.1.1"
 assert calendar_sync["policy"].startswith("OFFICIAL_ONLY")
 
 us_closed=call("GET","/api/market-data/trading-calendar/US?date=2026-07-03")
