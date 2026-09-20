@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 
 from .alpaca_data import AlpacaMarketDataProvider
 from .eastmoney_data import EastmoneyMarketDataProvider
+from .sina_us_data import SinaUSMarketDataProvider
+from .tencent_cn_data import TencentCNMarketDataProvider
 from .provider_registry import ProviderRegistry
 
 
@@ -154,6 +156,8 @@ class MarketDataHub:
         self.provider=provider or YahooChartProvider()
         self.alpaca=AlpacaMarketDataProvider()
         self.eastmoney=EastmoneyMarketDataProvider()
+        self.sina_us=SinaUSMarketDataProvider()
+        self.tencent_cn=TencentCNMarketDataProvider()
         self.registry=ProviderRegistry()
         self.registry.register(
             "research_bars",
@@ -168,12 +172,16 @@ class MarketDataHub:
             self.alpaca,
             routes=("US:QUOTE_L1",),
         )
-        self.registry.register("eastmoney_backup",self.eastmoney)
-        for route in (
-            "US:DAILY","US:INTRADAY","US:REALTIME",
-            "CN:DAILY","CN:INTRADAY","CN:REALTIME",
-        ):
-            self.registry.add_fallback(route,"eastmoney_backup")
+        self.registry.register("sina_us_backup",self.sina_us)
+        self.registry.register("tencent_cn_backup",self.tencent_cn)
+        # Eastmoney adapter remains available for research, but its public hosts
+        # are not in the automatic failover chain because Railway smoke observed
+        # remote disconnects from the current egress.
+        self.registry.register("eastmoney_experimental",self.eastmoney)
+        for route in ("US:DAILY","US:INTRADAY","US:REALTIME"):
+            self.registry.add_fallback(route,"sina_us_backup")
+        for route in ("CN:DAILY","CN:INTRADAY","CN:REALTIME"):
+            self.registry.add_fallback(route,"tencent_cn_backup")
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
         self._failovers:list[dict]=[]
@@ -207,10 +215,22 @@ class MarketDataHub:
                 "configured":True,
                 "role":"default research bars",
             },
-            "backup_bar_provider":{
-                "provider":self.eastmoney.version,
-                "configured":True,
-                "role":"automatic fallback for regular-session US/CN bars",
+            "backup_bar_providers":{
+                "US":{
+                    "provider":self.sina_us.version,
+                    "configured":True,
+                    "role":"automatic regular-session US fallback",
+                },
+                "CN":{
+                    "provider":self.tencent_cn.version,
+                    "configured":True,
+                    "role":"automatic A-share fallback",
+                },
+                "experimental":{
+                    "provider":self.eastmoney.version,
+                    "configured":True,
+                    "role":"not routed automatically after Railway connectivity smoke failure",
+                },
             },
             "us_l1_quote_provider":self.alpaca.configuration_status(),
             "routing":routing,
