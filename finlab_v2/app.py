@@ -48,6 +48,7 @@ async def _market_data_automation_loop():
                     _DATA_LAST_REFRESH[key]=now
                     _DATA_AUTOMATION_ERRORS.pop(key,None)
                     result["automation_refresh_interval_seconds"]=interval_seconds
+                    print("TRIAID_MARKET_DATA_AUTO_REFRESH",market_id,mode,result.get("source_latest_ts"),result.get("points"))
                 except Exception as exc:
                     _DATA_AUTOMATION_ERRORS[key]=f"{type(exc).__name__}:{exc}"
                     _DATA_LAST_REFRESH[key]=now
