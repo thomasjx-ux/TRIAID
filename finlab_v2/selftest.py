@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 tmp=tempfile.mkdtemp(prefix="triaid-fin-v2-selftest-")
 os.environ["TRIAID_DATA_DIR"]=tmp
+os.environ["TRIAID_STORAGE_BACKEND"]="file"
 
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
