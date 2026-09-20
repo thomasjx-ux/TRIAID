@@ -16,6 +16,7 @@ class MarketDataAutomation:
         self.enabled=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.last_refresh:dict[str,float]={}
         self.errors:dict[str,str]={}
+        self.last_phase:dict[str,str]={}
         self.frequency_policy=FrequencyPolicy(engine.store)
 
     def refresh_plan(self,market_id:str)->dict[str,int]:
@@ -32,7 +33,13 @@ class MarketDataAutomation:
                     "PREOPEN":self.frequency_policy.interval(market,"PREOPEN"),
                     "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
                 }
-            return {"DAILY":max(1800,self.frequency_policy.interval(market,"DAILY"))}
+            return {
+                "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
+            }
+        if phase=="BREAK":
+            return {
+                "REALTIME":max(300,self.frequency_policy.interval(market,"REALTIME")),
+            }
         if phase=="POSTCLOSE":
             return {"DAILY":self.frequency_policy.interval(market,"DAILY")}
         return {"DAILY":max(3600,self.frequency_policy.interval(market,"DAILY"))}
@@ -41,6 +48,12 @@ class MarketDataAutomation:
         while True:
             now=time.monotonic()
             for market_id in ("US","CN"):
+                phase=session_phase(market_id)
+                if self.last_phase.get(market_id)!=phase:
+                    for key in [k for k in self.last_refresh if k.startswith(f"{market_id}:")]:
+                        self.last_refresh[key]=0.0
+                    self.last_phase[market_id]=phase
+                    print("TRIAID_MARKET_PHASE",market_id,phase)
                 capabilities=self.engine.market_data_capabilities(market_id)[market_id]
                 for mode,interval_seconds in self.refresh_plan(market_id).items():
                     if not capabilities.get(mode,{}).get("supported",False):
@@ -75,6 +88,7 @@ class MarketDataAutomation:
             "automation_enabled":self.enabled,
             "discipline":"DATA_REFRESH_DOES_NOT_TRIGGER_TRADING_OR_CORE_ADJUSTMENT",
             "session_phase":{m:session_phase(m) for m in ("US","CN")},
+            "last_phase":dict(self.last_phase),
             "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN")},
             "last_refresh_monotonic":dict(self.last_refresh),
             "automation_errors":dict(self.errors),
