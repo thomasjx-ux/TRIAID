@@ -37,7 +37,7 @@ try:
         incremental_information_gain=-0.01,
         confidence=0.90,
     )
-    assert hold["evaluation_action"]=="HOLD_HIGHER_FREQUENCY"
+    assert hold["evaluation_action"]=="HOLD_INSUFFICIENT_EVIDENCE"
     assert hold["interval_seconds"]==60
     step=frequency.record_evidence(
         "US","REALTIME",
@@ -48,6 +48,15 @@ try:
     )
     assert step["evaluation_action"]=="STEP_DOWN_ONE_LEVEL"
     assert step["interval_seconds"]==120
+    step_up=frequency.record_evidence(
+        "US","REALTIME",
+        evaluated_samples=30,
+        incremental_net_return=0.002,
+        incremental_information_gain=0.01,
+        confidence=0.90,
+    )
+    assert step_up["evaluation_action"]=="STEP_UP_ONE_LEVEL"
+    assert step_up["interval_seconds"]==60
     locked=frequency.set_level("US","REALTIME",0,lock=True,reason="selftest")
     assert locked["interval_seconds"]==60
     locked_hold=frequency.record_evidence(
