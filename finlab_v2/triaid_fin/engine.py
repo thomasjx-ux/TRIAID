@@ -11,6 +11,7 @@ from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
 from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
 from .population_state import PopulationStateTracker
+from .observation import MarketObservationStore
 from .review import ReviewModule
 from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
@@ -23,6 +24,7 @@ class EvolutionLabEngine:
 
     def __init__(self) -> None:
         self.store=RunStore()
+        self.observations=MarketObservationStore(self.store)
         self.evolution=EvolutionModule(self.store)
         self.strategy_evolution=StrategyEvolutionModule(self.store)
         self.strategy_population=StrategyPopulationModule()
@@ -48,6 +50,7 @@ class EvolutionLabEngine:
             "architecture":self.architecture_version,
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
+            "market_observation":self.observations.version if hasattr(self,"observations") else "market-observation@0.1.0",
             "strategy_population":self.strategy_population.version,
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,
@@ -273,6 +276,7 @@ class EvolutionLabEngine:
             "market_data":{
                 "status":market_data_status(),
                 "capabilities":market_data_capabilities(),
+                "observations":self.observations.status(),
             },
         }
 
@@ -295,6 +299,20 @@ class EvolutionLabEngine:
 
     def market_data_instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
         return market_data_instrument_series(market_id,symbol,mode)
+
+    def record_market_observation(self,snapshot:dict)->dict:
+        return self.observations.record(snapshot)
+
+    def market_observations(
+        self,
+        market_id:str|None=None,
+        mode:str|None=None,
+        limit:int=500,
+    )->list[dict]:
+        return self.observations.list(market_id,mode,limit)
+
+    def market_observation_status(self)->dict:
+        return self.observations.status()
 
     def market_data_snapshot(self,market_id:str,mode:str,refresh:bool=False)->dict:
         return market_data_snapshot(market_id,mode,refresh)
