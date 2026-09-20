@@ -1,10 +1,39 @@
 import json
 import math
 from dataclasses import asdict
+from statistics import mean, pstdev
 
-from triaid_fin.market_lab import build_strategy_states, fetch_panel, policy_return_history
+from triaid_fin.contracts import StrategyState
+from triaid_fin.market_lab import fetch_panel, policy_return_history
 from triaid_fin.strategy_evolution import StrategyRuleProfile
 from triaid_fin.strategy_population import StrategyPopulationModule
+
+
+
+def light_states(history,t,weights):
+    windows=(21,63,126,252)
+    total=sum(weights)
+    weights=tuple(w/total for w in weights)
+    states=[]
+    for pid,full in history.items():
+        rs=full[:t+1]
+        vals=[];used=[]
+        for h,w in zip(windows,weights):
+            if len(rs)>=h:
+                vals.append(mean(rs[-h:])*252*w);used.append(w)
+        expected=sum(vals)/sum(used) if used else 0.0
+        sample=rs[-63:]
+        risk=pstdev(sample)*math.sqrt(252) if len(sample)>1 else 0.0
+        uncertainty=pstdev(sample)/math.sqrt(len(sample))*math.sqrt(252) if len(sample)>1 else 0.0
+        states.append(StrategyState(
+            strategy_id=pid,
+            lifecycle="active",
+            expected_net_return=0.0 if pid=="P28_CASH" else expected,
+            risk=0.0 if pid=="P28_CASH" else risk,
+            uncertainty=0.0 if pid=="P28_CASH" else uncertainty,
+            oos_marginal_value=expected,
+        ))
+    return states
 
 
 def legacy_weights(states,max_members=12,cap=0.28):
@@ -83,12 +112,12 @@ def make_profiles(market):
     return profiles
 
 
-def simulate_profile(panel,history,profile,start):
+def simulate_profile(panel,history,profile,start,state_cache):
     selector=StrategyPopulationModule();selector.configure_market(profile)
     prev=None;returns=[];turns=[];sizes=[]
-    for t in range(start,len(panel.ts)-1):
-        cut={pid:rs[:t+1] for pid,rs in history.items()}
-        states=build_strategy_states(panel,cut,profile.window_weights)
+    key=tuple(profile.window_weights)
+    for offset,t in enumerate(range(start,len(panel.ts)-1)):
+        states=state_cache[key][offset]
         next_realized={pid:history[pid][t+1] for pid in history}
         group=selector.select(
             profile.market_id,states,profile.max_group_size,
@@ -103,11 +132,11 @@ def simulate_profile(panel,history,profile,start):
     return returns,turns,sizes
 
 
-def simulate_legacy(panel,history,start):
+def simulate_legacy(panel,history,start,state_cache):
     prev={};returns=[];turns=[];sizes=[]
-    for t in range(start,len(panel.ts)-1):
-        cut={pid:rs[:t+1] for pid,rs in history.items()}
-        states=build_strategy_states(panel,cut,(0.35,0.30,0.20,0.15))
+    key=(0.35,0.30,0.20,0.15)
+    for offset,t in enumerate(range(start,len(panel.ts)-1)):
+        states=state_cache[key][offset]
         next_realized={pid:history[pid][t+1] for pid in history}
         w=legacy_weights(states)
         tv=turnover(prev,w)
@@ -121,13 +150,19 @@ def simulate_legacy(panel,history,start):
 def calibrate(market):
     panel=fetch_panel(market);history=policy_return_history(panel)
     start=max(300,len(panel.ts)-504)
-    legacy_rs,legacy_turn,legacy_size=simulate_legacy(panel,history,start)
+    profiles=make_profiles(market)
+    weight_keys=sorted(set(tuple(p.window_weights) for p in profiles)|{(0.35,0.30,0.20,0.15)})
+    state_cache={
+        key:[light_states(history,t,key) for t in range(start,len(panel.ts)-1)]
+        for key in weight_keys
+    }
+    legacy_rs,legacy_turn,legacy_size=simulate_legacy(panel,history,start,state_cache)
     split=max(1,int(len(legacy_rs)*0.70))
     legacy_dev=stats(legacy_rs[:split]);legacy_hold=stats(legacy_rs[split:])
 
     scored=[]
-    for profile in make_profiles(market):
-        rs,turns,sizes=simulate_profile(panel,history,profile,start)
+    for profile in profiles:
+        rs,turns,sizes=simulate_profile(panel,history,profile,start,state_cache)
         dev=stats(rs[:split]);hold=stats(rs[split:])
         scored.append({
             "profile":profile,
