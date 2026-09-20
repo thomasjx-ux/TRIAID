@@ -26,7 +26,7 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.7.4"
+assert s["architecture_version"]=="fin-evolution-lab@0.7.5"
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
