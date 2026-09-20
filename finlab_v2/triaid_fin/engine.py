@@ -17,10 +17,11 @@ from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
+from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.8.1"
+    architecture_version = "fin-evolution-lab@0.8.2"
     market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
@@ -65,6 +66,7 @@ class EvolutionLabEngine:
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
             "official_trading_calendar":TRADING_CALENDAR_VERSION,
+            "official_trading_calendar_sync":TRADING_CALENDAR_SYNC_VERSION,
             "market_observation":self.observations.version if hasattr(self,"observations") else "market-observation@0.1.0",
             "strategy_population":self.strategy_population.version,
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
