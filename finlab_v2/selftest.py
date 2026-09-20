@@ -28,6 +28,18 @@ try:
     assert engine.status()["strategy_registry_count"]==33
     assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.0"
     caps=engine.market_data_capabilities()
+    products=engine.market_data_product_capabilities()
+    providers=engine.market_data_provider_status()
+    assert products["US"]["BAR_DAILY"]["available"] is True
+    assert products["US"]["BAR_INTRADAY"]["available"] is True
+    assert products["US"]["ORDERBOOK_L2"]["available"] is False
+    assert products["US"]["BROKER_FILLS"]["available"] is False
+    assert products["CN"]["PREOPEN_AUCTION"]["available"] is False
+    assert products["CN"]["ORDERBOOK_L2"]["available"] is False
+    assert products["CN"]["DERIVATIVES_CHAIN"]["available"] is False
+    assert providers["bar_provider"]["configured"] is True
+    quotes=engine.market_data_latest_quotes("CN",["510300.SS"])
+    assert quotes["available"] is False
     assert caps["US"]["DAILY"]["supported"] is True
     assert caps["US"]["INTRADAY"]["supported"] is True
     assert caps["US"]["PREOPEN"]["supported"] is True
