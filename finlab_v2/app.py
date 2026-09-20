@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.5.0")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.5.1")
 engine = EvolutionLabEngine()
 
 
@@ -303,6 +303,17 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <tbody id="strategyRows"></tbody>
     </table>
   </div>
+  <details style="margin-top:12px">
+    <summary id="candidatePoolTitle" style="cursor:pointer;color:#748091">查看未入选候选策略池</summary>
+    <div class="tablewrap" style="margin-top:10px;max-height:420px">
+      <table>
+        <thead><tr>
+          <th>策略</th><th>状态</th><th>预期净回报</th><th>风险</th><th>说明</th>
+        </tr></thead>
+        <tbody id="candidateRows"></tbody>
+      </table>
+    </div>
+  </details>
 
   <h2 id="dailyTitle">今日摘要</h2>
   <div class="summary">
@@ -358,7 +369,7 @@ const T={
   overview:'当前状态',date:'最新数据日',core:'当前 Core',selected:'当前策略数',cum:'累计 TRIAID 超额',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
   daily:'今日摘要',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'今日结论',
-  strategies:'策略群与 TRIAID 调整',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
+  strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
   before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已验证决策',negative:'负贡献比例',next:'下一步',
   noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续验证结果形成候选改进',
@@ -373,7 +384,7 @@ const T={
   overview:'Current State',date:'Latest market date',core:'Active Core',selected:'Selected strategies',cum:'Cumulative TRIAID excess',
   curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
   daily:'Daily Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Daily conclusion',
-  strategies:'Strategy Group and TRIAID Adjustments',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
+  strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
   before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Verified decisions',negative:'Negative-contribution rate',next:'Next step',
   noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuously verified results',
@@ -391,6 +402,7 @@ function applyText(){
  const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
  baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
  selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
+ candidatePoolTitle:'candidatePool',
  regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',strategyTitle:'strategies',
  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
  evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
@@ -460,11 +472,12 @@ async function refreshAll(){
    el('dailyAnalysis').className=cls(g);
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
   drawCurve(curves);
-  const sorted=[...cards].sort((a,b)=>(Number(b.selected)-Number(a.selected))||((b.expected_net_return??-999)-(a.expected_net_return??-999)));
-  el('strategyRows').innerHTML=sorted.map(x=>{
+  const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
+  const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
+  el('strategyRows').innerHTML=selectedCards.map(x=>{
    const delta=(x.triaid_weight||0)-(x.baseline_weight||0);
    const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
-   return '<tr class="'+(x.selected?'selected':'')+'">'+
+   return '<tr class="selected">'+
     '<td><span class="strategy-name">'+esc(x.name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
     '<td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td>'+
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
@@ -473,6 +486,14 @@ async function refreshAll(){
     '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
     '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
     '<td class="reason">'+esc(explanation)+'</td></tr>';
+  }).join('');
+  el('candidateRows').innerHTML=candidateCards.map(x=>{
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(x.name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
   }).join('');
   const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
   el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
