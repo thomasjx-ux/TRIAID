@@ -13,17 +13,20 @@ from .market_lab import prepare_live_market
 from .population_state import PopulationStateTracker
 from .review import ReviewModule
 from .store import RunStore
+from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.4.1"
-    market_adapter_version = "market-lab@0.1.0"
+    architecture_version = "fin-evolution-lab@0.5.0"
+    market_adapter_version = "market-lab@0.2.0"
 
     def __init__(self) -> None:
         self.store=RunStore()
         self.evolution=EvolutionModule(self.store)
+        self.strategy_evolution=StrategyEvolutionModule(self.store)
         self.strategy_population=StrategyPopulationModule()
+        self._apply_strategy_profiles()
         self.population_state=PopulationStateTracker(self.store,self.strategy_population)
         self.core=TriaidCoreModule(self.evolution.active())
         self.evaluation=EvaluationModule()
@@ -31,6 +34,10 @@ class EvolutionLabEngine:
         self.review=ReviewModule()
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
+
+    def _apply_strategy_profiles(self)->None:
+        for market_id in ("US","CN"):
+            self.strategy_population.configure_market(self.strategy_evolution.active(market_id))
 
     def refresh_core(self)->None:
         self.core=TriaidCoreModule(self.evolution.active())
@@ -41,11 +48,14 @@ class EvolutionLabEngine:
             "architecture":self.architecture_version,
             "market_data":self.market_adapter_version,
             "strategy_population":self.strategy_population.version,
-            "population_state":self.population_state.version,
-            "triaid_core":self.core.version,
-            "evaluation":self.evaluation.version,
-            "audit":self.audit.version,
-            "review":self.review.version,
+            "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
+            "strategy_evolution":self.strategy_evolution.version,
+            "strategy_rules_US":self.strategy_evolution.active("US").version,
+            "strategy_rules_CN":self.strategy_evolution.active("CN").version,
+            "triaid_core":self.core.version if hasattr(self,"core") else self.evolution.active().version,
+            "evaluation":self.evaluation.version if hasattr(self,"evaluation") else "evaluation@0.2.0",
+            "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
+            "review":self.review.version if hasattr(self,"review") else "review@0.2.0",
             "store":self.store.version,
             "evolution":self.evolution.version,
         }
@@ -140,8 +150,11 @@ class EvolutionLabEngine:
     def execute_live(self,run_id:str,market_id:str)->None:
         market_id=market_id.upper()
         try:
-            prepared=prepare_live_market(market_id)
+            profile=self.strategy_evolution.active(market_id)
+            prepared=prepare_live_market(market_id,profile.window_weights)
             snapshot=prepared["snapshot"]
+            snapshot.metadata["strategy_rules_version"]=profile.version
+            snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
             existing=[
                 r for r in self.all_runs()
@@ -169,7 +182,7 @@ class EvolutionLabEngine:
             request=RunRequest(
                 market=snapshot,
                 strategy_states=states,
-                max_group_size=12,
+                max_group_size=profile.max_group_size,
             )
             with self._lock:
                 run=self._runs[run_id]
@@ -236,6 +249,10 @@ class EvolutionLabEngine:
             "module_manifest":self.module_manifest,
             "storage":self.store.status(),
             "active_core":self.evolution.active().__dict__,
+            "active_strategy_rules":{
+                market_id:self.strategy_evolution.active(market_id).__dict__
+                for market_id in ("US","CN")
+            },
             "strategy_registry_count":len(self.strategy_population.definitions()),
             "markets":["US","CN"],
             "run_counts":counts,
@@ -265,4 +282,25 @@ class EvolutionLabEngine:
         result=self.evolution.promote(version,validation)
         if result.get("promoted"):
             self.refresh_core()
+        return result
+
+    def strategy_evolution_status(self,market_id:str|None=None)->dict:
+        if market_id:
+            data=self.strategy_evolution.status(market_id)
+            return {
+                **data,
+                "diagnosis":self.strategy_evolution.diagnose(market_id,self.all_runs()),
+            }
+        return {
+            market_id:self.strategy_evolution_status(market_id)
+            for market_id in ("US","CN")
+        }
+
+    def propose_strategy_candidate(self,market_id:str)->dict:
+        return self.strategy_evolution.propose_candidate(market_id,self.all_runs())
+
+    def promote_strategy_rules(self,market_id:str,version:str,validation:dict)->dict:
+        result=self.strategy_evolution.promote(market_id,version,validation)
+        if result.get("promoted"):
+            self._apply_strategy_profiles()
         return result
