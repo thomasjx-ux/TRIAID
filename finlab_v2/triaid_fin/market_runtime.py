@@ -6,10 +6,11 @@ import time
 
 from .market_data import session_phase
 from .frequency_policy import FrequencyPolicy
+from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.3.0"
+    version="market-data-automation@0.4.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
@@ -43,7 +44,9 @@ class MarketDataAutomation:
             }
         if phase=="POSTCLOSE":
             return {"DAILY":self.frequency_policy.interval(market,"DAILY")}
-        return {"DAILY":max(3600,self.frequency_policy.interval(market,"DAILY"))}
+        if phase in {"CLOSED","CALENDAR_UNAVAILABLE"}:
+            return {}
+        return {}
 
     def refresh_plan(self,market_id:str)->dict[str,int]:
         market=market_id.upper()
@@ -106,8 +109,9 @@ class MarketDataAutomation:
         return {
             "version":self.version,
             "automation_enabled":self.enabled,
-            "discipline":"DATA_REFRESH_DOES_NOT_TRIGGER_TRADING_OR_CORE_ADJUSTMENT",
+            "discipline":"OFFICIAL_TRADING_CALENDAR_GATED_REFRESH; DATA_REFRESH_DOES_NOT_TRIGGER_TRADING",
             "session_phase":{m:session_phase(m) for m in ("US","CN")},
+            "official_trading_calendar":calendar_status(),
             "last_phase":dict(self.last_phase),
             "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN")},
             "last_refresh_monotonic":dict(self.last_refresh),
