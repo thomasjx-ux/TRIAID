@@ -27,6 +27,18 @@ try:
 
     assert engine.status()["strategy_registry_count"]==33
     assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.0"
+    obs={
+        "market_id":"US","mode":"INTRADAY","session_phase":"OPEN",
+        "provider":"selftest","quality":"research_intraday","execution_grade":False,
+        "source_latest_ts":1234567890,"interval":"5m","points":10,
+        "symbols":["SPY"],"latest":{"SPY":{"close":100.0,"volume":1000.0}},
+    }
+    first_obs=engine.record_market_observation(obs)
+    second_obs=engine.record_market_observation(obs)
+    assert first_obs["recorded"] is True
+    assert second_obs["recorded"] is False
+    assert engine.market_observation_status()["count"]==1
+    assert len(engine.market_observations("US","INTRADAY",10))==1
     caps=engine.market_data_capabilities()
     products=engine.market_data_product_capabilities()
     providers=engine.market_data_provider_status()
