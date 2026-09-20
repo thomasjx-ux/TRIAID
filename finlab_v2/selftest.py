@@ -26,7 +26,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.0"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.1"
     obs={
         "market_id":"US","mode":"INTRADAY","session_phase":"OPEN",
         "provider":"selftest","quality":"research_intraday","execution_grade":False,
@@ -51,6 +51,12 @@ try:
     caps=engine.market_data_capabilities()
     products=engine.market_data_product_capabilities()
     providers=engine.market_data_provider_status()
+    storage=engine.store.status()
+    assert storage["backend"]["backend"]=="file"
+    assert storage["durability"] in {"EPHEMERAL","PERSISTENT"}
+    assert providers["registry"]["version"]=="provider-registry@0.1.0"
+    assert providers["registry"]["routes"]["US:DAILY"]=="research_bars"
+    assert providers["registry"]["routes"]["US:QUOTE_L1"]=="us_l1_quotes"
     assert products["US"]["BAR_DAILY"]["available"] is True
     assert products["US"]["BAR_INTRADAY"]["available"] is True
     assert products["US"]["ORDERBOOK_L2"]["available"] is False
