@@ -36,9 +36,9 @@ class RunStore:
 
     def list_runs(self) -> list[RunRecord]:
         rows=[]
-        for name in self.backend.list_names("runs/",".json"):
+        for _,content in self.backend.list_texts("runs/",".json").items():
             try:
-                rows.append(RunRecord.model_validate_json(self.backend.read_text(name)))
+                rows.append(RunRecord.model_validate_json(content))
             except Exception:
                 continue
         return sorted(rows,key=lambda r:r.created_at)
