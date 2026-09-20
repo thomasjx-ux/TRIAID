@@ -35,10 +35,19 @@ try:
     }
     first_obs=engine.record_market_observation(obs)
     second_obs=engine.record_market_observation(obs)
+    obs2={**obs,"source_latest_ts":1234568190,"latest":{"SPY":{"close":101.0,"volume":1200.0}}}
+    third_obs=engine.record_market_observation(obs2)
     assert first_obs["recorded"] is True
     assert second_obs["recorded"] is False
-    assert engine.market_observation_status()["count"]==1
-    assert len(engine.market_observations("US","INTRADAY",10))==1
+    assert third_obs["recorded"] is True
+    assert third_obs["transition"] is not None
+    assert third_obs["transition"]["research_only"] is True
+    assert third_obs["transition"]["action_generated"] is False
+    assert abs(third_obs["transition"]["symbol_returns"]["SPY"]-0.01)<1e-12
+    assert engine.market_observation_status()["count"]==2
+    assert engine.market_observation_status()["transition_count"]==1
+    assert len(engine.market_observations("US","INTRADAY",10))==2
+    assert len(engine.market_transitions("US","INTRADAY",10))==1
     caps=engine.market_data_capabilities()
     products=engine.market_data_product_capabilities()
     providers=engine.market_data_provider_status()
