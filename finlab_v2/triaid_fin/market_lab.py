@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from statistics import mean, pstdev
 
 from .contracts import BilingualText, MarketSnapshot, StrategyState
-from .strategy_registry import POLICY_IDS
+from .cn_incubator import CN_SHADOW_IDS, positions as cn_shadow_positions
+from .strategy_registry import POLICY_IDS, strategy_ids_for_market
 
 
 @dataclass(frozen=True)
@@ -324,12 +325,15 @@ def _trade_cost(prev:list[float],new:list[float],panel:MarketPanel,i:int)->tuple
 def policy_return_history(panel:MarketPanel)->dict[str,list[float]]:
     n=len(panel.ts);assets=panel.assets
     asset_returns={a:_ret(panel.close[a]) for a in assets}
-    out={pid:[0.0]*n for pid in POLICY_IDS}
-    prev={pid:[0.0]*len(assets) for pid in POLICY_IDS}
+    ids=strategy_ids_for_market(panel.spec.market_id)
+    out={pid:[0.0]*n for pid in ids}
+    prev={pid:[0.0]*len(assets) for pid in ids}
     for i in range(n-1):
         positions=policy_positions(panel,i)
+        if panel.spec.market_id=="CN":
+            positions.update(cn_shadow_positions(panel,i))
         next_returns=[asset_returns[a][i+1] for a in assets]
-        for pid in POLICY_IDS:
+        for pid in ids:
             pos=positions[pid]
             gross=sum(w*r for w,r in zip(pos,next_returns))
             cost,_=_trade_cost(prev[pid],pos,panel,i)
@@ -364,8 +368,7 @@ def build_strategy_states(
     else:
         weights=tuple(float(x)/total for x in weights)
     states=[]
-    for pid in POLICY_IDS:
-        rs=history[pid]
+    for pid,rs in history.items():
         weighted=[];used=[]
         metrics={}
         for h,w in zip(windows,weights):
@@ -447,7 +450,7 @@ def prepare_live_market(
             "max_participation_adv":panel.spec.max_participation_adv,
         },
     )
-    realized={pid:history[pid][-1] for pid in POLICY_IDS}
+    realized={pid:history[pid][-1] for pid in history}
     return {
         "snapshot":snapshot,
         "strategy_states":states,
