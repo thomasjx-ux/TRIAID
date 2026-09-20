@@ -17,7 +17,7 @@ from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.4.0"
+    architecture_version = "fin-evolution-lab@0.4.1"
     market_adapter_version = "market-lab@0.1.0"
 
     def __init__(self) -> None:
@@ -113,19 +113,24 @@ class EvolutionLabEngine:
         bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0)
         return turnover*bps/10000.0
 
-    def _resolve_pending_outcomes(self,market_id:str,recent_outcomes:dict[str,dict[str,float]])->list[str]:
+    def _resolve_previous_period(
+        self,
+        market_id:str,
+        previous_as_of:str,
+        realized_returns:dict[str,float],
+    )->list[str]:
         resolved=[]
         candidates=[
             r for r in self.all_runs()
             if r.market.market_id.upper()==market_id.upper()
             and r.status=="DECISION_READY_AWAITING_OUTCOME"
-            and r.market.as_of in recent_outcomes
+            and r.market.as_of==previous_as_of
         ]
         for run in candidates:
             self.submit_outcome(
                 run.run_id,
                 OutcomeRequest(
-                    realized_returns=recent_outcomes[run.market.as_of],
+                    realized_returns=realized_returns,
                     trading_cost=self._meta_rebalance_cost(run),
                 ),
             )
@@ -155,7 +160,11 @@ class EvolutionLabEngine:
                     self.store.save_run(run)
                 return
 
-            resolved=self._resolve_pending_outcomes(market_id,prepared["recent_outcomes"])
+            resolved=self._resolve_previous_period(
+                market_id,
+                prepared["previous_as_of"],
+                prepared["realized_returns_from_previous_period"],
+            )
             states=self.population_state.apply(market_id,prepared["strategy_states"])
             request=RunRequest(
                 market=snapshot,
