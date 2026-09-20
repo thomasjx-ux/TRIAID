@@ -351,9 +351,18 @@ def _annualized_mean(xs:list[float])->float:
     return mean(xs)*252 if xs else 0.0
 
 
-def build_strategy_states(panel:MarketPanel,history:dict[str,list[float]])->list[StrategyState]:
+def build_strategy_states(
+    panel:MarketPanel,
+    history:dict[str,list[float]],
+    window_weights:tuple[float,float,float,float]|None=None,
+)->list[StrategyState]:
     windows=(21,63,126,252)
-    weights=(0.35,0.30,0.20,0.15)
+    weights=window_weights or (0.35,0.30,0.20,0.15)
+    total=sum(float(x) for x in weights)
+    if total<=0:
+        weights=(0.35,0.30,0.20,0.15)
+    else:
+        weights=tuple(float(x)/total for x in weights)
     states=[]
     for pid in POLICY_IDS:
         rs=history[pid]
@@ -409,10 +418,13 @@ def infer_regime(panel:MarketPanel)->str:
     return "mixed"
 
 
-def prepare_live_market(market_id:str)->dict:
+def prepare_live_market(
+    market_id:str,
+    window_weights:tuple[float,float,float,float]|None=None,
+)->dict:
     panel=fetch_panel(market_id)
     history=policy_return_history(panel)
-    states=build_strategy_states(panel,history)
+    states=build_strategy_states(panel,history,window_weights)
     latest_ts=panel.ts[-1]
     previous_ts=panel.ts[-2]
     as_of=datetime.fromtimestamp(latest_ts,tz=timezone.utc).date().isoformat()
@@ -429,6 +441,9 @@ def prepare_live_market(market_id:str)->dict:
             "source_latest_ts":latest_ts,
             "currency":panel.spec.currency,
             "reference_capital":panel.spec.reference_capital,
+            "base_cost_bps":panel.spec.base_cost_bps,
+            "impact_coefficient_bps":panel.spec.impact_coefficient_bps,
+            "max_participation_adv":panel.spec.max_participation_adv,
         },
     )
     realized={pid:history[pid][-1] for pid in POLICY_IDS}
