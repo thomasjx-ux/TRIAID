@@ -14,6 +14,7 @@ from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.frequency_policy import FrequencyPolicy
 from triaid_fin.market_data import session_phase
 from triaid_fin.market_runtime import MarketDataAutomation
+from triaid_fin.trading_calendar import trading_day_info, official_session_phase, calendar_status
 
 
 def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",recent=None):
@@ -42,11 +43,58 @@ try:
     assert session_phase("CN",datetime(2026,9,22,15,5,tzinfo=ZoneInfo("Asia/Shanghai")))=="POSTCLOSE"
     assert session_phase("US",datetime(2026,9,22,8,0,tzinfo=ZoneInfo("America/New_York")))=="PREOPEN"
     assert session_phase("US",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("America/New_York")))=="OPEN"
+
+    # Official exchange calendar gates.
+    us_holiday=trading_day_info("US","2026-07-03")
+    assert us_holiday["calendar_known"] is True
+    assert us_holiday["is_trading_day"] is False
+    assert us_holiday["reason"]=="OFFICIAL_EXCHANGE_HOLIDAY"
+    assert official_session_phase(
+        "US",
+        datetime(2026,7,3,10,0,tzinfo=ZoneInfo("America/New_York")),
+    )=="CLOSED"
+
+    us_early=trading_day_info("US","2026-11-27")
+    assert us_early["is_trading_day"] is True
+    assert us_early["early_close"] is True
+    assert us_early["early_close_time"]=="13:00"
+    assert official_session_phase(
+        "US",
+        datetime(2026,11,27,12,30,tzinfo=ZoneInfo("America/New_York")),
+    )=="OPEN"
+    assert official_session_phase(
+        "US",
+        datetime(2026,11,27,14,0,tzinfo=ZoneInfo("America/New_York")),
+    )=="POSTCLOSE"
+
+    cn_holiday=trading_day_info("CN","2026-09-25")
+    assert cn_holiday["calendar_known"] is True
+    assert cn_holiday["is_trading_day"] is False
+    assert official_session_phase(
+        "CN",
+        datetime(2026,9,25,10,0,tzinfo=ZoneInfo("Asia/Shanghai")),
+    )=="CLOSED"
+    cn_open=trading_day_info("CN","2026-09-28")
+    assert cn_open["is_trading_day"] is True
+    cn_unknown=trading_day_info("CN","2027-01-04")
+    assert cn_unknown["calendar_known"] is False
+    assert cn_unknown["reason"]=="CALENDAR_YEAR_UNAVAILABLE"
+    assert official_session_phase(
+        "CN",
+        datetime(2027,1,4,10,0,tzinfo=ZoneInfo("Asia/Shanghai")),
+    )=="CALENDAR_UNAVAILABLE"
+    cal=calendar_status()
+    assert cal["version"]=="official-trading-calendar@0.1.0"
+    assert cal["markets"]["US"]["coverage_years"]==[2026,2027,2028]
+    assert cal["markets"]["CN"]["coverage_years"]==[2026]
     assert runtime.refresh_plan_for_phase("CN","PREOPEN")=={"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","OPEN")=={"INTRADAY":300,"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","BREAK")=={"REALTIME":300}
     assert runtime.refresh_plan_for_phase("US","PREOPEN")=={"PREOPEN":300,"REALTIME":60}
     assert runtime.refresh_plan_for_phase("US","OPEN")=={"INTRADAY":300,"REALTIME":60}
+    assert runtime.refresh_plan_for_phase("US","CLOSED")=={}
+    assert runtime.refresh_plan_for_phase("CN","CLOSED")=={}
+    assert runtime.refresh_plan_for_phase("CN","CALENDAR_UNAVAILABLE")=={}
     frequency=FrequencyPolicy(engine.store)
     assert frequency.interval("US","REALTIME")==60
     hold=frequency.record_evidence(
