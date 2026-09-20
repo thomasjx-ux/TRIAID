@@ -195,7 +195,7 @@ call("POST","/api/strategy-evolution/propose/XX",expected=(400,))
 call("POST","/api/strategy-evolution/promote/US/__smoke_missing__",body={},expected=(404,))
 
 # Real research decision path: both markets, then poll persistent run records.
-created=call("POST","/api/live/run-all",timeout=20)
+created=call("POST","/api/live/run-all",expected=(202,),timeout=20)
 assert len(created["runs"])==2
 for item in created["runs"]:
     run_id=item["run_id"]
