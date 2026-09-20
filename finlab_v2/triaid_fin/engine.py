@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from threading import RLock
 from typing import Dict, List
 from uuid import uuid4
@@ -9,17 +8,19 @@ from .audit import AuditModule
 from .contracts import OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
+from .review import ReviewModule
 from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.1.0"
+    architecture_version = "fin-evolution-lab@0.2.0"
 
     def __init__(self) -> None:
         self.strategy_population = StrategyPopulationModule()
         self.core = TriaidCoreModule()
         self.evaluation = EvaluationModule()
         self.audit = AuditModule()
+        self.review = ReviewModule()
         self._runs: Dict[str, RunRecord] = {}
         self._lock = RLock()
 
@@ -31,6 +32,7 @@ class EvolutionLabEngine:
             "triaid_core": self.core.version,
             "evaluation": self.evaluation.version,
             "audit": self.audit.version,
+            "review": self.review.version,
         }
 
     def create_run(self, request: RunRequest) -> RunRecord:
@@ -46,7 +48,11 @@ class EvolutionLabEngine:
 
     def execute(self, run_id: str, request: RunRequest) -> None:
         try:
-            group = self.strategy_population.select(request.strategy_states, request.max_group_size)
+            group = self.strategy_population.select(
+                request.market.market_id,
+                request.strategy_states,
+                request.max_group_size,
+            )
             decision = self.core.decide(request.market, group)
             with self._lock:
                 run = self._runs[run_id]
@@ -79,6 +85,10 @@ class EvolutionLabEngine:
         with self._lock:
             return self._runs[run_id]
 
+    def _runs_snapshot(self) -> List[RunRecord]:
+        with self._lock:
+            return list(self._runs.values())
+
     def status(self) -> dict:
         with self._lock:
             counts: Dict[str, int] = {}
@@ -92,46 +102,7 @@ class EvolutionLabEngine:
         }
 
     def daily_summary(self) -> dict:
-        today = date.today().isoformat()
-        with self._lock:
-            rows = [r for r in self._runs.values() if r.created_at.startswith(today)]
-        evaluated = [r for r in rows if r.evaluation and r.evaluation.status == "EVALUATED"]
-        excess = sum((r.evaluation.excess_return or 0.0) for r in evaluated)
-        return {
-            "date": today,
-            "runs": len(rows),
-            "evaluated_runs": len(evaluated),
-            "cumulative_excess_return": excess,
-            "runs_detail": [
-                {
-                    "run_id": r.run_id,
-                    "market_id": r.market.market_id,
-                    "status": r.status,
-                    "members": r.strategy_group.members if r.strategy_group else [],
-                    "evaluation": r.evaluation.model_dump() if r.evaluation else None,
-                }
-                for r in rows
-            ],
-        }
+        return self.review.daily_summary(self._runs_snapshot())
 
     def curves(self) -> List[dict]:
-        with self._lock:
-            runs = sorted(self._runs.values(), key=lambda r: r.created_at)
-        baseline_equity = 1.0
-        triaid_equity = 1.0
-        points = []
-        for run in runs:
-            if not run.evaluation or run.evaluation.status != "EVALUATED":
-                continue
-            baseline_equity *= 1.0 + (run.evaluation.baseline_return or 0.0)
-            triaid_equity *= 1.0 + (run.evaluation.triaid_return or 0.0)
-            points.append(
-                {
-                    "time": run.created_at,
-                    "run_id": run.run_id,
-                    "baseline_equity": baseline_equity,
-                    "triaid_equity": triaid_equity,
-                    "excess_equity": triaid_equity - baseline_equity,
-                }
-            )
-        return points
+        return self.review.curves(self._runs_snapshot())
