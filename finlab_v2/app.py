@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.1.0")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.2.0")
 engine = EvolutionLabEngine()
 
 
@@ -60,6 +60,11 @@ def strategies(lang: str = Query(default="zh", pattern="^(zh|en)$")) -> list[dic
     return engine.strategy_population.strategy_cards(lang)
 
 
+@app.get("/api/strategy-population/rules/{market_id}")
+def population_rules(market_id: str) -> dict:
+    return engine.strategy_population.rules(market_id)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home() -> str:
     return """
@@ -87,7 +92,7 @@ button{padding:8px 12px}.muted{opacity:.65}pre{white-space:pre-wrap}
 <script>
 let lang='zh';
 const text={
- zh:{title:'TRIAID FIN 进化实验台 V2',subtitle:'最小模块化架构：策略群 → TRIAID Core → 结果评价 → 审计 → 连续回顾',arch:'架构状态',daily:'今日总结',strategies:'策略说明',empty:'策略 Registry 尚未迁入。'},
+ zh:{title:'TRIAID FIN 进化实验台 V2',subtitle:'最小模块化架构：策略群 → TRIAID Core → 结果评价 → 审计 → 连续回顾',arch:'架构状态',daily:'今日总结',strategies:'策略说明',empty:'审核后的策略 Registry 尚未迁入。'},
  en:{title:'TRIAID FIN Evolution Lab V2',subtitle:'Minimal modular architecture: Strategy Population → TRIAID Core → Evaluation → Audit → Continuous Review',arch:'Architecture Status',daily:'Daily Summary',strategies:'Strategy Explanations',empty:'The audited strategy registry has not been migrated yet.'}
 };
 async function refresh(){
