@@ -110,21 +110,31 @@ class FrequencyPolicy:
         net_value=(evidence.incremental_net_return if evidence.incremental_net_return is not None else float("inf"))
         info_value=(evidence.incremental_information_gain if evidence.incremental_information_gain is not None else float("inf"))
 
-        if (
-            not locked
-            and enough_samples
-            and enough_confidence
-            and net_value<=self.min_incremental_net_return
+        current=self.level(market_id,mode)
+        if locked:
+            action="MANUAL_LOCK_HOLD"
+        elif not enough_samples or not enough_confidence:
+            action="HOLD_INSUFFICIENT_EVIDENCE"
+        elif (
+            net_value<=self.min_incremental_net_return
             and info_value<=self.min_information_gain
         ):
-            current=self.level(market_id,mode)
             if current<len(self.LADDERS[mode])-1:
                 self.state["levels"][key]=current+1
                 action="STEP_DOWN_ONE_LEVEL"
             else:
                 action="ALREADY_AT_LOWEST_FREQUENCY"
-        elif locked:
-            action="MANUAL_LOCK_HOLD"
+        elif (
+            net_value>self.min_incremental_net_return
+            or info_value>self.min_information_gain
+        ):
+            if current>0:
+                self.state["levels"][key]=current-1
+                action="STEP_UP_ONE_LEVEL"
+            else:
+                action="ALREADY_AT_HIGHEST_FREQUENCY"
+        else:
+            action="HOLD_CURRENT_FREQUENCY"
 
         self._save()
         result=self.status_one(market_id,mode)
@@ -157,7 +167,7 @@ class FrequencyPolicy:
     def status(self)->dict:
         return {
             "version":self.version,
-            "principle":"START_HIGHEST_THEN_STEP_DOWN_ONLY_ON_SUFFICIENT_LOW_MARGINAL_VALUE_EVIDENCE",
+            "principle":"START_HIGHEST_STEP_DOWN_ONLY_ON_LOW_MARGINAL_VALUE_AND_ALLOW_STEP_UP_WHEN_HIGHER_FREQUENCY_VALUE_RETURNS",
             "markets":{
                 market:{
                     mode:self.status_one(market,mode)
