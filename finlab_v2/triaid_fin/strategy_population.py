@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Dict, Iterable, List
 
 from .contracts import BilingualText, StrategyDefinition, StrategyGroup, StrategyState
+from .strategy_registry import build_definitions
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class PopulationConfig:
 
 
 US_CONFIG = PopulationConfig(
-    config_version="population-us@0.2.0",
+    config_version="population-us@0.3.0",
     market_id="US",
     review_windows=(21, 63, 126, 252),
     entry_confirm_days=3,
@@ -38,7 +39,7 @@ US_CONFIG = PopulationConfig(
 )
 
 CN_CONFIG = PopulationConfig(
-    config_version="population-cn@0.2.0",
+    config_version="population-cn@0.3.0",
     market_id="CN",
     review_windows=(21, 63, 126, 252),
     entry_confirm_days=5,
@@ -49,16 +50,12 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    """Reference module for dynamic strategy groups.
-
-    It owns registry, state interpretation, lifecycle, group selection and weighting.
-    TRIAID Core consumes the selected group but does not own these rules.
-    """
-
-    version = "strategy-population@0.2.0"
+    version = "strategy-population@0.3.0"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
+        for definition in build_definitions():
+            self.register(definition)
 
     def config_for(self, market_id: str) -> PopulationConfig:
         key = market_id.upper()
@@ -71,7 +68,8 @@ class StrategyPopulationModule:
         result = asdict(cfg)
         result["selection_objective"] = "maximize expected net return subject to risk, cost, liquidity, capacity and concentration constraints"
         result["switch_rule"] = "switch only when expected net improvement exceeds switching cost and uncertainty"
-        result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive live experimental weight; SHADOW receives no exposure"
+        result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive experimental weight; SHADOW receives no exposure"
+        result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
         result["empty_group_allowed"] = True
         return result
 
@@ -79,7 +77,10 @@ class StrategyPopulationModule:
         self._registry[definition.strategy_id] = definition
 
     def definitions(self) -> List[StrategyDefinition]:
-        return list(self._registry.values())
+        return [self._registry[k] for k in sorted(self._registry)]
+
+    def definition(self, strategy_id: str) -> StrategyDefinition | None:
+        return self._registry.get(strategy_id)
 
     def strategy_cards(self, lang: str = "zh") -> List[dict]:
         cards = []
@@ -88,29 +89,25 @@ class StrategyPopulationModule:
                 {
                     "strategy_id": item.strategy_id,
                     "version": item.version,
-                    "name": getattr(item.name, lang, item.name.zh),
-                    "summary": getattr(item.summary, lang, item.summary.zh),
-                    "logic": getattr(item.logic, lang, item.logic.zh),
-                    "best_conditions": getattr(item.best_conditions, lang, item.best_conditions.zh),
-                    "main_risks": getattr(item.main_risks, lang, item.main_risks.zh),
+                    "name": getattr(item.name, lang),
+                    "summary": getattr(item.summary, lang),
+                    "logic": getattr(item.logic, lang),
+                    "best_conditions": getattr(item.best_conditions, lang),
+                    "main_risks": getattr(item.main_risks, lang),
                 }
             )
         return cards
 
     def recommend_lifecycle(self, state: StrategyState, market_id: str) -> str:
         cfg = self.config_for(market_id)
-
         if state.hard_failure:
             return "frozen"
-
         positive_oos = state.oos_marginal_value is not None and state.oos_marginal_value > 0
 
         if state.lifecycle == "research":
             return "candidate" if state.eligible and positive_oos else "research"
-
         if state.lifecycle == "candidate":
             return "shadow" if state.eligible and positive_oos else "candidate"
-
         if state.lifecycle == "shadow":
             return "active" if state.eligible and positive_oos and state.shadow_evidence_pass else "shadow"
 
@@ -124,24 +121,22 @@ class StrategyPopulationModule:
             and state.horizon_multiples >= cfg.retirement_min_horizons
             and state.independent_decisions >= cfg.retirement_min_decisions
         )
-        underperforming = state.expected_net_return <= 0 or (state.oos_marginal_value is not None and state.oos_marginal_value <= 0)
+        underperforming = state.expected_net_return <= 0 or (
+            state.oos_marginal_value is not None and state.oos_marginal_value <= 0
+        )
 
         if state.lifecycle == "active" and downgrade_evidence and underperforming:
             return "reduced"
-
         if state.lifecycle == "reduced" and downgrade_evidence and underperforming:
             return "frozen"
-
         if state.lifecycle == "frozen":
             if state.new_evidence_pass and positive_oos:
                 return "candidate"
             if retirement_evidence and underperforming:
                 return "retired"
             return "frozen"
-
         if state.lifecycle == "retired" and state.new_evidence_pass and positive_oos:
             return "candidate"
-
         return state.lifecycle
 
     @staticmethod
@@ -154,9 +149,9 @@ class StrategyPopulationModule:
         return candidate_expected_net_return - current_expected_net_return > switching_cost + uncertainty
 
     @staticmethod
-    def _allocate_with_cap(states: List[StrategyState], cap: float) -> Dict[str, float]:
+    def _allocate_with_cap(states: List[StrategyState], cap: float) -> tuple[Dict[str, float], float]:
         positive = {s.strategy_id: max(0.0, s.expected_net_return) for s in states}
-        active = {k for k, v in positive.items() if v > 0}
+        active = {k for k, v in positive.items() if v > 0 and k != "P28_CASH"}
         weights: Dict[str, float] = {}
         remaining = 1.0
 
@@ -174,14 +169,16 @@ class StrategyPopulationModule:
                 weights[k] = cap
                 remaining -= cap
                 active.remove(k)
-
-        return weights
+        return weights, max(0.0, remaining)
 
     def select(self, market_id: str, states: Iterable[StrategyState], max_members: int) -> StrategyGroup:
         cfg = self.config_for(market_id)
+        states=list(states)
+        cash=next((s for s in states if s.strategy_id=="P28_CASH" and s.eligible and s.lifecycle in {"active","reduced"}),None)
         feasible = [
             s for s in states
-            if s.eligible
+            if s.strategy_id!="P28_CASH"
+            and s.eligible
             and s.lifecycle in {"active", "reduced"}
             and not s.hard_failure
             and s.liquidity_ok
@@ -192,32 +189,34 @@ class StrategyPopulationModule:
         ]
         ranked = sorted(feasible, key=lambda s: s.expected_net_return, reverse=True)[:max_members]
 
-        if not ranked:
-            return StrategyGroup(
-                group_version=self.version,
-                config_version=cfg.config_version,
-                market_id=market_id,
-                members=[],
-                weights={},
-                reasons={},
-            )
+        weights,remaining=self._allocate_with_cap(ranked,cfg.max_weight)
+        members=[s.strategy_id for s in ranked if weights.get(s.strategy_id,0)>0]
 
-        weights = self._allocate_with_cap(ranked, cfg.max_weight)
-        members = [s.strategy_id for s in ranked if weights.get(s.strategy_id, 0.0) > 0]
-        reasons = {}
-        for s in ranked:
-            if s.strategy_id not in members:
-                continue
-            reasons[s.strategy_id] = s.selection_reason or BilingualText(
-                zh=f"当前为 {s.lifecycle.upper()}，预期净回报 {s.expected_net_return:.4f}，通过风险、流动性、容量和集中度约束，因此进入当前策略群。",
-                en=f"Currently {s.lifecycle.upper()} with expected net return {s.expected_net_return:.4f}; it passes risk, liquidity, capacity and concentration constraints and is included in the current group.",
-            )
+        if cash is not None and (remaining>1e-12 or not members):
+            weights["P28_CASH"]=remaining if members else 1.0
+            members.append("P28_CASH")
+
+        reasons={}
+        state_map={s.strategy_id:s for s in states}
+        for strategy_id in members:
+            s=state_map[strategy_id]
+            definition=self.definition(strategy_id)
+            if strategy_id=="P28_CASH":
+                reasons[strategy_id]=BilingualText(
+                    zh="当前未被其他策略使用的资金明确保留为现金，避免为了满仓而强行增加风险。",
+                    en="Capital not justified by other strategies is held explicitly as cash rather than forcing full risky exposure.",
+                )
+            else:
+                reasons[strategy_id]=s.selection_reason or BilingualText(
+                    zh=f"{definition.name.zh if definition else strategy_id} 当前预期净回报为 {s.expected_net_return:.4f}，并通过风险、流动性、容量和集中度约束，因此进入策略群。",
+                    en=f"{definition.name.en if definition else strategy_id} has expected net return {s.expected_net_return:.4f} and passes risk, liquidity, capacity and concentration constraints.",
+                )
 
         return StrategyGroup(
             group_version=self.version,
             config_version=cfg.config_version,
             market_id=market_id,
             members=members,
-            weights={k: weights[k] for k in members},
+            weights=weights,
             reasons=reasons,
         )
