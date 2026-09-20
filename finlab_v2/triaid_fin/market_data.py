@@ -15,6 +15,7 @@ from .eastmoney_data import EastmoneyMarketDataProvider
 from .sina_us_data import SinaUSMarketDataProvider
 from .tencent_cn_data import TencentCNMarketDataProvider
 from .provider_registry import ProviderRegistry
+from .trading_calendar import official_session_phase
 
 
 class MarketDataError(RuntimeError):
@@ -585,38 +586,10 @@ class MarketDataHub:
 
 
 def session_phase(market_id:str,now:datetime|None=None)->str:
-    market=market_id.upper()
-    if market=="US":
-        tz=ZoneInfo("America/New_York")
-        current=(now.astimezone(tz) if now else datetime.now(tz))
-        if current.weekday()>=5:
-            return "CLOSED"
-        t=current.time()
-        if dt_time(4,0)<=t<dt_time(9,30):
-            return "PREOPEN"
-        if dt_time(9,30)<=t<dt_time(16,0):
-            return "OPEN"
-        if dt_time(16,0)<=t<dt_time(20,0):
-            return "POSTCLOSE"
-        return "CLOSED"
-
-    if market=="CN":
-        tz=ZoneInfo("Asia/Shanghai")
-        current=(now.astimezone(tz) if now else datetime.now(tz))
-        if current.weekday()>=5:
-            return "CLOSED"
-        t=current.time()
-        if dt_time(9,15)<=t<dt_time(9,30):
-            return "PREOPEN"
-        if dt_time(9,30)<=t<dt_time(11,30) or dt_time(13,0)<=t<dt_time(15,0):
-            return "OPEN"
-        if dt_time(11,30)<=t<dt_time(13,0):
-            return "BREAK"
-        if dt_time(15,0)<=t<dt_time(18,0):
-            return "POSTCLOSE"
-        return "CLOSED"
-
-    raise MarketDataError(f"unsupported_market:{market_id}")
+    try:
+        return official_session_phase(market_id,now)
+    except ValueError as exc:
+        raise MarketDataError(str(exc)) from exc
 
 
 _DEFAULT_HUB=MarketDataHub()
