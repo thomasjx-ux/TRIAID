@@ -10,7 +10,7 @@ The goal is not to force the current Core to beat the strategy population immedi
 
 ## Modules
 
-- Market Data: real US and CN market panels, point-in-time T to T+1 discipline
+- Market Data: modular provider hub with DAILY / INTRADAY / PREOPEN / REALTIME interfaces and point-in-time discipline
 - Strategy Registry: 29 migrated strategies from the audited Cloud 007 policy bank
 - Strategy Population: market-specific admission, exit, cooldown, weighting and cash handling
 - Population State: persistent lifecycle state and automatic daily updates
@@ -26,6 +26,30 @@ The goal is not to force the current Core to beat the strategy population immedi
 US uses SPY, QQQ, IWM, TLT and GLD.
 
 CN uses 510300.SS, 510500.SS, 159915.SZ, 512100.SS and 511010.SS.
+
+## Market data
+
+Market data is separated from trading decisions. Data refresh never calls Strategy Population or TRIAID Core by itself.
+
+Current Yahoo Chart provider:
+- DAILY: US + CN, research-grade daily data
+- INTRADAY: US + CN, 5-minute research data
+- PREOPEN: US indicative extended-hours data; CN call-auction remains unsupported until a dedicated provider is connected
+- REALTIME: US + CN 1-minute indicative chart data; explicitly not execution-grade and does not include bid/ask, order book or broker fills
+
+Automatic refresh is session-aware:
+- OPEN: INTRADAY every 5 minutes, indicative REALTIME every 2 minutes
+- US PREOPEN: PREOPEN every 5 minutes, indicative REALTIME every 2 minutes
+- POSTCLOSE: DAILY every 10 minutes
+- CLOSED: DAILY every 60 minutes
+
+The refresh scheduler does not create trading runs or change weights. Adjustment frequency remains a separate TRIAID research decision.
+
+API:
+- GET /api/market-data/status
+- GET /api/market-data/capabilities
+- GET /api/market-data/snapshot/{market_id}/{mode}
+- POST /api/market-data/refresh/{market_id}/{mode}
 
 ## Live execution
 
