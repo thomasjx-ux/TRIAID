@@ -5,28 +5,37 @@ import os
 import time
 
 from .market_data import session_phase
+from .frequency_policy import FrequencyPolicy
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.1.0"
+    version="market-data-automation@0.2.0"
 
     def __init__(self,engine)->None:
         self.engine=engine
         self.enabled=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.last_refresh:dict[str,float]={}
         self.errors:dict[str,str]={}
+        self.frequency_policy=FrequencyPolicy(engine.store)
 
     def refresh_plan(self,market_id:str)->dict[str,int]:
-        phase=session_phase(market_id)
+        market=market_id.upper()
+        phase=session_phase(market)
         if phase=="OPEN":
-            return {"INTRADAY":300,"REALTIME":120}
+            return {
+                "INTRADAY":self.frequency_policy.interval(market,"INTRADAY"),
+                "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
+            }
         if phase=="PREOPEN":
-            if market_id.upper()=="US":
-                return {"PREOPEN":300,"REALTIME":120}
-            return {"DAILY":1800}
+            if market=="US":
+                return {
+                    "PREOPEN":self.frequency_policy.interval(market,"PREOPEN"),
+                    "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
+                }
+            return {"DAILY":max(1800,self.frequency_policy.interval(market,"DAILY"))}
         if phase=="POSTCLOSE":
-            return {"DAILY":600}
-        return {"DAILY":3600}
+            return {"DAILY":self.frequency_policy.interval(market,"DAILY")}
+        return {"DAILY":max(3600,self.frequency_policy.interval(market,"DAILY"))}
 
     async def run(self)->None:
         while True:
@@ -69,5 +78,6 @@ class MarketDataAutomation:
             "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN")},
             "last_refresh_monotonic":dict(self.last_refresh),
             "automation_errors":dict(self.errors),
+            "frequency_policy":self.frequency_policy.status(),
             "hub":self.engine.market_data_status(),
         }
