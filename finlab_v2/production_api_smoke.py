@@ -60,7 +60,8 @@ assert health["storage_durability"]=="PERSISTENT"
 assert health["storage_persistence_confirmed"] is True
 assert health["decision_automation_enabled"] is True
 assert health["broker_execution_enabled"] is False
-assert health["official_trading_calendar_version"]=="official-trading-calendar@0.1.0"
+assert health["official_trading_calendar_version"]=="official-trading-calendar@0.2.0"
+assert health["calendar_sync_version"]=="official-trading-calendar-sync@0.1.0"
 
 openapi=call("GET","/openapi.json")
 paths=set(openapi.get("paths") or {})
@@ -78,6 +79,7 @@ expected_paths={
     "/api/market-data/providers","/api/market-data/products",
     "/api/market-data/trading-calendar",
     "/api/market-data/trading-calendar/{market_id}",
+    "/api/market-data/trading-calendar-sync",
     "/api/market-data/frequency-policy",
     "/api/market-data/frequency-policy/{market_id}/{mode}/set-level",
     "/api/market-data/frequency-policy/{market_id}/{mode}/set-interval",
@@ -151,9 +153,12 @@ assert products["US"]["BAR_DAILY"]["available"] is True
 assert products["CN"]["BAR_DAILY"]["available"] is True
 
 calendar=call("GET","/api/market-data/trading-calendar")
-assert calendar["version"]=="official-trading-calendar@0.1.0"
+assert calendar["version"]=="official-trading-calendar@0.2.0"
 assert calendar["markets"]["US"]["coverage_years"]==[2026,2027,2028]
 assert calendar["markets"]["CN"]["coverage_years"]==[2026]
+calendar_sync=call("GET","/api/market-data/trading-calendar-sync")
+assert calendar_sync["version"]=="official-trading-calendar-sync@0.1.0"
+assert calendar_sync["policy"].startswith("OFFICIAL_ONLY")
 
 us_closed=call("GET","/api/market-data/trading-calendar/US?date=2026-07-03")
 assert us_closed["calendar_known"] is True
