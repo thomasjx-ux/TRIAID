@@ -60,6 +60,7 @@ assert health["storage_durability"]=="PERSISTENT"
 assert health["storage_persistence_confirmed"] is True
 assert health["decision_automation_enabled"] is True
 assert health["broker_execution_enabled"] is False
+assert health["official_trading_calendar_version"]=="official-trading-calendar@0.1.0"
 
 openapi=call("GET","/openapi.json")
 paths=set(openapi.get("paths") or {})
