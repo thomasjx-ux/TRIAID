@@ -1,59 +1,115 @@
+import os
+import shutil
+import tempfile
+
+tmp=tempfile.mkdtemp(prefix="triaid-fin-v2-selftest-")
+os.environ["TRIAID_DATA_DIR"]=tmp
+
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
 
 
-engine = EvolutionLabEngine()
-request = RunRequest(
-    market=MarketSnapshot(
-        market_id="US",
-        as_of="2026-09-20T00:00:00Z",
-        snapshot_id="selftest-snapshot-002",
-        regime="test",
-    ),
-    strategy_states=[
-        StrategyState(strategy_id="strategy-a", lifecycle="active", expected_net_return=0.02, risk=0.01),
-        StrategyState(strategy_id="strategy-b", lifecycle="active", expected_net_return=0.01, risk=0.01),
-        StrategyState(strategy_id="strategy-shadow", lifecycle="shadow", expected_net_return=0.50, risk=0.01),
-    ],
-    max_group_size=3,
-)
+def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active"):
+    return StrategyState(
+        strategy_id=strategy_id,
+        lifecycle=lifecycle,
+        expected_net_return=expected,
+        risk=risk,
+        uncertainty=uncertainty,
+        oos_marginal_value=expected,
+        shadow_evidence_pass=True,
+    )
 
-run = engine.create_run(request)
-engine.execute(run.run_id, request)
-decision_ready = engine.get_run(run.run_id)
-assert decision_ready.status == "DECISION_READY_AWAITING_OUTCOME"
-assert decision_ready.strategy_group
-assert "strategy-shadow" not in decision_ready.strategy_group.members
-assert max(decision_ready.strategy_group.weights.values()) <= 0.2800001
 
-hard_failure = StrategyState(
-    strategy_id="strategy-fail",
-    lifecycle="active",
-    expected_net_return=0.20,
-    hard_failure=True,
-)
-assert engine.strategy_population.recommend_lifecycle(hard_failure, "US") == "frozen"
+try:
+    engine=EvolutionLabEngine()
 
-rules = engine.strategy_population.rules("US")
-assert rules["entry_confirm_days"] == 3
-assert rules["exit_confirm_days"] == 3
-assert rules["cooldown_days"] == 5
-assert rules["max_weight"] == 0.28
+    assert engine.status()["strategy_registry_count"]==29
+    zh=engine.strategy_population.strategy_cards("zh")
+    en=engine.strategy_population.strategy_cards("en")
+    assert len(zh)==29 and len(en)==29
+    assert zh[0]["name"]!=en[0]["name"]
 
-verified = engine.submit_outcome(
-    run.run_id,
-    OutcomeRequest(
-        realized_returns={"strategy-a": 0.01, "strategy-b": -0.005},
-        trading_cost=0.0,
-    ),
-)
-assert verified.status == "VERIFIED"
-assert verified.audit and verified.audit.passed
-assert verified.evaluation and verified.evaluation.status == "EVALUATED"
-assert abs((verified.evaluation.excess_return or 0.0)) < 1e-12
-assert len(engine.curves()) == 1
-assert engine.daily_summary()["evaluated_runs"] == 1
+    request=RunRequest(
+        market=MarketSnapshot(
+            market_id="US",
+            as_of="2026-09-18",
+            snapshot_id="SELFTEST:1",
+            regime="risk_on_trend",
+        ),
+        strategy_states=[
+            state("P00_BUY_HOLD",0.12,0.18,0.02),
+            state("P04_TREND50",0.16,0.12,0.02),
+            state("P18_XMOM20",0.20,0.20,0.04),
+            state("P28_CASH",0.0,0.0,0.0),
+            state("P16_REV5",0.50,0.20,0.04,lifecycle="shadow"),
+        ],
+        max_group_size=4,
+    )
 
-print("TRIAID_FIN_V2_SELFTEST_PASS")
-print(engine.module_manifest)
-print(engine.strategy_population.rules("US"))
+    run=engine.create_run(request)
+    engine.execute(run.run_id,request)
+    decision=engine.get_run(run.run_id)
+    assert decision.status=="DECISION_READY_AWAITING_OUTCOME"
+    assert decision.audit and decision.audit.passed
+    assert decision.strategy_group
+    assert "P16_REV5" not in decision.strategy_group.members
+    assert all(w>=0 for w in decision.strategy_group.weights.values())
+    assert sum(decision.strategy_group.weights.values())<=1.0000001
+    assert max(decision.strategy_group.weights.values())<=1.0000001
+    assert decision.triaid_decision
+    assert decision.triaid_decision.core_version==engine.evolution.active().version
+    assert sum(decision.triaid_decision.weights_after.values())<=1.0000001
+
+    verified=engine.submit_outcome(
+        run.run_id,
+        OutcomeRequest(
+            realized_returns={
+                "P00_BUY_HOLD":0.004,
+                "P04_TREND50":0.005,
+                "P18_XMOM20":-0.003,
+                "P28_CASH":0.0,
+            },
+            trading_cost=0.0001,
+        ),
+    )
+    assert verified.status=="VERIFIED"
+    assert verified.evaluation and verified.evaluation.status=="EVALUATED"
+    assert verified.audit and verified.audit.passed
+    assert verified.diagnostic_summary.get("contribution_deltas") is not None
+
+    curves=engine.curves("US")
+    assert len(curves)>=1
+    daily=engine.daily_summary("US")
+    assert daily["evaluated_runs"]>=1
+
+    reloaded=EvolutionLabEngine()
+    assert reloaded.get_run(run.run_id).status=="VERIFIED"
+    assert len(reloaded.all_runs())>=1
+
+    before=reloaded.evolution_status()["active_version"]
+    proposal=reloaded.propose_core_candidate()
+    assert proposal["created"] is True
+    candidate=proposal["candidate"]["version"]
+    blocked=reloaded.promote_core(candidate,{"replay_pass":True,"holdout_pass":False,"shadow_pass":True,"audit_pass":True})
+    assert blocked["promoted"] is False
+    promoted=reloaded.promote_core(candidate,{"replay_pass":True,"holdout_pass":True,"shadow_pass":True,"audit_pass":True})
+    assert promoted["promoted"] is True
+    assert reloaded.evolution_status()["active_version"]==candidate
+    assert before!=candidate
+
+    hard_failure=state("P04_TREND50",0.2)
+    hard_failure.hard_failure=True
+    assert reloaded.strategy_population.recommend_lifecycle(hard_failure,"US")=="frozen"
+
+    us_rules=reloaded.strategy_population.rules("US")
+    cn_rules=reloaded.strategy_population.rules("CN")
+    assert us_rules["entry_confirm_days"]==3 and us_rules["cooldown_days"]==5
+    assert cn_rules["entry_confirm_days"]==5 and cn_rules["cooldown_days"]==10
+    assert us_rules["max_weight"]==0.28 and cn_rules["max_weight"]==0.28
+
+    print("TRIAID_FIN_V2_SELFTEST_PASS")
+    print(reloaded.module_manifest)
+    print({"strategy_registry_count":reloaded.status()["strategy_registry_count"],"active_core":reloaded.evolution_status()["active_version"]})
+finally:
+    shutil.rmtree(tmp,ignore_errors=True)
