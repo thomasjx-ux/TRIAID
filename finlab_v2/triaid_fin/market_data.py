@@ -488,6 +488,8 @@ def session_phase(market_id:str,now:datetime|None=None)->str:
             return "PREOPEN"
         if dt_time(9,30)<=t<dt_time(11,30) or dt_time(13,0)<=t<dt_time(15,0):
             return "OPEN"
+        if dt_time(11,30)<=t<dt_time(13,0):
+            return "BREAK"
         if dt_time(15,0)<=t<dt_time(18,0):
             return "POSTCLOSE"
         return "CLOSED"
