@@ -24,7 +24,7 @@ def _mode(value:str)->str:
     return key
 
 
-def build_market_data_router(engine,automation)->APIRouter:
+def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     router=APIRouter(prefix="/api/market-data",tags=["market-data"])
 
     @router.get("/status")
@@ -60,6 +60,21 @@ def build_market_data_router(engine,automation)->APIRouter:
             return trading_day_info(key,date)
         except ValueError as exc:
             raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+    @router.get("/trading-calendar-sync")
+    def trading_calendar_sync_status_api()->dict:
+        if calendar_sync is None:
+            return {"enabled":False,"status":"NOT_CONFIGURED"}
+        return calendar_sync.status()
+
+    @router.post("/trading-calendar-sync")
+    def trading_calendar_sync_now_api(force:bool=Query(default=True))->dict:
+        if calendar_sync is None:
+            raise HTTPException(status_code=503,detail="calendar sync not configured")
+        try:
+            return calendar_sync.sync_once(force=force)
+        except Exception as exc:
+            raise HTTPException(status_code=503,detail=f"{type(exc).__name__}:{exc}") from exc
 
     @router.get("/frequency-policy")
     def frequency_policy_status_api()->dict:
