@@ -1,8 +1,15 @@
 from app import daily, evolution_status, home, status, strategies
 
 html=home()
-assert "join('\\n')" in html
-assert "replace(/\\n/g" in html
+assert "TRIAID 增益" in html
+assert 'id="baseReturn"' in html
+assert 'id="triaidReturn"' in html
+assert 'id="gain"' in html
+assert 'id="thDelta"' in html
+assert "renderComparison" in html
+assert "baseline_weight" in html
+assert "triaid_weight" in html
+assert "JSON.stringify(d,null,2)" not in html
 assert "const el=id=>document.getElementById(id);" in html
 assert "UI data error:" in html
 
@@ -17,6 +24,7 @@ cards=strategies("zh","US")
 assert len(cards)==29
 assert any(x["selected"] for x in cards)
 assert all(x["name"] for x in cards)
+assert all("baseline_weight" in x and "triaid_weight" in x for x in cards)
 
 e=evolution_status()
 assert e["active_version"]
@@ -28,4 +36,5 @@ print({
     "date":d["date"],
     "strategy_cards":len(cards),
     "selected":sum(1 for x in cards if x["selected"]),
+    "ui_mode":"comparison-first",
 })
