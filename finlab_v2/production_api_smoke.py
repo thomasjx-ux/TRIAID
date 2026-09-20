@@ -75,6 +75,8 @@ expected_paths={
     "/api/strategy-evolution/promote/{market_id}/{version}",
     "/api/market-data/status","/api/market-data/capabilities",
     "/api/market-data/providers","/api/market-data/products",
+    "/api/market-data/trading-calendar",
+    "/api/market-data/trading-calendar/{market_id}",
     "/api/market-data/frequency-policy",
     "/api/market-data/frequency-policy/{market_id}/{mode}/set-level",
     "/api/market-data/frequency-policy/{market_id}/{mode}/set-interval",
@@ -146,6 +148,33 @@ assert providers["registry"]["chains"]["CN:DAILY"]==["research_bars","tencent_cn
 products=call("GET","/api/market-data/products")
 assert products["US"]["BAR_DAILY"]["available"] is True
 assert products["CN"]["BAR_DAILY"]["available"] is True
+
+calendar=call("GET","/api/market-data/trading-calendar")
+assert calendar["version"]=="official-trading-calendar@0.1.0"
+assert calendar["markets"]["US"]["coverage_years"]==[2026,2027,2028]
+assert calendar["markets"]["CN"]["coverage_years"]==[2026]
+
+us_closed=call("GET","/api/market-data/trading-calendar/US?date=2026-07-03")
+assert us_closed["calendar_known"] is True
+assert us_closed["is_trading_day"] is False
+assert us_closed["reason"]=="OFFICIAL_EXCHANGE_HOLIDAY"
+
+us_early=call("GET","/api/market-data/trading-calendar/US?date=2026-11-27")
+assert us_early["is_trading_day"] is True
+assert us_early["early_close"] is True
+assert us_early["early_close_time"]=="13:00"
+
+cn_closed=call("GET","/api/market-data/trading-calendar/CN?date=2026-09-25")
+assert cn_closed["calendar_known"] is True
+assert cn_closed["is_trading_day"] is False
+
+cn_open=call("GET","/api/market-data/trading-calendar/CN?date=2026-09-28")
+assert cn_open["is_trading_day"] is True
+
+cn_unknown=call("GET","/api/market-data/trading-calendar/CN?date=2027-01-04")
+assert cn_unknown["calendar_known"] is False
+assert cn_unknown["is_trading_day"] is False
+assert cn_unknown["reason"]=="CALENDAR_YEAR_UNAVAILABLE"
 freq=call("GET","/api/market-data/frequency-policy")
 assert freq["principle"].startswith("START_HIGHEST")
 
