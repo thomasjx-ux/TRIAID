@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.4.1")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.4.2")
 engine = EvolutionLabEngine()
 
 
@@ -187,24 +187,38 @@ def home() -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TRIAID FIN Evolution Lab V2</title>
 <style>
-:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#16181d;background:#f6f7f9}
-*{box-sizing:border-box}body{margin:0}.wrap{max-width:1240px;margin:auto;padding:24px}
+:root{
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:#172033;background:#f5f7fa;
+  --base:#5f6b7a;--triaid:#1769e0;--good:#138a4b;--bad:#c0392b;--warn:#b9770e;
+  --line:#e1e6ec;--card:#fff;--soft-blue:#eef5ff;--soft-green:#edf8f1;--soft-red:#fff1ef;
+}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:1280px;margin:auto;padding:24px}
 .top{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
-h1{margin:0;font-size:28px}h2{margin-top:30px;font-size:20px}h3{margin:0 0 8px;font-size:16px}
-.muted{color:#68707c}.toolbar{display:flex;gap:8px;flex-wrap:wrap}
-button,select{border:1px solid #cfd3da;background:#fff;border-radius:9px;padding:9px 13px;cursor:pointer}
-button.primary{background:#16181d;color:#fff;border-color:#16181d}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.card{background:#fff;border:1px solid #e1e4e8;border-radius:12px;padding:15px}
-.kpi{font-size:24px;margin-top:6px}.small{font-size:12px}.good{color:#0b7a3e}.bad{color:#b42318}
-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e1e4e8}
-th,td{text-align:left;padding:9px;border-bottom:1px solid #eceef1;font-size:13px;vertical-align:top}
-th{background:#fafafa;position:sticky;top:0}.tablewrap{overflow:auto;max-height:650px;border-radius:12px}
-.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef0f3;font-size:11px}
-.selected{background:#eaf7ef}.weights{white-space:nowrap}.reason{min-width:260px}
-canvas{width:100%;height:280px;background:#fff;border:1px solid #e1e4e8;border-radius:12px}
-pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0}
-.statusline{padding:10px 12px;border-radius:9px;background:#fff;border:1px solid #e1e4e8;margin-top:12px}
+h1{margin:0;font-size:28px}h2{margin:30px 0 12px;font-size:20px}.muted{color:#748091}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+button,select{border:1px solid #cfd6df;background:#fff;border-radius:9px;padding:9px 13px;cursor:pointer}
+button.primary{background:#172033;color:#fff;border-color:#172033}
+.statusline{padding:9px 12px;border-radius:9px;background:#fff;border:1px solid var(--line);margin-top:12px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px}
+.label{font-size:13px;color:#748091}.value{font-size:26px;font-weight:700;margin-top:6px}.sub{font-size:12px;color:#87909d;margin-top:4px}
+.base{color:var(--base)}.triaid{color:var(--triaid)}.good{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.compare{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.compare .card{min-height:112px}.compare .gain{border-width:2px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.summary .item{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
+.summary .item b{display:block;margin-top:4px;font-size:15px}
+canvas{width:100%;height:270px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.legend{display:flex;gap:18px;font-size:12px;margin:8px 0}.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+.tablewrap{overflow:auto;max-height:690px;border:1px solid var(--line);border-radius:12px;background:#fff}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #edf0f3;font-size:13px;vertical-align:top}
+th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fbff}.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef1f5;font-size:11px}
+.num{white-space:nowrap;font-variant-numeric:tabular-nums}.reason{min-width:320px;line-height:1.45}.strategy-name{font-weight:650}
+.delta{font-weight:700}.corebox{display:flex;gap:12px;flex-wrap:wrap}.corebox .card{flex:1;min-width:240px}
+.small{font-size:12px}.nowrap{white-space:nowrap}
+@media(max-width:760px){.compare{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
 </style>
 </head>
 <body>
@@ -212,7 +226,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0}
   <div class="top">
     <div>
       <h1 id="title">TRIAID FIN 进化实验台 V2</h1>
-      <div class="muted" id="subtitle">真实市场 → 动态策略群 → TRIAID Core → 后验评价 → 诊断 → Core 进化</div>
+      <div class="muted" id="subtitle">真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化</div>
     </div>
     <div class="toolbar">
       <select id="market" onchange="refreshAll()"><option value="US">US</option><option value="CN">A股 / CN</option></select>
@@ -223,105 +237,226 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0}
   </div>
   <div class="statusline" id="runStatus">Ready</div>
 
-  <h2 id="overviewTitle">系统与今日状态</h2>
-  <div class="grid">
-    <div class="card"><div class="muted" id="archLabel">架构版本</div><div class="kpi" id="arch">-</div></div>
-    <div class="card"><div class="muted" id="coreLabel">当前 Core</div><div class="kpi" id="core">-</div></div>
-    <div class="card"><div class="muted" id="dateLabel">最新数据日</div><div class="kpi" id="date">-</div></div>
-    <div class="card"><div class="muted" id="excessLabel">累计 TRIAID 超额</div><div class="kpi" id="excess">-</div></div>
+  <h2 id="resultTitle">TRIAID 结果比较</h2>
+  <div class="compare">
+    <div class="card">
+      <div class="label" id="baseReturnLabel">策略群基线收益</div>
+      <div class="value base" id="baseReturn">等待后验</div>
+      <div class="sub" id="baseReturnSub">介入前</div>
+    </div>
+    <div class="card">
+      <div class="label" id="triaidReturnLabel">TRIAID 后收益</div>
+      <div class="value triaid" id="triaidReturn">等待后验</div>
+      <div class="sub" id="triaidReturnSub">介入后</div>
+    </div>
+    <div class="card gain" id="gainCard">
+      <div class="label" id="gainLabel">TRIAID 增益</div>
+      <div class="value" id="gain">等待后验</div>
+      <div class="sub" id="gainSub">TRIAID 后收益 − 策略群基线</div>
+    </div>
   </div>
 
-  <h2 id="curveTitle">连续回顾曲线</h2>
-  <canvas id="curve" width="1180" height="280"></canvas>
+  <h2 id="overviewTitle">当前状态</h2>
+  <div class="grid">
+    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
+    <div class="card"><div class="label" id="coreLabel">当前 Core</div><div class="value triaid" id="core">-</div></div>
+    <div class="card"><div class="label" id="selectedLabel">当前策略数</div><div class="value" id="selectedCount">-</div></div>
+    <div class="card"><div class="label" id="cumLabel">累计 TRIAID 超额</div><div class="value" id="cumExcess">-</div></div>
+  </div>
 
-  <h2 id="dailyTitle">每日总结与详细分析</h2>
-  <div class="card"><pre id="daily">-</pre></div>
+  <h2 id="curveTitle">连续回顾</h2>
+  <div class="legend">
+    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
+    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
+  </div>
+  <canvas id="curve" width="1220" height="270"></canvas>
 
-  <h2 id="strategyTitle">策略群与每个策略解释</h2>
+  <h2 id="dailyTitle">今日摘要</h2>
+  <div class="summary">
+    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
+    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
+    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
+    <div class="item"><span class="label" id="dailyAnalysisLabel">今日结论</span><b id="dailyAnalysis">-</b></div>
+  </div>
+
+  <h2 id="strategyTitle">策略群与 TRIAID 调整</h2>
   <div class="tablewrap">
-  <table>
-    <thead><tr>
-      <th id="thStrategy">策略</th><th id="thState">状态</th><th id="thExp">预期净回报</th>
-      <th id="thRisk">风险</th><th id="thWeight">群组 → TRIAID</th><th id="thWhy">是什么 / 为什么选 / TRIAID为什么调</th>
-    </tr></thead>
-    <tbody id="strategyRows"></tbody>
-  </table>
+    <table>
+      <thead><tr>
+        <th id="thStrategy">策略</th>
+        <th id="thState">状态</th>
+        <th id="thExp">预期净回报</th>
+        <th id="thRisk">风险</th>
+        <th id="thBase">介入前</th>
+        <th id="thTriaid">TRIAID 后</th>
+        <th id="thDelta">增减</th>
+        <th id="thWhy">策略说明与选择原因</th>
+      </tr></thead>
+      <tbody id="strategyRows"></tbody>
+    </table>
   </div>
 
-  <h2 id="evolutionTitle">Core 进化</h2>
-  <div class="grid">
-    <div class="card"><h3 id="diagLabel">诊断</h3><pre id="evolution">-</pre></div>
-    <div class="card"><h3 id="gateLabel">进化门</h3><div id="gateText" class="muted"></div><br><button onclick="propose()" id="proposeBtn">生成 Candidate Core</button></div>
+  <h2 id="evolutionTitle">Core 进化状态</h2>
+  <div class="corebox">
+    <div class="card">
+      <div class="label" id="evoObservedLabel">已验证决策</div>
+      <div class="value" id="evoObserved">0</div>
+      <div class="sub" id="evoMean">尚无可评价结果</div>
+    </div>
+    <div class="card">
+      <div class="label" id="evoNegLabel">负贡献比例</div>
+      <div class="value" id="evoNeg">-</div>
+      <div class="sub" id="evoNote">Core 会根据持续验证结果形成候选改进</div>
+    </div>
+    <div class="card">
+      <div class="label" id="evoCandidateLabel">下一步</div>
+      <div class="sub" id="evoLast">尚无 Candidate</div>
+      <br><button onclick="propose()" id="proposeBtn">生成 Candidate Core</button>
+    </div>
   </div>
 </div>
+
 <script>
 let lang='zh';
+const el=id=>document.getElementById(id);
 const T={
- zh:{title:'TRIAID FIN 进化实验台 V2',subtitle:'真实市场 → 动态策略群 → TRIAID Core → 后验评价 → 诊断 → Core 进化',
- overview:'系统与今日状态',arch:'架构版本',core:'当前 Core',date:'最新数据日',excess:'累计 TRIAID 超额',
- curve:'连续回顾曲线',daily:'每日总结与详细分析',strategies:'策略群与每个策略解释',
- strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',weight:'群组 → TRIAID',why:'是什么 / 为什么选 / TRIAID为什么调',
- evolution:'Core 进化',diag:'诊断',gate:'进化门',gateText:'Candidate 只有 Replay、Holdout、Shadow、Audit 四项全部通过才能晋升。',
- run:'立即执行',runAll:'执行两个市场',ready:'Ready',running:'已创建运行，后台正在读取真实市场数据。'},
- en:{title:'TRIAID FIN Evolution Lab V2',subtitle:'Real market → Dynamic strategy population → TRIAID Core → Outcome evaluation → Diagnosis → Core evolution',
- overview:'System and Daily State',arch:'Architecture',core:'Active Core',date:'Latest Market Date',excess:'Cumulative TRIAID Excess',
- curve:'Continuous Review Curves',daily:'Daily Summary and Detailed Analysis',strategies:'Strategy Group and Explanations',
- strategy:'Strategy',state:'State',exp:'Expected Net Return',risk:'Risk',weight:'Group → TRIAID',why:'What it is / Why selected / Why TRIAID changed it',
- evolution:'Core Evolution',diag:'Diagnosis',gate:'Evolution Gate',gateText:'A Candidate can be promoted only after Replay, Holdout, Shadow and Audit all pass.',
- run:'Run Now',runAll:'Run Both Markets',ready:'Ready',running:'Run created. Real market data is being processed in the background.'}
+ zh:{
+  title:'TRIAID FIN 进化实验台 V2',subtitle:'真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化',
+  result:'TRIAID 结果比较',baseReturn:'策略群基线收益',triaidReturn:'TRIAID 后收益',gain:'TRIAID 增益',
+  baseSub:'介入前',triaidSub:'介入后',gainSub:'TRIAID 后收益 − 策略群基线',
+  overview:'当前状态',date:'最新数据日',core:'当前 Core',selected:'当前策略数',cum:'累计 TRIAID 超额',
+  curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
+  daily:'今日摘要',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'今日结论',
+  strategies:'策略群与 TRIAID 调整',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
+  before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
+  evolution:'Core 进化状态',observed:'已验证决策',negative:'负贡献比例',next:'下一步',
+  noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续验证结果形成候选改进',
+  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即执行',runAll:'执行两个市场',
+  running:'已创建运行，后台正在读取真实市场数据。',pending:'当前决策已生成，等待下一交易日结果。',
+  positive:'TRIAID 本次产生正增益',negativeResult:'TRIAID 本次产生负增益，需要回看干预归因',flat:'TRIAID 本次与基线基本一致'
+ },
+ en:{
+  title:'TRIAID FIN Evolution Lab V2',subtitle:'Real market → Dynamic strategy population → TRIAID Core → Outcome validation → Continuous evolution',
+  result:'TRIAID Result Comparison',baseReturn:'Strategy-group baseline',triaidReturn:'After TRIAID',gain:'TRIAID uplift',
+  baseSub:'Before intervention',triaidSub:'After intervention',gainSub:'After TRIAID − strategy-group baseline',
+  overview:'Current State',date:'Latest market date',core:'Active Core',selected:'Selected strategies',cum:'Cumulative TRIAID excess',
+  curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
+  daily:'Daily Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Daily conclusion',
+  strategies:'Strategy Group and TRIAID Adjustments',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
+  before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
+  evolution:'Core Evolution State',observed:'Verified decisions',negative:'Negative-contribution rate',next:'Next step',
+  noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuously verified results',
+  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Now',runAll:'Run Both Markets',
+  running:'Run created. Real market data is being processed in the background.',pending:'Current decision is ready and awaiting the next market outcome.',
+  positive:'TRIAID produced positive uplift in the latest evaluated run',negativeResult:'TRIAID produced negative uplift; intervention attribution should be reviewed',flat:'TRIAID is approximately in line with baseline'
+ }
 };
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
+function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return (v>0?'+':'')+v.toFixed(2)+'%'}
+function cls(x){return x>1e-12?'good':x<-1e-12?'bad':''}
 function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-const el=id=>document.getElementById(id);
 function applyText(){
  const t=T[lang];
- el('title').textContent=t.title;el('subtitle').textContent=t.subtitle;el('overviewTitle').textContent=t.overview;
- el('archLabel').textContent=t.arch;el('coreLabel').textContent=t.core;el('dateLabel').textContent=t.date;el('excessLabel').textContent=t.excess;
- el('curveTitle').textContent=t.curve;el('dailyTitle').textContent=t.daily;el('strategyTitle').textContent=t.strategies;
- el('thStrategy').textContent=t.strategy;el('thState').textContent=t.state;el('thExp').textContent=t.exp;el('thRisk').textContent=t.risk;el('thWeight').textContent=t.weight;el('thWhy').textContent=t.why;
- el('evolutionTitle').textContent=t.evolution;el('diagLabel').textContent=t.diag;el('gateLabel').textContent=t.gate;el('gateText').textContent=t.gateText;
- el('runBtn').textContent=t.run;el('runAllBtn').textContent=t.runAll;
+ const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
+ baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
+ selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
+ regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',strategyTitle:'strategies',
+ thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+ evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
+ proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
+ Object.entries(map).forEach(([id,key])=>el(id).textContent=t[key]);
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function runNow(){
- const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
+ const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
 }
 async function runAll(){
- const x=await json('/api/live/run-all',{method:'POST'});el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
+ const x=await json('/api/live/run-all',{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
  x.runs.forEach(r=>pollRun(r.run_id));
 }
 async function pollRun(id){
- for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,1000));try{const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;if(!['CREATED','FETCHING_DATA'].includes(x.status)){refreshAll();return}}catch(e){}}
+ for(let i=0;i<30;i++){
+  await new Promise(r=>setTimeout(r,1000));
+  try{
+   const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
+   if(!['CREATED','FETCHING_DATA'].includes(x.status)){refreshAll();return}
+  }catch(e){}
+ }
 }
 function drawCurve(points){
- const c=document.getElementById('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
- g.font='12px system-ui';g.fillStyle='#68707c';g.fillText('Baseline / TRIAID',12,18);
- if(!points.length){g.fillText(lang==='zh'?'等待连续验证数据':'Waiting for continuous verified outcomes',12,45);return}
- const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
- const X=i=>30+(c.width-55)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-50)*(hi-v)/(hi-lo);
- g.strokeStyle='#d8dce2';g.beginPath();g.moveTo(30,c.height-25);g.lineTo(c.width-20,c.height-25);g.stroke();
- [['baseline_equity','#69707d'],['triaid_equity','#111827']].forEach(([key,color])=>{g.strokeStyle=color;g.lineWidth=2;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke()});
+ const c=el('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+ if(!points.length){g.fillStyle='#7b8593';g.font='13px system-ui';g.fillText(T[lang].noEval,18,32);return}
+ const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);
+ let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
+ const X=i=>45+(c.width-70)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-55)*(hi-v)/(hi-lo);
+ g.strokeStyle='#e1e6ec';g.lineWidth=1;for(let j=0;j<4;j++){const y=25+(c.height-55)*j/3;g.beginPath();g.moveTo(45,y);g.lineTo(c.width-20,y);g.stroke()}
+ [['baseline_equity','#6f7782'],['triaid_equity','#1769e0']].forEach(([key,color])=>{
+  g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+ });
+}
+function renderComparison(evaluated){
+ const t=T[lang];
+ if(!evaluated){
+  el('baseReturn').textContent=t.noEval;el('triaidReturn').textContent=t.noEval;el('gain').textContent=t.noEval;
+  el('gain').className='value';el('gainCard').style.background='#fff';return;
+ }
+ const e=evaluated.evaluation, gain=Number(e.excess_return||0);
+ el('baseReturn').textContent=fmtPct(e.baseline_return);el('triaidReturn').textContent=fmtPct(e.triaid_return);
+ el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
+ el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
 }
 async function refreshAll(){
  const m=el('market').value;
  try{
- const [s,d,cards,curves,evo]=await Promise.all([
-  json('/api/status'),json('/api/daily?market_id='+m),json('/api/strategies?market_id='+m+'&lang='+lang),json('/api/curves?market_id='+m),json('/api/evolution')
- ]);
- el('arch').textContent=s.architecture_version;el('core').textContent=s.active_core.version;el('date').textContent=d.date||'-';
- const last=curves.length?curves[curves.length-1]:null;const ex=last?last.cumulative_excess_return:null;
- el('excess').textContent=fmtPct(ex);el('excess').className='kpi '+(ex>0?'good':ex<0?'bad':'');
- el('daily').textContent=JSON.stringify(d,null,2);el('evolution').textContent=JSON.stringify({active_version:evo.active_version,diagnosis:evo.diagnosis,history:(evo.history||[]).slice(-5)},null,2);
- drawCurve(curves);
- el('strategyRows').innerHTML=cards.map(x=>{
-  const cls=x.selected?'selected':'';
-  const explain=[x.summary,x.best_conditions,x.selection_reason,x.triaid_reason].filter(Boolean).join('\\n');
-  return '<tr class="'+cls+'"><td><b>'+esc(x.name)+'</b><br><span class="small muted">'+esc(x.strategy_id)+'</span></td><td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td><td>'+fmtPct(x.expected_net_return)+'</td><td>'+fmtPct(x.risk)+'</td><td class="weights">'+fmtPct(x.baseline_weight)+' → '+fmtPct(x.triaid_weight)+'</td><td class="reason">'+esc(explain).replace(/\\n/g,'<br>')+'</td></tr>'
- }).join('');
+  const [s,d,cards,curves,evo,runs]=await Promise.all([
+   json('/api/status'),json('/api/daily?market_id='+m),json('/api/strategies?market_id='+m+'&lang='+lang),
+   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100')
+  ]);
+  const evaluated=[...runs].reverse().find(x=>x.evaluation&&x.evaluation.status==='EVALUATED')||null;
+  const selected=cards.filter(x=>x.selected);
+  const latest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
+  const lastCurve=curves.length?curves[curves.length-1]:null;
+  renderComparison(evaluated);
+  el('date').textContent=d.date||'-';el('core').textContent=s.active_core.version;el('selectedCount').textContent=selected.length;
+  const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
+  el('regime').textContent=latest?.regime||'-';el('runState').textContent=latest?.status||'-';
+  el('selectedNames').textContent=selected.length?selected.map(x=>x.name).slice(0,6).join('、')+(selected.length>6?' …':''):'-';
+  if(evaluated){
+   const g=Number(evaluated.evaluation.excess_return||0);
+   el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
+   el('dailyAnalysis').className=cls(g);
+  }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  drawCurve(curves);
+  const sorted=[...cards].sort((a,b)=>(Number(b.selected)-Number(a.selected))||((b.expected_net_return??-999)-(a.expected_net_return??-999)));
+  el('strategyRows').innerHTML=sorted.map(x=>{
+   const delta=(x.triaid_weight||0)-(x.baseline_weight||0);
+   const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
+   return '<tr class="'+(x.selected?'selected':'')+'">'+
+    '<td><span class="strategy-name">'+esc(x.name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
+    '<td class="reason">'+esc(explanation)+'</td></tr>';
+  }).join('');
+  const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
+  el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
+    (lang==='zh'?'平均 TRIAID 增益 ':'Mean TRIAID uplift ')+signedPct(diag.mean_excess_return);
+  el('evoMean').className='sub '+cls(diag.mean_excess_return||0);
+  el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
+  const history=evo.history||[];const last=history.length?history[history.length-1]:null;
+  el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
+  el('runStatus').textContent=latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready';
  }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
 }
 async function propose(){
- const x=await json('/api/evolution/propose',{method:'POST'});el('runStatus').textContent=JSON.stringify(x);refreshAll();
+ const x=await json('/api/evolution/propose',{method:'POST'});
+ el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
+ refreshAll();
 }
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll()}
 applyText();refreshAll();setInterval(refreshAll,15000);
