@@ -10,6 +10,7 @@ os.environ["TRIAID_STORAGE_BACKEND"]="file"
 
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.frequency_policy import FrequencyPolicy
 from triaid_fin.market_data import session_phase
 from triaid_fin.market_runtime import MarketDataAutomation
@@ -32,7 +33,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.5"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.8.0"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -208,6 +209,23 @@ try:
     assert verified.audit and verified.audit.passed
     assert verified.diagnostic_summary.get("contribution_deltas") is not None
 
+    scheduler=DecisionScheduler(engine)
+    assessment=scheduler.assess_transition("US","INTRADAY",third_obs["transition"])
+    assert assessment["trigger"] is True
+    assert assessment["reason"]=="WARMUP_HIGH_SENSITIVITY"
+    auto=scheduler.after_refresh(
+        "US",
+        "INTRADAY",
+        {"market_id":"US","mode":"INTRADAY","session_phase":"OPEN","source_latest_ts":third_obs["transition"]["source_latest_ts"]},
+        {"transition":third_obs["transition"]},
+    )
+    assert auto["enabled"] is True
+    assert auto["action"]=="TRANSITION_EVALUATED"
+    assert auto["event"]["event_type"]=="TRANSITION_RESEARCH_DECISION"
+    assert auto["event"]["decision"]["research_only"] is True
+    assert auto["event"]["decision"]["action_generated"] is False
+    assert scheduler.status()["broker_execution_enabled"] is False
+
     curves=engine.curves("US")
     assert len(curves)>=1
     daily=engine.daily_summary("US")
@@ -230,9 +248,11 @@ try:
 
     incubator=state("C29_SIZE_REL20",0.20,0.20,0.03)
     incubator.metrics["latest_return"]=0.01
-    tracked=reloaded.population_state.apply("CN",[incubator])[0]
+    tracked=reloaded.population_state.apply("CN",[incubator],observation_key="DAILY:2026-09-18")[0]
+    tracked_again=reloaded.population_state.apply("CN",[incubator],observation_key="DAILY:2026-09-18")[0]
     assert tracked.lifecycle=="shadow"
     assert tracked.metrics["shadow_live_days"]==1.0
+    assert tracked_again.metrics["shadow_live_days"]==1.0
     assert tracked.shadow_evidence_pass is False
 
     hard_failure=state("P04_TREND50",0.2)
