@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.market_data import session_phase
+from triaid_fin.market_lab import MARKETS
 
 engine = EvolutionLabEngine()
 
@@ -101,6 +102,48 @@ def market_data_capabilities_api(market_id: str | None = None) -> dict:
     if market_id and market_id.upper() not in {"US","CN"}:
         raise HTTPException(status_code=400, detail="market_id must be US or CN")
     return engine.market_data_capabilities(market_id.upper() if market_id else None)
+
+
+@app.get("/api/market-data/providers")
+def market_data_providers_api() -> dict:
+    return engine.market_data_provider_status()
+
+
+@app.get("/api/market-data/products")
+def market_data_products_api(market_id: str | None = None) -> dict:
+    if market_id and market_id.upper() not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    return engine.market_data_product_capabilities(market_id.upper() if market_id else None)
+
+
+@app.get("/api/market-data/quotes/{market_id}")
+def market_data_quotes_api(
+    market_id: str,
+    symbols: str | None = Query(default=None),
+) -> dict:
+    market_id=market_id.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    requested=[x.strip().upper() for x in (symbols or "").split(",") if x.strip()]
+    if not requested:
+        requested=list(MARKETS[market_id].assets)
+    try:
+        return engine.market_data_latest_quotes(market_id,requested)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
+
+
+@app.get("/api/market-data/instrument/{market_id}/{symbol}/{mode}")
+def market_data_instrument_api(market_id: str, symbol: str, mode: str) -> dict:
+    market_id=market_id.upper();mode=mode.upper();symbol=symbol.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if mode not in {"DAILY","INTRADAY","PREOPEN","REALTIME"}:
+        raise HTTPException(status_code=400, detail="mode must be DAILY, INTRADAY, PREOPEN or REALTIME")
+    try:
+        return engine.market_data_instrument_series(market_id,symbol,mode)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
 
 
 @app.get("/api/market-data/snapshot/{market_id}/{mode}")
