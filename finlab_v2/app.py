@@ -109,7 +109,7 @@ def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
     market_id: str | None = Query(default=None),
 ) -> list[dict]:
-    cards = engine.strategy_population.strategy_cards(lang)
+    cards = engine.strategy_population.strategy_cards(lang, market_id)
     latest_run = engine.latest_run(market_id) if market_id else None
     state_map = {s.strategy_id: s for s in latest_run.strategy_states} if latest_run else {}
     group = latest_run.strategy_group if latest_run else None
