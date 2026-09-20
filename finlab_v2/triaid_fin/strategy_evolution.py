@@ -192,6 +192,7 @@ class StrategyEvolutionModule:
 
     def _candidate_profiles(self,active:StrategyRuleProfile)->list[StrategyRuleProfile]:
         weight_sets=[
+            ("default",active.window_weights),
             ("short",(0.45,0.30,0.15,0.10)),
             ("balanced",(0.25,0.25,0.25,0.25)),
             ("long",(0.20,0.25,0.25,0.30)),
