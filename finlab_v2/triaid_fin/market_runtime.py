@@ -9,7 +9,7 @@ from .frequency_policy import FrequencyPolicy
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.2.0"
+    version="market-data-automation@0.3.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
