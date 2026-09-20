@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 from .trading_calendar import install_synced_calendar
 
 
-VERSION="official-trading-calendar-sync@0.1.0"
+VERSION="official-trading-calendar-sync@0.1.1"
 
 NYSE_URL="https://www.nyse.com/trade/hours-calendars"
 SSE_LIST_URL="https://www.sse.com.cn/disclosure/dealinstruc/closed/list/"
