@@ -1,19 +1,65 @@
 # TRIAID FIN Evolution Lab V2
 
-This branch contains a minimal modular scaffold for the secondary-market TRIAID evolution experiment.
+TRIAID FIN V2 is a secondary-market research environment for continuous TRIAID Core improvement. It is deliberately smaller than a general trading platform.
 
-The system is intentionally small:
+## Research loop
 
-1. Strategy Population
-2. TRIAID Core
-3. Evaluation
-4. Audit
-5. Daily review and continuous curves
+Real market data → dynamic strategy population → TRIAID Core → next-period outcome → evaluation and attribution → diagnosis → Candidate Core → replay/holdout/shadow/audit gate → promotion or rejection.
 
-The current Core is an identity scaffold and must not be interpreted as the research Core. It exists to prove that the Core can be replaced independently without modifying the surrounding modules.
+The goal is not to force the current Core to beat the strategy population immediately. The goal is to make Core improvement observable, attributable, reproducible and continuously testable.
 
-A decision run is created first. Realized outcomes are submitted later through a separate endpoint. This preserves the T to T+1 boundary and avoids using future outcomes when making a decision.
+## Modules
 
-The strategy registry is intentionally empty until the previously developed strategy-population rules have been independently reviewed and migrated.
+- Market Data: real US and CN market panels, point-in-time T to T+1 discipline
+- Strategy Registry: 29 migrated strategies from the audited Cloud 007 policy bank
+- Strategy Population: market-specific admission, exit, cooldown, weighting and cash handling
+- Population State: persistent lifecycle state and automatic daily updates
+- TRIAID Core: independently versioned intervention module
+- Evaluation: baseline versus TRIAID outcome and strategy-level attribution
+- Audit: structural and result integrity checks
+- Review: daily detailed report and continuous curves
+- Evolution: diagnosis, Candidate generation, validation gate and promotion ledger
+- Run Store: persistent when /data is mounted, local fallback otherwise
 
-No market credentials, private data, account data, or historical production artifacts are stored in this branch.
+## Markets
+
+US uses SPY, QQQ, IWM, TLT and GLD.
+
+CN uses 510300.SS, 510500.SS, 159915.SZ, 512100.SS and 511010.SS.
+
+## Live execution
+
+A Run Now request creates a run identifier immediately. Market retrieval and calculation continue in the background. If the provider timestamp has not changed, the run is marked NO_NEW_DATA. On a new trading day, the previous day's pending decision is evaluated with the newly observed next-period return before a new decision is produced.
+
+## Strategy population rules
+
+US:
+- 21/63/126/252-day evidence windows
+- 3-day entry confirmation
+- 3-day exit confirmation
+- 5-day cooldown
+- 28% maximum risky strategy weight
+
+CN:
+- 21/63/126/252-day evidence windows
+- 5-day entry confirmation
+- 3-day exit confirmation
+- 10-day cooldown
+- 28% maximum risky strategy weight
+
+SHADOW strategies receive no experimental allocation. Cash is explicit. Risk, liquidity, capacity, cost and concentration are constraints, not diversity objectives.
+
+## Core evolution
+
+Candidate generation is permitted from verified diagnostic history. Promotion is not automatic. A Candidate must pass all four gates:
+
+- Replay
+- Holdout
+- Shadow
+- Audit
+
+The active Core version and every promotion event are recorded.
+
+## Storage
+
+If Railway mounts a persistent Volume at /data, V2 automatically stores runs and evolution state under /data/triaid_fin_v2. Without /data it falls back to local runtime storage, which is suitable for testing but not durable across redeployments.
