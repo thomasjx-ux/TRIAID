@@ -36,6 +36,19 @@ class EvolutionLabEngine:
         self.review=ReviewModule()
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
+        self._recover_stale_runs()
+
+    def _recover_stale_runs(self)->None:
+        for run in list(self._runs.values()):
+            if run.status not in {"CREATED","FETCHING_DATA"}:
+                continue
+            run.status="FAILED"
+            run.diagnostic_summary={
+                **dict(run.diagnostic_summary or {}),
+                "error":"STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART",
+                "recovery":"Previous process ended before this research run completed.",
+            }
+            self.store.save_run(run)
 
     def _apply_strategy_profiles(self)->None:
         for market_id in ("US","CN"):
