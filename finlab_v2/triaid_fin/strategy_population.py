@@ -50,16 +50,33 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.3.0"
+    version = "strategy-population@0.4.0"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
+        self._config_overrides: Dict[str, PopulationConfig] = {}
         for definition in build_definitions():
             self.register(definition)
 
+    def configure_market(self, profile) -> None:
+        key=profile.market_id.upper()
+        self._config_overrides[key]=PopulationConfig(
+            config_version=profile.version,
+            market_id=key,
+            review_windows=(21,63,126,252),
+            entry_confirm_days=int(profile.entry_confirm_days),
+            exit_confirm_days=int(profile.exit_confirm_days),
+            cooldown_days=int(profile.cooldown_days),
+            max_weight=float(profile.max_weight),
+        )
+
     def config_for(self, market_id: str) -> PopulationConfig:
         key = market_id.upper()
-        if key in {"CN", "A", "A_SHARE", "ASHARE"}:
+        if key in {"A", "A_SHARE", "ASHARE"}:
+            key="CN"
+        if key in self._config_overrides:
+            return self._config_overrides[key]
+        if key=="CN":
             return CN_CONFIG
         return US_CONFIG
 
