@@ -30,9 +30,20 @@ class StrategyState(BaseModel):
     lifecycle: Literal["research", "candidate", "shadow", "active", "reduced", "frozen", "retired"] = "candidate"
     expected_net_return: float
     risk: float = 0.0
+    uncertainty: float = 0.0
     estimated_cost: float = 0.0
+    liquidity_ok: bool = True
     capacity_ok: bool = True
     risk_ok: bool = True
+    concentration_ok: bool = True
+    hard_failure: bool = False
+    oos_marginal_value: Optional[float] = None
+    shadow_evidence_pass: bool = False
+    new_evidence_pass: bool = False
+    evidence_days: int = 0
+    horizon_multiples: float = 0.0
+    independent_decisions: int = 0
+    metrics: Dict[str, float] = Field(default_factory=dict)
     selection_reason: Optional[BilingualText] = None
 
 
@@ -57,6 +68,8 @@ class OutcomeRequest(BaseModel):
 
 class StrategyGroup(BaseModel):
     group_version: str
+    config_version: str
+    market_id: str
     selected_at: str = Field(default_factory=utc_now)
     members: List[str]
     weights: Dict[str, float]
