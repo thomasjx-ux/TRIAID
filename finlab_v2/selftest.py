@@ -7,6 +7,7 @@ os.environ["TRIAID_DATA_DIR"]=tmp
 
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.frequency_policy import FrequencyPolicy
 
 
 def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",recent=None):
@@ -27,6 +28,38 @@ try:
 
     assert engine.status()["strategy_registry_count"]==33
     assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.1"
+    frequency=FrequencyPolicy(engine.store)
+    assert frequency.interval("US","REALTIME")==60
+    hold=frequency.record_evidence(
+        "US","REALTIME",
+        evaluated_samples=5,
+        incremental_net_return=-0.001,
+        incremental_information_gain=-0.01,
+        confidence=0.90,
+    )
+    assert hold["evaluation_action"]=="HOLD_HIGHER_FREQUENCY"
+    assert hold["interval_seconds"]==60
+    step=frequency.record_evidence(
+        "US","REALTIME",
+        evaluated_samples=30,
+        incremental_net_return=-0.001,
+        incremental_information_gain=-0.01,
+        confidence=0.90,
+    )
+    assert step["evaluation_action"]=="STEP_DOWN_ONE_LEVEL"
+    assert step["interval_seconds"]==120
+    locked=frequency.set_level("US","REALTIME",0,lock=True,reason="selftest")
+    assert locked["interval_seconds"]==60
+    locked_hold=frequency.record_evidence(
+        "US","REALTIME",
+        evaluated_samples=50,
+        incremental_net_return=-0.01,
+        incremental_information_gain=-0.10,
+        confidence=0.99,
+    )
+    assert locked_hold["evaluation_action"]=="MANUAL_LOCK_HOLD"
+    assert locked_hold["interval_seconds"]==60
+    frequency.unlock("US","REALTIME")
     obs={
         "market_id":"US","mode":"INTRADAY","session_phase":"OPEN",
         "provider":"selftest","quality":"research_intraday","execution_grade":False,
