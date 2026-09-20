@@ -36,13 +36,16 @@ app.include_router(build_market_data_router(engine,market_automation))
 
 @app.get("/health")
 def health()->dict:
+    storage=engine.store.backend.status()
+    probe=storage.get("persistence_probe") or {}
+    volume=storage.get("volume") or {}
     return {
         "ok":True,
         "architecture_version":engine.architecture_version,
-        "storage_backend":engine.store.backend.status()["backend"],
-        "storage_durability":engine.store.backend.durability,
-        "storage_volume_mounted":engine.store.backend.status()["volume"]["expected_mount_is_mounted"],
-        "storage_persistence_confirmed":engine.store.backend.status()["persistence_probe"]["confirmed_across_deployments"],
+        "storage_backend":storage.get("backend"),
+        "storage_durability":storage.get("durability"),
+        "storage_volume_mounted":volume.get("expected_mount_is_mounted"),
+        "storage_persistence_confirmed":probe.get("confirmed_across_deployments"),
     }
 
 
