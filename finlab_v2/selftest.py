@@ -1,6 +1,8 @@
 import os
 import shutil
 import tempfile
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 tmp=tempfile.mkdtemp(prefix="triaid-fin-v2-selftest-")
 os.environ["TRIAID_DATA_DIR"]=tmp
@@ -8,6 +10,8 @@ os.environ["TRIAID_DATA_DIR"]=tmp
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.frequency_policy import FrequencyPolicy
+from triaid_fin.market_data import session_phase
+from triaid_fin.market_runtime import MarketDataAutomation
 
 
 def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",recent=None):
@@ -27,7 +31,20 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.2"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.3"
+    runtime=MarketDataAutomation(engine)
+    assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
+    assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
+    assert session_phase("CN",datetime(2026,9,22,12,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="BREAK"
+    assert session_phase("CN",datetime(2026,9,22,14,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
+    assert session_phase("CN",datetime(2026,9,22,15,5,tzinfo=ZoneInfo("Asia/Shanghai")))=="POSTCLOSE"
+    assert session_phase("US",datetime(2026,9,22,8,0,tzinfo=ZoneInfo("America/New_York")))=="PREOPEN"
+    assert session_phase("US",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("America/New_York")))=="OPEN"
+    assert runtime.refresh_plan_for_phase("CN","PREOPEN")=={"REALTIME":60}
+    assert runtime.refresh_plan_for_phase("CN","OPEN")=={"INTRADAY":300,"REALTIME":60}
+    assert runtime.refresh_plan_for_phase("CN","BREAK")=={"REALTIME":300}
+    assert runtime.refresh_plan_for_phase("US","PREOPEN")=={"PREOPEN":300,"REALTIME":60}
+    assert runtime.refresh_plan_for_phase("US","OPEN")=={"INTRADAY":300,"REALTIME":60}
     frequency=FrequencyPolicy(engine.store)
     assert frequency.interval("US","REALTIME")==60
     hold=frequency.record_evidence(
