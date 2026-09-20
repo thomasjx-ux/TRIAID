@@ -170,6 +170,23 @@ def market_data_observation_status_api() -> dict:
     return engine.market_observation_status()
 
 
+@app.get("/api/market-data/transitions")
+def market_data_transitions_api(
+    market_id: str | None = None,
+    mode: str | None = None,
+    limit: int = Query(default=200, ge=1, le=5000),
+) -> list[dict]:
+    if market_id and market_id.upper() not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if mode and mode.upper() not in {"DAILY","INTRADAY","PREOPEN","REALTIME"}:
+        raise HTTPException(status_code=400, detail="invalid mode")
+    return engine.market_transitions(
+        market_id.upper() if market_id else None,
+        mode.upper() if mode else None,
+        limit,
+    )
+
+
 @app.get("/api/market-data/snapshot/{market_id}/{mode}")
 def market_data_snapshot_api(
     market_id: str,
