@@ -27,7 +27,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.1"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.2"
     frequency=FrequencyPolicy(engine.store)
     assert frequency.interval("US","REALTIME")==60
     hold=frequency.record_evidence(
