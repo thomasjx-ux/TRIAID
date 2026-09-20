@@ -5,24 +5,31 @@ from typing import Dict, List
 from uuid import uuid4
 
 from .audit import AuditModule
-from .contracts import OutcomeRequest, RunRecord, RunRequest
+from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
+from .evolution import EvolutionModule
 from .review import ReviewModule
+from .store import RunStore
 from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.2.0"
+    architecture_version = "fin-evolution-lab@0.3.0"
 
     def __init__(self) -> None:
+        self.store=RunStore()
+        self.evolution=EvolutionModule(self.store)
         self.strategy_population = StrategyPopulationModule()
-        self.core = TriaidCoreModule()
+        self.core = TriaidCoreModule(self.evolution.active())
         self.evaluation = EvaluationModule()
         self.audit = AuditModule()
         self.review = ReviewModule()
-        self._runs: Dict[str, RunRecord] = {}
+        self._runs: Dict[str, RunRecord] = {r.run_id:r for r in self.store.list_runs()}
         self._lock = RLock()
+
+    def refresh_core(self) -> None:
+        self.core=TriaidCoreModule(self.evolution.active())
 
     @property
     def module_manifest(self) -> Dict[str, str]:
@@ -33,17 +40,34 @@ class EvolutionLabEngine:
             "evaluation": self.evaluation.version,
             "audit": self.audit.version,
             "review": self.review.version,
+            "store": self.store.version,
+            "evolution": self.evolution.version,
         }
 
-    def create_run(self, request: RunRequest) -> RunRecord:
-        run_id = f"{request.market.market_id}-{uuid4().hex[:12]}"
+    def create_run(self, request: RunRequest, run_id: str | None = None) -> RunRecord:
+        run_id = run_id or f"{request.market.market_id}-{uuid4().hex[:12]}"
         run = RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
             market=request.market,
+            strategy_states=list(request.strategy_states),
         )
         with self._lock:
             self._runs[run_id] = run
+            self.store.save_run(run)
+        return run
+
+    def create_pending_live_run(self, market_id: str) -> RunRecord:
+        run_id=f"{market_id}-live-{uuid4().hex[:12]}"
+        run=RunRecord(
+            run_id=run_id,
+            module_manifest=self.module_manifest,
+            market=MarketSnapshot(market_id=market_id,as_of="",snapshot_id="PENDING",regime=None),
+            status="FETCHING_DATA",
+        )
+        with self._lock:
+            self._runs[run_id]=run
+            self.store.save_run(run)
         return run
 
     def execute(self, run_id: str, request: RunRequest) -> None:
@@ -53,22 +77,29 @@ class EvolutionLabEngine:
                 request.strategy_states,
                 request.max_group_size,
             )
-            decision = self.core.decide(request.market, group)
+            decision = self.core.decide(request.market, group, request.strategy_states)
             with self._lock:
                 run = self._runs[run_id]
+                run.market=request.market
+                run.strategy_states=list(request.strategy_states)
+                run.module_manifest=self.module_manifest
                 run.strategy_group = group
                 run.triaid_decision = decision
                 run.evaluation = self.evaluation.pending()
                 run.audit = self.audit.audit(run)
                 run.status = "DECISION_READY_AWAITING_OUTCOME" if run.audit.passed else "FAILED"
-        except Exception:
+                self.store.save_run(run)
+        except Exception as exc:
             with self._lock:
-                self._runs[run_id].status = "FAILED"
+                run=self._runs[run_id]
+                run.status="FAILED"
+                run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
+                self.store.save_run(run)
             raise
 
     def submit_outcome(self, run_id: str, outcome: OutcomeRequest) -> RunRecord:
         with self._lock:
-            run = self._runs[run_id]
+            run = self._runs.get(run_id) or self.store.load_run(run_id)
             if run.strategy_group is None or run.triaid_decision is None:
                 raise ValueError("Decision is not ready.")
             run.evaluation = self.evaluation.evaluate(
@@ -79,30 +110,71 @@ class EvolutionLabEngine:
             )
             run.audit = self.audit.audit(run)
             run.status = "VERIFIED" if run.audit.passed else "FAILED"
+            base=run.evaluation.baseline_contributions
+            tri=run.evaluation.triaid_contributions
+            deltas={k:tri.get(k,0.0)-base.get(k,0.0) for k in set(base)|set(tri)}
+            run.diagnostic_summary={
+                "positive_interventions":sum(1 for x in deltas.values() if x>0),
+                "negative_interventions":sum(1 for x in deltas.values() if x<0),
+                "largest_positive":max(deltas.items(),key=lambda x:x[1]) if deltas else None,
+                "largest_negative":min(deltas.items(),key=lambda x:x[1]) if deltas else None,
+                "contribution_deltas":deltas,
+            }
+            self._runs[run_id]=run
+            self.store.save_run(run)
             return run
 
     def get_run(self, run_id: str) -> RunRecord:
         with self._lock:
-            return self._runs[run_id]
+            if run_id in self._runs:
+                return self._runs[run_id]
+        return self.store.load_run(run_id)
 
-    def _runs_snapshot(self) -> List[RunRecord]:
+    def all_runs(self) -> List[RunRecord]:
         with self._lock:
-            return list(self._runs.values())
+            return sorted(self._runs.values(),key=lambda r:r.created_at)
+
+    def latest_run(self, market_id: str | None = None) -> RunRecord | None:
+        rows=self.all_runs()
+        if market_id:
+            rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
+        return rows[-1] if rows else None
 
     def status(self) -> dict:
-        with self._lock:
-            counts: Dict[str, int] = {}
-            for run in self._runs.values():
-                counts[run.status] = counts.get(run.status, 0) + 1
+        counts: Dict[str, int] = {}
+        for run in self.all_runs():
+            counts[run.status] = counts.get(run.status, 0) + 1
         return {
             "architecture_version": self.architecture_version,
             "module_manifest": self.module_manifest,
-            "storage_mode": "ephemeral_scaffold",
+            "storage": self.store.status(),
+            "active_core": self.evolution.active().__dict__,
+            "strategy_registry_count": len(self.strategy_population.definitions()),
             "run_counts": counts,
         }
 
-    def daily_summary(self) -> dict:
-        return self.review.daily_summary(self._runs_snapshot())
+    def daily_summary(self, market_id: str | None = None) -> dict:
+        rows=self.all_runs()
+        if market_id:
+            rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
+        return self.review.daily_summary(rows)
 
-    def curves(self) -> List[dict]:
-        return self.review.curves(self._runs_snapshot())
+    def curves(self, market_id: str | None = None) -> List[dict]:
+        rows=self.all_runs()
+        if market_id:
+            rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
+        return self.review.curves(rows)
+
+    def evolution_status(self) -> dict:
+        data=self.evolution.status()
+        data["diagnosis"]=self.evolution.diagnose(self.all_runs())
+        return data
+
+    def propose_core_candidate(self) -> dict:
+        return self.evolution.propose_candidate(self.all_runs())
+
+    def promote_core(self, version: str, validation: dict) -> dict:
+        result=self.evolution.promote(version,validation)
+        if result.get("promoted"):
+            self.refresh_core()
+        return result
