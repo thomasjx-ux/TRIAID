@@ -231,8 +231,11 @@ try:
     daily=engine.daily_summary("US")
     assert daily["evaluated_runs"]>=1
 
+    stale=engine.create_pending_live_run("US")
     reloaded=EvolutionLabEngine()
     assert reloaded.get_run(run.run_id).status=="VERIFIED"
+    assert reloaded.get_run(stale.run_id).status=="FAILED"
+    assert reloaded.get_run(stale.run_id).diagnostic_summary["error"]=="STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART"
     assert len(reloaded.all_runs())>=1
 
     before=reloaded.evolution_status()["active_version"]
