@@ -12,6 +12,11 @@ assert "triaid_weight" in html
 assert "JSON.stringify(d,null,2)" not in html
 assert "const el=id=>document.getElementById(id);" in html
 assert "UI data error:" in html
+assert 'id="hoverTip"' in html
+assert 'class="has-tip"' in html
+assert "const TIP={" in html
+assert "data-tip=" in html
+assert "SHADOW：只记录真实未来表现进行前瞻验证" in html
 assert 'id="candidatePoolTitle"' in html
 assert 'id="candidateRows"' in html
 assert "cards.filter(x=>x.selected)" in html
