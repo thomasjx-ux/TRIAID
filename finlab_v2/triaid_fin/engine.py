@@ -173,20 +173,25 @@ class EvolutionLabEngine:
             snapshot.metadata["strategy_rules_version"]=profile.version
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
-            existing=[
+            existing_decisions=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==market_id
                 and r.market.snapshot_id==snapshot.snapshot_id
-                and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED","NO_NEW_DATA"}
+                and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+                and r.strategy_group is not None
+                and r.triaid_decision is not None
             ]
-            if existing:
+            if existing_decisions:
                 with self._lock:
                     run=self._runs[run_id]
                     run.market=snapshot
                     run.status="NO_NEW_DATA"
-                    run.previous_run_id=existing[-1].run_id
-                    run.diagnostic_summary={"message":"Market source timestamp unchanged; existing run remains current."}
+                    run.previous_run_id=existing_decisions[-1].run_id
+                    run.diagnostic_summary={
+                        "message":"Market source timestamp unchanged; existing complete decision remains current.",
+                        "dedupe_basis":"COMPLETE_DECISION_FOR_SNAPSHOT",
+                    }
                     self.store.save_run(run)
                 return
 
