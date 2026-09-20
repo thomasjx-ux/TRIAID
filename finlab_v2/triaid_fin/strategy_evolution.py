@@ -25,6 +25,7 @@ class StrategyRuleProfile:
     uncertainty_penalty: float = 0.50
     switch_hurdle_bps: float = 5.0
     switch_uncertainty_fraction: float = 0.25
+    switch_guard_enabled: bool = True
     status: str = "active"
     parent_version: str | None = None
     hypothesis: str | None = None
@@ -34,7 +35,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
     market_id=market_id.upper()
     if market_id=="CN":
         return StrategyRuleProfile(
-            version="strategy-rules-cn@0.2.0",
+            version="strategy-rules-cn@0.3.0",
             market_id="CN",
             window_weights=(0.35,0.30,0.20,0.15),
             max_group_size=12,
@@ -42,15 +43,16 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
             entry_confirm_days=5,
             exit_confirm_days=3,
             cooldown_days=10,
-            near_duplicate_corr=0.990,
-            family_cap=3,
-            redundancy_penalty=0.30,
-            uncertainty_penalty=0.60,
-            switch_hurdle_bps=8.0,
-            switch_uncertainty_fraction=0.25,
+            near_duplicate_corr=1.01,
+            family_cap=12,
+            redundancy_penalty=0.0,
+            uncertainty_penalty=0.0,
+            switch_hurdle_bps=0.0,
+            switch_uncertainty_fraction=0.0,
+            switch_guard_enabled=True,
         )
     return StrategyRuleProfile(
-        version="strategy-rules-us@0.2.0",
+        version="strategy-rules-us@0.3.0",
         market_id="US",
         window_weights=(0.35,0.30,0.20,0.15),
         max_group_size=12,
@@ -58,19 +60,20 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
         entry_confirm_days=3,
         exit_confirm_days=3,
         cooldown_days=5,
-        near_duplicate_corr=0.995,
-        family_cap=3,
-        redundancy_penalty=0.35,
-        uncertainty_penalty=0.50,
-        switch_hurdle_bps=5.0,
-        switch_uncertainty_fraction=0.25,
+        near_duplicate_corr=1.01,
+        family_cap=12,
+        redundancy_penalty=0.0,
+        uncertainty_penalty=0.0,
+        switch_hurdle_bps=0.0,
+        switch_uncertainty_fraction=0.0,
+        switch_guard_enabled=False,
     )
 
 
 class StrategyEvolutionModule:
     """Independent self-evolution loop for Strategy Population rules."""
 
-    version="strategy-evolution@0.2.0"
+    version="strategy-evolution@0.3.0"
     min_verified_runs=20
 
     def __init__(self,store:RunStore) -> None:
@@ -195,15 +198,17 @@ class StrategyEvolutionModule:
         ]
         sizes=sorted(set([max(6,active.max_group_size-2),active.max_group_size,min(16,active.max_group_size+2)]))
         redundancy_values=sorted(set([
-            max(0.10,active.redundancy_penalty-0.15),
+            max(0.0,active.redundancy_penalty-0.15),
             active.redundancy_penalty,
             min(0.80,active.redundancy_penalty+0.15),
         ]))
+        switch_modes=sorted(set([active.switch_guard_enabled,not active.switch_guard_enabled]))
         out=[]
         for label,weights in weight_sets:
             for size in sizes:
                 for redundancy in redundancy_values:
-                    out.append(StrategyRuleProfile(
+                    for switch_guard in switch_modes:
+                        out.append(StrategyRuleProfile(
                         version="",
                         market_id=active.market_id,
                         window_weights=weights,
@@ -218,9 +223,10 @@ class StrategyEvolutionModule:
                         uncertainty_penalty=active.uncertainty_penalty,
                         switch_hurdle_bps=active.switch_hurdle_bps,
                         switch_uncertainty_fraction=active.switch_uncertainty_fraction,
+                        switch_guard_enabled=switch_guard,
                         status="candidate",
                         parent_version=active.version,
-                        hypothesis=f"{label}-horizon weighting, max group {size}, redundancy penalty {redundancy:.2f}",
+                        hypothesis=f"{label}-horizon weighting, max group {size}, redundancy penalty {redundancy:.2f}, switch guard {switch_guard}",
                     ))
         return out
 
