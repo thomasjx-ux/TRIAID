@@ -195,7 +195,11 @@ class EvolutionLabEngine:
                 prepared["previous_as_of"],
                 prepared["realized_returns_from_previous_period"],
             )
-            states=self.population_state.apply(market_id,prepared["strategy_states"])
+            states=self.population_state.apply(
+                market_id,
+                prepared["strategy_states"],
+                observation_key=f"DAILY:{snapshot.as_of}",
+            )
             request=RunRequest(
                 market=snapshot,
                 strategy_states=states,
@@ -212,6 +216,85 @@ class EvolutionLabEngine:
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
                 self.store.save_run(run)
+
+    def latest_decision_run(self,market_id:str)->RunRecord|None:
+        market_id=market_id.upper()
+        rows=[
+            r for r in self.all_runs()
+            if r.market.market_id.upper()==market_id
+            and r.strategy_group is not None
+            and r.triaid_decision is not None
+            and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+        ]
+        return rows[-1] if rows else None
+
+    def run_live_research(self,market_id:str)->RunRecord:
+        run=self.create_pending_live_run(market_id)
+        self.execute_live(run.run_id,market_id)
+        return self.get_run(run.run_id)
+
+    def recompute_transition_research(
+        self,
+        market_id:str,
+        transition:dict,
+        mode:str,
+    )->dict:
+        market_id=market_id.upper()
+        reference=self.latest_decision_run(market_id)
+        if reference is None:
+            attempted=self.run_live_research(market_id)
+            reference=self.latest_decision_run(market_id)
+            if reference is None:
+                return {
+                    "research_only":True,
+                    "action_generated":False,
+                    "status":"NO_REFERENCE_DECISION",
+                    "attempt_run_id":attempted.run_id,
+                    "attempt_status":attempted.status,
+                }
+
+        market=reference.market.model_copy(deep=True)
+        source_ts=transition.get("source_latest_ts")
+        market.snapshot_id=f"{market_id}:{mode.upper()}:TRANSITION:{source_ts}"
+        market.as_of=str(source_ts)
+        market.metadata=dict(market.metadata or {})
+        market.metadata.update({
+            "research_only":True,
+            "decision_trigger":"STATE_TRANSITION",
+            "transition_mode":mode.upper(),
+            "transition_source_latest_ts":source_ts,
+            "transition_features":{
+                "mean_return":transition.get("mean_return"),
+                "mean_abs_return":transition.get("mean_abs_return"),
+                "max_abs_return":transition.get("max_abs_return"),
+                "cross_sectional_dispersion":transition.get("cross_sectional_dispersion"),
+                "advancers":transition.get("advancers"),
+                "decliners":transition.get("decliners"),
+            },
+            "reference_run_id":reference.run_id,
+        })
+        decision=self.core.decide(
+            market,
+            reference.strategy_group,
+            reference.strategy_states,
+        )
+        prior=reference.triaid_decision.weights_after if reference.triaid_decision else {}
+        keys=set(prior)|set(decision.weights_after)
+        l1=sum(abs(decision.weights_after.get(k,0.0)-prior.get(k,0.0)) for k in keys)
+        return {
+            "research_only":True,
+            "action_generated":False,
+            "status":"RECOMPUTED",
+            "market_id":market_id,
+            "mode":mode.upper(),
+            "source_latest_ts":source_ts,
+            "reference_run_id":reference.run_id,
+            "core_version":decision.core_version,
+            "weights_before":decision.weights_before,
+            "weights_after":decision.weights_after,
+            "weight_change_l1_vs_reference":l1,
+            "diagnostics":decision.diagnostics,
+        }
 
     def submit_outcome(self,run_id:str,outcome:OutcomeRequest)->RunRecord:
         with self._lock:
