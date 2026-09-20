@@ -392,6 +392,7 @@ def build_strategy_states(
                 estimated_cost=0.0,
                 oos_marginal_value=expected,
                 metrics=metrics,
+                recent_returns=[float(x) for x in rs[-252:]],
                 selection_reason=BilingualText(
                     zh=f"根据21/63/126/252日真实净收益轨迹，当前年化预期净回报估计为 {expected:.2%}。",
                     en=f"Based on 21/63/126/252-day realized net-return history, current annualized expected net return is estimated at {expected:.2%}.",
