@@ -106,3 +106,26 @@ Every infrastructure change must keep passing:
 - market-data capability boundaries
 - Observation/Transition no-action invariant
 - existing strategy registry and lifecycle tests
+
+
+## Frequency policy
+
+Observation/update frequency is independent from TRIAID adjustment frequency.
+
+Default discipline:
+1. Start at the highest effective frequency supported by the source.
+2. Do not downgrade on intuition or polling cost alone.
+3. Require enough prospective/replay samples and confidence.
+4. Compare the higher frequency's marginal net return/information value against the next lower frequency.
+5. If marginal value is not positive, step down exactly one level.
+6. Re-evaluate after the step-down.
+7. If higher-frequency marginal value returns, step up exactly one level.
+8. Manual lock/override is always available.
+
+Current ladders:
+- REALTIME: 60, 120, 300, 600, 900, 1800 seconds
+- INTRADAY: 300, 600, 900, 1800, 3600 seconds
+- PREOPEN: 300, 600, 900, 1800 seconds
+- DAILY: 600, 1800, 3600 seconds
+
+The frequency controller changes observation cadence only. It does not create runs, alter strategy weights, or trigger trades.
