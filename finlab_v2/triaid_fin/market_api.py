@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from .market_lab import MARKETS
+from .trading_calendar import calendar_status, trading_day_info
 
 
 VALID_MARKETS={"US","CN"}
@@ -43,6 +44,22 @@ def build_market_data_router(engine,automation)->APIRouter:
     def market_data_products_api(market_id:str|None=None)->dict:
         key=_market(market_id) if market_id else None
         return engine.market_data_product_capabilities(key)
+
+    @router.get("/trading-calendar")
+    def trading_calendar_status_api(market_id:str|None=None)->dict:
+        key=_market(market_id) if market_id else None
+        return calendar_status(key)
+
+    @router.get("/trading-calendar/{market_id}")
+    def trading_calendar_day_api(
+        market_id:str,
+        date:str|None=Query(default=None),
+    )->dict:
+        key=_market(market_id)
+        try:
+            return trading_day_info(key,date)
+        except ValueError as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
 
     @router.get("/frequency-policy")
     def frequency_policy_status_api()->dict:
