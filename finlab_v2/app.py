@@ -30,7 +30,7 @@ async def lifespan(app:FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.7.4",lifespan=lifespan)
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.7.5",lifespan=lifespan)
 app.include_router(build_market_data_router(engine,market_automation))
 
 
@@ -41,12 +41,19 @@ def health()->dict:
         "architecture_version":engine.architecture_version,
         "storage_backend":engine.store.backend.status()["backend"],
         "storage_durability":engine.store.backend.durability,
+        "storage_volume_mounted":engine.store.backend.status()["volume"]["expected_mount_is_mounted"],
+        "storage_persistence_confirmed":engine.store.backend.status()["persistence_probe"]["confirmed_across_deployments"],
     }
 
 
 @app.get("/api/status")
 def status()->dict:
     return engine.status()
+
+
+@app.get("/api/storage/status")
+def storage_status()->dict:
+    return engine.store.status()
 
 
 @app.post("/api/live/run/{market_id}", status_code=202)
