@@ -19,7 +19,7 @@ from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.7.2"
+    architecture_version = "fin-evolution-lab@0.7.3"
     market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
