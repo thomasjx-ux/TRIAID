@@ -113,8 +113,12 @@ try:
     assert us_rules["max_weight"]==0.28 and cn_rules["max_weight"]==0.28
 
     strategy_evo=reloaded.strategy_evolution_status("US")
-    assert strategy_evo["active_version"]=="strategy-rules-us@0.2.0"
+    assert strategy_evo["active_version"]=="strategy-rules-us@0.3.0"
     assert tuple(reloaded.strategy_evolution.active("US").window_weights)==(0.35,0.30,0.20,0.15)
+    assert reloaded.strategy_evolution.active("US").switch_guard_enabled is False
+    assert reloaded.strategy_evolution.active("CN").switch_guard_enabled is True
+    assert reloaded.strategy_evolution.active("US").redundancy_penalty==0.0
+    assert reloaded.strategy_evolution.active("CN").redundancy_penalty==0.0
     proposal_rules=reloaded.propose_strategy_candidate("US")
     assert proposal_rules["created"] is False
     assert proposal_rules["reason"]=="INSUFFICIENT_VERIFIED_RUNS"
