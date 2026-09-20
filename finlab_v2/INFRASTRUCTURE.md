@@ -170,3 +170,25 @@ APIs:
 
 - GET /api/decision-scheduler/status
 - GET /api/decision-scheduler/events
+
+
+## Official trading calendar
+
+Automatic market refresh is gated by a dedicated official-calendar module.
+
+Sources:
+- US: NYSE Holidays & Trading Hours. Embedded coverage: 2026, 2027, 2028.
+- CN: Shanghai Stock Exchange and Shenzhen Stock Exchange official 2026 holiday closure notices. Embedded coverage: 2026.
+
+Rules:
+- weekends are closed;
+- official exchange holidays are closed;
+- US official early-close dates shorten the OPEN phase to 13:00 ET;
+- CLOSED and CALENDAR_UNAVAILABLE phases schedule no automatic market-data refresh;
+- a year without an embedded official exchange calendar is fail-closed as CALENDAR_YEAR_UNAVAILABLE. The system does not guess future holiday dates.
+
+Calendar lookup APIs:
+- GET /api/market-data/trading-calendar
+- GET /api/market-data/trading-calendar/{market_id}?date=YYYY-MM-DD
+
+The exchange calendar gates scheduling only. It does not alter historical market data or infer unavailable session data.
