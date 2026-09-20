@@ -14,7 +14,8 @@ class RunStore:
         self.backend=build_storage_backend(root)
         self.root=self.backend.root
         self.runs_dir=self.backend.path("runs")
-        self.runs_dir.mkdir(parents=True,exist_ok=True)
+        if getattr(self.backend,"status",lambda:{})().get("backend")=="file":
+            self.runs_dir.mkdir(parents=True,exist_ok=True)
         self._lock=RLock()
 
     @property
@@ -35,12 +36,12 @@ class RunStore:
 
     def list_runs(self) -> list[RunRecord]:
         rows=[]
-        for path in self.backend.list_files("runs",".json"):
+        for name in self.backend.list_names("runs/",".json"):
             try:
-                rows.append(RunRecord.model_validate_json(path.read_text(encoding="utf-8")))
+                rows.append(RunRecord.model_validate_json(self.backend.read_text(name)))
             except Exception:
                 continue
-        return sorted(rows, key=lambda r: r.created_at)
+        return sorted(rows,key=lambda r:r.created_at)
 
     def save_json(self, name: str, payload: dict) -> None:
         self.backend.atomic_write_text(
@@ -61,15 +62,11 @@ class RunStore:
         self.backend.append_line(name,line)
 
     def read_jsonl(self, name: str, limit: int | None = None) -> list[dict]:
-        if not self.backend.exists(name):
-            return []
         rows=[]
         try:
-            lines=self.backend.read_text(name).splitlines()
+            lines=self.backend.read_lines(name,limit)
         except Exception:
             return []
-        if limit is not None and limit>0:
-            lines=lines[-limit:]
         for line in lines:
             try:
                 row=json.loads(line)
