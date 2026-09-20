@@ -192,3 +192,28 @@ Calendar lookup APIs:
 - GET /api/market-data/trading-calendar/{market_id}?date=YYYY-MM-DD
 
 The exchange calendar gates scheduling only. It does not alter historical market data or infer unavailable session data.
+
+
+## Autonomous official-calendar maintenance
+
+The official exchange calendar is self-maintaining.
+
+Module:
+- `trading_calendar_sync.py`
+
+Runtime:
+1. Load the last verified dynamic calendar from persistent storage at process start.
+2. Keep the embedded verified calendar as a safe fallback.
+3. Poll official exchange sources every six hours, with an internal interval guard.
+4. US: parse the NYSE Holidays & Trading Hours table and validate the number and structure of official closures/early closes.
+5. CN: discover the annual holiday notice independently on SSE and SZSE, parse both notices, and promote a year only when the two official closure sets match exactly.
+6. Persist each verified year and source SHA-256 to Supabase.
+7. Hot-load newly verified years without requiring a code deployment.
+8. If a source is unavailable, parsing fails, or SSE/SZSE disagree, preserve the last verified calendar and never replace it with inferred dates.
+9. If a year has neither an embedded nor a dynamically verified calendar, the market is fail-closed as `CALENDAR_YEAR_UNAVAILABLE`.
+
+Operational endpoints:
+- GET /api/market-data/trading-calendar-sync
+- POST /api/market-data/trading-calendar-sync?force=true
+
+The temporary deployment smoke server has calendar sync disabled so external exchange-site availability cannot make application deployment flaky. The production server runs calendar sync independently from Market Data automation and Decision Scheduler.
