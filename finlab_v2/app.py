@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import os
+import time
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query
@@ -7,9 +11,64 @@ from fastapi.responses import HTMLResponse
 
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.market_data import session_phase
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.6.3")
 engine = EvolutionLabEngine()
+
+DATA_AUTOMATION_ENABLED=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
+_DATA_LAST_REFRESH={}
+_DATA_AUTOMATION_ERRORS={}
+
+def _refresh_plan(market_id:str)->dict[str,int]:
+    phase=session_phase(market_id)
+    if phase=="OPEN":
+        return {"INTRADAY":300,"REALTIME":120}
+    if phase=="PREOPEN":
+        if market_id.upper()=="US":
+            return {"PREOPEN":300,"REALTIME":120}
+        return {"DAILY":1800}
+    if phase=="POSTCLOSE":
+        return {"DAILY":600}
+    return {"DAILY":3600}
+
+async def _market_data_automation_loop():
+    while True:
+        now=time.monotonic()
+        for market_id in ("US","CN"):
+            capabilities=engine.market_data_capabilities(market_id)[market_id]
+            for mode,interval_seconds in _refresh_plan(market_id).items():
+                if not capabilities.get(mode,{}).get("supported",False):
+                    continue
+                key=f"{market_id}:{mode}"
+                last=_DATA_LAST_REFRESH.get(key,0.0)
+                if now-last<interval_seconds:
+                    continue
+                try:
+                    result=await asyncio.to_thread(engine.refresh_market_data,market_id,mode)
+                    _DATA_LAST_REFRESH[key]=now
+                    _DATA_AUTOMATION_ERRORS.pop(key,None)
+                    result["automation_refresh_interval_seconds"]=interval_seconds
+                except Exception as exc:
+                    _DATA_AUTOMATION_ERRORS[key]=f"{type(exc).__name__}:{exc}"
+                    _DATA_LAST_REFRESH[key]=now
+        await asyncio.sleep(30)
+
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    task=None
+    if DATA_AUTOMATION_ENABLED:
+        task=asyncio.create_task(_market_data_automation_loop())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.7.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -20,6 +79,59 @@ def health() -> dict:
 @app.get("/api/status")
 def status() -> dict:
     return engine.status()
+
+
+
+@app.get("/api/market-data/status")
+def market_data_status_api() -> dict:
+    return {
+        "automation_enabled":DATA_AUTOMATION_ENABLED,
+        "discipline":"DATA_REFRESH_DOES_NOT_TRIGGER_TRADING_OR_CORE_ADJUSTMENT",
+        "session_phase":{m:session_phase(m) for m in ("US","CN")},
+        "refresh_plan":{m:_refresh_plan(m) for m in ("US","CN")},
+        "last_refresh_monotonic":dict(_DATA_LAST_REFRESH),
+        "automation_errors":dict(_DATA_AUTOMATION_ERRORS),
+        "hub":engine.market_data_status(),
+    }
+
+
+@app.get("/api/market-data/capabilities")
+def market_data_capabilities_api(market_id: str | None = None) -> dict:
+    if market_id and market_id.upper() not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    return engine.market_data_capabilities(market_id.upper() if market_id else None)
+
+
+@app.get("/api/market-data/snapshot/{market_id}/{mode}")
+def market_data_snapshot_api(
+    market_id: str,
+    mode: str,
+    refresh: bool = Query(default=False),
+) -> dict:
+    market_id=market_id.upper();mode=mode.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if mode not in {"DAILY","INTRADAY","PREOPEN","REALTIME"}:
+        raise HTTPException(status_code=400, detail="mode must be DAILY, INTRADAY, PREOPEN or REALTIME")
+    try:
+        return engine.market_data_snapshot(market_id,mode,refresh)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
+
+
+@app.post("/api/market-data/refresh/{market_id}/{mode}")
+def market_data_refresh_api(market_id: str, mode: str) -> dict:
+    market_id=market_id.upper();mode=mode.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if mode not in {"DAILY","INTRADAY","PREOPEN","REALTIME"}:
+        raise HTTPException(status_code=400, detail="mode must be DAILY, INTRADAY, PREOPEN or REALTIME")
+    try:
+        result=engine.refresh_market_data(market_id,mode)
+        _DATA_LAST_REFRESH[f"{market_id}:{mode}"]=time.monotonic()
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
 
 
 @app.post("/api/live/run/{market_id}", status_code=202)
