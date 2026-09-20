@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.4.3")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.5.0")
 engine = EvolutionLabEngine()
 
 
@@ -175,6 +175,37 @@ def evolution_promote(version: str, validation: dict[str, Any] = Body(...)) -> d
         return engine.promote_core(version, validation)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="core version not found") from exc
+
+
+
+
+
+@app.get("/api/strategy-evolution")
+def strategy_evolution_status(market_id: str | None = None) -> dict:
+    return engine.strategy_evolution_status(market_id)
+
+
+@app.post("/api/strategy-evolution/propose/{market_id}")
+def strategy_evolution_propose(market_id: str) -> dict:
+    market_id=market_id.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    return engine.propose_strategy_candidate(market_id)
+
+
+@app.post("/api/strategy-evolution/promote/{market_id}/{version}")
+def strategy_evolution_promote(
+    market_id: str,
+    version: str,
+    validation: dict[str, Any] = Body(...),
+) -> dict:
+    market_id=market_id.upper()
+    if market_id not in {"US","CN"}:
+        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    try:
+        return engine.promote_strategy_rules(market_id,version,validation)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="strategy rule version not found") from exc
 
 
 @app.get("/", response_class=HTMLResponse)
