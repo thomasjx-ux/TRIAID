@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from .market_lab import MARKETS
 
@@ -43,6 +43,69 @@ def build_market_data_router(engine,automation)->APIRouter:
     def market_data_products_api(market_id:str|None=None)->dict:
         key=_market(market_id) if market_id else None
         return engine.market_data_product_capabilities(key)
+
+    @router.get("/frequency-policy")
+    def frequency_policy_status_api()->dict:
+        return automation.frequency_policy.status()
+
+    @router.post("/frequency-policy/{market_id}/{mode}/set-level")
+    def frequency_policy_set_level_api(
+        market_id:str,
+        mode:str,
+        level:int=Query(...,ge=0),
+        lock:bool=Query(default=False),
+        reason:str=Query(default="manual"),
+    )->dict:
+        key=_market(market_id);freq=_mode(mode)
+        return automation.frequency_policy.set_level(key,freq,level,lock=lock,reason=reason)
+
+    @router.post("/frequency-policy/{market_id}/{mode}/set-interval")
+    def frequency_policy_set_interval_api(
+        market_id:str,
+        mode:str,
+        seconds:int=Query(...,ge=1),
+        lock:bool=Query(default=False),
+        reason:str=Query(default="manual"),
+    )->dict:
+        key=_market(market_id);freq=_mode(mode)
+        return automation.frequency_policy.set_interval(key,freq,seconds,lock=lock,reason=reason)
+
+    @router.post("/frequency-policy/{market_id}/{mode}/unlock")
+    def frequency_policy_unlock_api(market_id:str,mode:str)->dict:
+        key=_market(market_id);freq=_mode(mode)
+        return automation.frequency_policy.unlock(key,freq)
+
+    @router.post("/frequency-policy/{market_id}/{mode}/evidence")
+    def frequency_policy_evidence_api(
+        market_id:str,
+        mode:str,
+        payload:dict=Body(...),
+    )->dict:
+        key=_market(market_id);freq=_mode(mode)
+        try:
+            return automation.frequency_policy.record_evidence(
+                key,
+                freq,
+                evaluated_samples=int(payload.get("evaluated_samples",0)),
+                incremental_net_return=(
+                    None if payload.get("incremental_net_return") is None
+                    else float(payload.get("incremental_net_return"))
+                ),
+                incremental_information_gain=(
+                    None if payload.get("incremental_information_gain") is None
+                    else float(payload.get("incremental_information_gain"))
+                ),
+                incremental_cost=(
+                    None if payload.get("incremental_cost") is None
+                    else float(payload.get("incremental_cost"))
+                ),
+                confidence=(
+                    None if payload.get("confidence") is None
+                    else float(payload.get("confidence"))
+                ),
+            )
+        except (TypeError,ValueError) as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
 
     @router.get("/quotes/{market_id}")
     def market_data_quotes_api(
