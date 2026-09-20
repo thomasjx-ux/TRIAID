@@ -17,7 +17,7 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.4.1"
+assert s["architecture_version"]=="fin-evolution-lab@0.5.0"
 assert s["strategy_registry_count"]==29
 
 d=daily("US")
@@ -31,6 +31,8 @@ assert all("baseline_weight" in x and "triaid_weight" in x for x in cards)
 
 e=evolution_status()
 assert e["active_version"]
+assert s["active_strategy_rules"]["US"]["version"].startswith("strategy-rules-us@")
+assert s["active_strategy_rules"]["CN"]["version"].startswith("strategy-rules-cn@")
 
 print("TRIAID_FIN_V2_UI_SMOKE_PASS")
 print({
