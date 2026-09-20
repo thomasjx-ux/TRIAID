@@ -9,11 +9,14 @@ from fastapi.responses import HTMLResponse
 
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.decision_api import build_decision_router
+from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
 
 engine=EvolutionLabEngine()
-market_automation=MarketDataAutomation(engine)
+decision_scheduler=DecisionScheduler(engine)
+market_automation=MarketDataAutomation(engine,decision_scheduler)
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -30,8 +33,9 @@ async def lifespan(app:FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.7.5",lifespan=lifespan)
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.0",lifespan=lifespan)
 app.include_router(build_market_data_router(engine,market_automation))
+app.include_router(build_decision_router(decision_scheduler))
 
 
 @app.get("/health")
@@ -46,6 +50,8 @@ def health()->dict:
         "storage_durability":storage.get("durability"),
         "storage_volume_mounted":volume.get("expected_mount_is_mounted"),
         "storage_persistence_confirmed":probe.get("confirmed_across_deployments"),
+        "decision_automation_enabled":decision_scheduler.enabled,
+        "broker_execution_enabled":False,
     }
 
 
