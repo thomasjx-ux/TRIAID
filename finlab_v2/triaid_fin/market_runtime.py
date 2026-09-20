@@ -11,8 +11,9 @@ from .frequency_policy import FrequencyPolicy
 class MarketDataAutomation:
     version="market-data-automation@0.2.0"
 
-    def __init__(self,engine)->None:
+    def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
+        self.decision_scheduler=decision_scheduler
         self.enabled=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.last_refresh:dict[str,float]={}
         self.errors:dict[str,str]={}
@@ -69,6 +70,15 @@ class MarketDataAutomation:
                         result=await asyncio.to_thread(self.engine.refresh_market_data,market_id,mode)
                         snapshot=await asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False)
                         observed=await asyncio.to_thread(self.engine.record_market_observation,snapshot)
+                        decision_result=None
+                        if self.decision_scheduler is not None:
+                            decision_result=await asyncio.to_thread(
+                                self.decision_scheduler.after_refresh,
+                                market_id,
+                                mode,
+                                snapshot,
+                                observed,
+                            )
                         self.last_refresh[key]=now
                         self.errors.pop(key,None)
                         print(
@@ -78,6 +88,12 @@ class MarketDataAutomation:
                             result.get("points"),
                             observed.get("recorded"),
                         )
+                        if decision_result is not None:
+                            print(
+                                "TRIAID_DECISION_AUTOMATION",
+                                market_id,mode,
+                                decision_result.get("action"),
+                            )
                     except Exception as exc:
                         self.errors[key]=f"{type(exc).__name__}:{exc}"
                         self.last_refresh[key]=now
@@ -97,5 +113,10 @@ class MarketDataAutomation:
             "last_refresh_monotonic":dict(self.last_refresh),
             "automation_errors":dict(self.errors),
             "frequency_policy":self.frequency_policy.status(),
+            "decision_scheduler":(
+                self.decision_scheduler.status()
+                if self.decision_scheduler is not None
+                else None
+            ),
             "hub":self.engine.market_data_status(),
         }
