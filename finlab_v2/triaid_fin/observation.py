@@ -44,6 +44,12 @@ class MarketObservationStore:
                 previous=candidate
                 break
 
+        provider_changed=bool(
+            previous
+            and previous.get("provider")
+            and previous.get("provider")!=provider
+        )
+
         row={
             "observed_at":datetime.now(timezone.utc).isoformat(),
             "market_id":market,
@@ -57,6 +63,8 @@ class MarketObservationStore:
             "points":snapshot.get("points"),
             "symbols":snapshot.get("symbols") or [],
             "latest":snapshot.get("latest") or {},
+            "provider_boundary":provider_changed,
+            "previous_provider":previous.get("provider") if provider_changed and previous else None,
         }
         self.store.append_jsonl(self.filename,row)
         transition=self._transition(previous,row) if previous else None
@@ -67,6 +75,8 @@ class MarketObservationStore:
         return {"recorded":True,"observation":row,"transition":transition}
 
     def _transition(self,previous:dict,current:dict)->dict|None:
+        if previous.get("provider")!=current.get("provider"):
+            return None
         prev_latest=previous.get("latest") or {}
         curr_latest=current.get("latest") or {}
         returns={}
