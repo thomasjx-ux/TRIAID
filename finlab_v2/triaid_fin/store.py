@@ -10,7 +10,7 @@ from .contracts import RunRecord
 
 
 class RunStore:
-    version = "run-store@0.1.0"
+    version = "run-store@0.2.0"
 
     def __init__(self, root: str | None = None) -> None:
         preferred = root or os.environ.get("TRIAID_DATA_DIR")
@@ -70,6 +70,34 @@ class RunStore:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return {} if default is None else default
+
+    def append_jsonl(self, name: str, payload: dict) -> None:
+        path = self.root / name
+        line = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        with self._lock:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+
+    def read_jsonl(self, name: str, limit: int | None = None) -> list[dict]:
+        path = self.root / name
+        if not path.exists():
+            return []
+        rows=[]
+        with self._lock:
+            try:
+                lines=path.read_text(encoding="utf-8").splitlines()
+            except Exception:
+                return []
+        if limit is not None and limit>0:
+            lines=lines[-limit:]
+        for line in lines:
+            try:
+                row=json.loads(line)
+                if isinstance(row,dict):
+                    rows.append(row)
+            except Exception:
+                continue
+        return rows
 
     def status(self) -> dict:
         return {
