@@ -31,7 +31,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.3"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.4"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -103,9 +103,15 @@ try:
     assert third_obs["transition"]["research_only"] is True
     assert third_obs["transition"]["action_generated"] is False
     assert abs(third_obs["transition"]["symbol_returns"]["SPY"]-0.01)<1e-12
-    assert engine.market_observation_status()["count"]==2
+    obs3={**obs2,"provider":"backup-selftest","source_latest_ts":1234568490,"latest":{"SPY":{"close":102.0,"volume":1300.0}}}
+    fourth_obs=engine.record_market_observation(obs3)
+    assert fourth_obs["recorded"] is True
+    assert fourth_obs["transition"] is None
+    assert fourth_obs["observation"]["provider_boundary"] is True
+    assert fourth_obs["observation"]["previous_provider"]=="selftest"
+    assert engine.market_observation_status()["count"]==3
     assert engine.market_observation_status()["transition_count"]==1
-    assert len(engine.market_observations("US","INTRADAY",10))==2
+    assert len(engine.market_observations("US","INTRADAY",10))==3
     assert len(engine.market_transitions("US","INTRADAY",10))==1
     caps=engine.market_data_capabilities()
     products=engine.market_data_product_capabilities()
@@ -113,9 +119,14 @@ try:
     storage=engine.store.status()
     assert storage["backend"]["backend"]=="file"
     assert storage["durability"] in {"EPHEMERAL","PERSISTENT"}
-    assert providers["registry"]["version"]=="provider-registry@0.1.0"
+    assert providers["registry"]["version"]=="provider-registry@0.2.0"
     assert providers["registry"]["routes"]["US:DAILY"]=="research_bars"
     assert providers["registry"]["routes"]["US:QUOTE_L1"]=="us_l1_quotes"
+    assert providers["registry"]["chains"]["US:DAILY"]==["research_bars","eastmoney_backup"]
+    assert providers["registry"]["chains"]["US:INTRADAY"]==["research_bars","eastmoney_backup"]
+    assert providers["registry"]["chains"]["CN:DAILY"]==["research_bars","eastmoney_backup"]
+    assert providers["registry"]["chains"]["CN:REALTIME"]==["research_bars","eastmoney_backup"]
+    assert providers["registry"]["chains"]["US:PREOPEN"]==["research_bars"]
     assert products["US"]["BAR_DAILY"]["available"] is True
     assert products["US"]["BAR_INTRADAY"]["available"] is True
     assert products["US"]["ORDERBOOK_L2"]["available"] is False
