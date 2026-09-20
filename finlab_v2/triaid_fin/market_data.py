@@ -11,6 +11,7 @@ from threading import RLock
 from zoneinfo import ZoneInfo
 
 from .alpaca_data import AlpacaMarketDataProvider
+from .provider_registry import ProviderRegistry
 
 
 class MarketDataError(RuntimeError):
@@ -146,35 +147,47 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.2.0"
+    version="market-data-hub@0.3.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
         self.alpaca=AlpacaMarketDataProvider()
+        self.registry=ProviderRegistry()
+        self.registry.register(
+            "research_bars",
+            self.provider,
+            routes=(
+                "US:DAILY","US:INTRADAY","US:PREOPEN","US:REALTIME",
+                "CN:DAILY","CN:INTRADAY","CN:REALTIME",
+            ),
+        )
+        self.registry.register(
+            "us_l1_quotes",
+            self.alpaca,
+            routes=("US:QUOTE_L1",),
+        )
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
         self._lock=RLock()
 
     def provider_status(self)->dict:
+        registry=self.registry.status()
+        routing={}
+        for route,provider_name in registry["routes"].items():
+            provider=self.registry.provider(provider_name)
+            configured=bool(getattr(provider,"configured",True)) if provider else False
+            routing[route]=getattr(provider,"version",None) if configured else None
+        routing.setdefault("CN:PREOPEN_AUCTION",None)
+        routing.setdefault("CN:QUOTE_L1",None)
         return {
+            "registry":registry,
             "bar_provider":{
-                "provider":self.provider.version,
+                "provider":getattr(self.registry.provider("research_bars"),"version",None),
                 "configured":True,
                 "role":"default research bars",
             },
             "us_l1_quote_provider":self.alpaca.configuration_status(),
-            "routing":{
-                "US:DAILY":self.provider.version,
-                "US:INTRADAY":self.provider.version,
-                "US:PREOPEN":self.provider.version,
-                "US:REALTIME":self.provider.version,
-                "US:QUOTE_L1":self.alpaca.version if self.alpaca.configured else None,
-                "CN:DAILY":self.provider.version,
-                "CN:INTRADAY":self.provider.version,
-                "CN:REALTIME":self.provider.version,
-                "CN:PREOPEN_AUCTION":None,
-                "CN:QUOTE_L1":None,
-            },
+            "routing":routing,
         }
 
     def product_capabilities(self,market_id:str|None=None)->dict:
@@ -258,7 +271,8 @@ class MarketDataHub:
                 "symbols":{},
                 "reason":"NO_AUTHORIZED_L1_PROVIDER",
             }
-        if not self.alpaca.configured:
+        provider=self.registry.provider_for("US:QUOTE_L1")
+        if provider is None or not bool(getattr(provider,"configured",False)):
             return {
                 "available":False,
                 "market_id":"US",
@@ -267,7 +281,7 @@ class MarketDataHub:
                 "symbols":{},
                 "reason":"ALPACA_CREDENTIALS_NOT_CONFIGURED",
             }
-        result=self.alpaca.latest_quotes(symbols)
+        result=provider.latest_quotes(symbols)
         return {
             "available":True,
             "market_id":"US",
@@ -284,7 +298,10 @@ class MarketDataHub:
         cfg=MODE_CONFIGS[mode]
         if market=="CN" and mode=="PREOPEN":
             raise MarketDataError("unsupported_market_mode:CN:PREOPEN")
-        s=self.provider.fetch_series(
+        provider=self.registry.provider_for(f"{market}:{mode}")
+        if provider is None:
+            raise MarketDataError(f"provider_route_missing:{market}:{mode}")
+        s=provider.fetch_series(
             symbol,
             range_=cfg.range_,
             interval=cfg.interval,
@@ -295,7 +312,7 @@ class MarketDataHub:
             "market_id":market,
             "symbol":symbol,
             "mode":mode,
-            "provider":self.provider.version,
+            "provider":provider.version,
             "quality":cfg.quality,
             "execution_grade":False,
             "points":len(s.ts),
@@ -350,12 +367,16 @@ class MarketDataHub:
             if cached and not force and now-cached.fetched_at<=cfg.cache_ttl_seconds:
                 return cached
 
+        provider=self.registry.provider_for(f"{market}:{mode}")
+        if provider is None:
+            raise MarketDataError(f"provider_route_missing:{market}:{mode}")
+
         series=[]
         errors=[]
         for symbol in symbols:
             try:
                 series.append(
-                    self.provider.fetch_series(
+                    provider.fetch_series(
                         symbol,
                         range_=cfg.range_,
                         interval=cfg.interval,
@@ -400,7 +421,7 @@ class MarketDataHub:
         panel=ProviderPanel(
             market_id=market,
             mode=mode,
-            provider=self.provider.version,
+            provider=provider.version,
             ts=ts,
             close=close,
             volume=volume,
