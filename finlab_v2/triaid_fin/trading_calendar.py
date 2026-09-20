@@ -4,7 +4,7 @@ from datetime import date, datetime, time as dt_time
 from zoneinfo import ZoneInfo
 
 
-VERSION="official-trading-calendar@0.1.0"
+VERSION="official-trading-calendar@0.2.0"
 
 MARKET_TZ={
     "US":"America/New_York",
@@ -15,93 +15,60 @@ OFFICIAL_SOURCES={
     "US":{
         "name":"NYSE Holidays & Trading Hours",
         "url":"https://www.nyse.com/trade/hours-calendars",
-        "coverage_years":[2026,2027,2028],
+        "built_in_coverage_years":[2026,2027,2028],
     },
     "CN":{
-        "name":"SSE/SZSE 2026 official holiday closure notices",
+        "name":"SSE/SZSE official holiday closure notices",
         "urls":[
             "https://www.sse.com.cn/disclosure/dealinstruc/closed/list/",
             "https://www.szse.cn/disclosure/notice/general/",
         ],
-        "coverage_years":[2026],
+        "built_in_coverage_years":[2026],
     },
 }
 
 US_CLOSED={
     2026:{
-        date(2026,1,1),
-        date(2026,1,19),
-        date(2026,2,16),
-        date(2026,4,3),
-        date(2026,5,25),
-        date(2026,6,19),
-        date(2026,7,3),
-        date(2026,9,7),
-        date(2026,11,26),
-        date(2026,12,25),
+        date(2026,1,1),date(2026,1,19),date(2026,2,16),date(2026,4,3),
+        date(2026,5,25),date(2026,6,19),date(2026,7,3),date(2026,9,7),
+        date(2026,11,26),date(2026,12,25),
     },
     2027:{
-        date(2027,1,1),
-        date(2027,1,18),
-        date(2027,2,15),
-        date(2027,3,26),
-        date(2027,5,31),
-        date(2027,6,18),
-        date(2027,7,5),
-        date(2027,9,6),
-        date(2027,11,25),
-        date(2027,12,24),
+        date(2027,1,1),date(2027,1,18),date(2027,2,15),date(2027,3,26),
+        date(2027,5,31),date(2027,6,18),date(2027,7,5),date(2027,9,6),
+        date(2027,11,25),date(2027,12,24),
     },
     2028:{
-        date(2028,1,17),
-        date(2028,2,21),
-        date(2028,4,14),
-        date(2028,5,29),
-        date(2028,6,19),
-        date(2028,7,4),
-        date(2028,9,4),
-        date(2028,11,23),
+        date(2028,1,17),date(2028,2,21),date(2028,4,14),date(2028,5,29),
+        date(2028,6,19),date(2028,7,4),date(2028,9,4),date(2028,11,23),
         date(2028,12,25),
     },
 }
 
 US_EARLY_CLOSE={
-    2026:{
-        date(2026,11,27):dt_time(13,0),
-        date(2026,12,24):dt_time(13,0),
-    },
-    2027:{
-        date(2027,11,26):dt_time(13,0),
-    },
-    2028:{
-        date(2028,7,3):dt_time(13,0),
-        date(2028,11,24):dt_time(13,0),
-    },
+    2026:{date(2026,11,27):dt_time(13,0),date(2026,12,24):dt_time(13,0)},
+    2027:{date(2027,11,26):dt_time(13,0)},
+    2028:{date(2028,7,3):dt_time(13,0),date(2028,11,24):dt_time(13,0)},
 }
 
 CN_CLOSED={
     2026:{
-        # New Year
         date(2026,1,1),date(2026,1,2),date(2026,1,3),
-        # Spring Festival
-        date(2026,2,15),date(2026,2,16),date(2026,2,17),
-        date(2026,2,18),date(2026,2,19),date(2026,2,20),
-        date(2026,2,21),date(2026,2,22),date(2026,2,23),
-        # Qingming
+        date(2026,2,15),date(2026,2,16),date(2026,2,17),date(2026,2,18),
+        date(2026,2,19),date(2026,2,20),date(2026,2,21),date(2026,2,22),
+        date(2026,2,23),
         date(2026,4,4),date(2026,4,5),date(2026,4,6),
-        # Labour Day
-        date(2026,5,1),date(2026,5,2),date(2026,5,3),
-        date(2026,5,4),date(2026,5,5),
-        # Dragon Boat
+        date(2026,5,1),date(2026,5,2),date(2026,5,3),date(2026,5,4),
+        date(2026,5,5),
         date(2026,6,19),date(2026,6,20),date(2026,6,21),
-        # Mid-Autumn
         date(2026,9,25),date(2026,9,26),date(2026,9,27),
-        # National Day
-        date(2026,10,1),date(2026,10,2),date(2026,10,3),
-        date(2026,10,4),date(2026,10,5),date(2026,10,6),
-        date(2026,10,7),
+        date(2026,10,1),date(2026,10,2),date(2026,10,3),date(2026,10,4),
+        date(2026,10,5),date(2026,10,6),date(2026,10,7),
     },
 }
+
+_SYNCED={"US":{},"CN":{}}
+_SYNC_METADATA={}
 
 
 def _market(value:str)->str:
@@ -111,9 +78,60 @@ def _market(value:str)->str:
     return key
 
 
-def coverage_years(market_id:str)->list[int]:
+def install_synced_calendar(payload:dict|None)->None:
+    global _SYNCED,_SYNC_METADATA
+    synced={"US":{},"CN":{}}
+    metadata={}
+    if isinstance(payload,dict):
+        metadata={
+            "sync_version":payload.get("version"),
+            "last_check_at":payload.get("last_check_at"),
+            "last_success_at":payload.get("last_success_at"),
+            "last_error":payload.get("last_error"),
+        }
+        for market in ("US","CN"):
+            years=(
+                payload.get("markets",{})
+                .get(market,{})
+                .get("years",{})
+            )
+            for year_text,row in (years or {}).items():
+                try:
+                    year=int(year_text)
+                    if not row.get("validated"):
+                        continue
+                    closed={date.fromisoformat(x) for x in row.get("closed",[])}
+                    early={
+                        date.fromisoformat(k):dt_time.fromisoformat(v)
+                        for k,v in (row.get("early_close") or {}).items()
+                    }
+                    if not closed:
+                        continue
+                    synced[market][year]={
+                        "closed":closed,
+                        "early_close":early,
+                        "source":row.get("source") or row.get("sources"),
+                        "validated_at":row.get("validated_at"),
+                        "validation":row.get("validation"),
+                    }
+                except Exception:
+                    continue
+    _SYNCED=synced
+    _SYNC_METADATA=metadata
+
+
+def built_in_years(market_id:str)->list[int]:
     market=_market(market_id)
-    return list(OFFICIAL_SOURCES[market]["coverage_years"])
+    return sorted((US_CLOSED if market=="US" else CN_CLOSED).keys())
+
+
+def synced_years(market_id:str)->list[int]:
+    market=_market(market_id)
+    return sorted(_SYNCED.get(market,{}).keys())
+
+
+def coverage_years(market_id:str)->list[int]:
+    return sorted(set(built_in_years(market_id))|set(synced_years(market_id)))
 
 
 def _date(value:date|datetime|str|None,market_id:str)->date:
@@ -128,6 +146,33 @@ def _date(value:date|datetime|str|None,market_id:str)->date:
     return date.fromisoformat(str(value))
 
 
+def _calendar_for_year(market_id:str,year:int)->dict|None:
+    market=_market(market_id)
+    synced=_SYNCED.get(market,{}).get(year)
+    if synced is not None:
+        return {
+            **synced,
+            "origin":"SYNCED_OFFICIAL",
+        }
+
+    if market=="US" and year in US_CLOSED:
+        return {
+            "closed":US_CLOSED[year],
+            "early_close":US_EARLY_CLOSE.get(year,{}),
+            "source":OFFICIAL_SOURCES["US"],
+            "origin":"BUILT_IN_VERIFIED",
+        }
+
+    if market=="CN" and year in CN_CLOSED:
+        return {
+            "closed":CN_CLOSED[year],
+            "early_close":{},
+            "source":OFFICIAL_SOURCES["CN"],
+            "origin":"BUILT_IN_VERIFIED",
+        }
+    return None
+
+
 def trading_day_info(
     market_id:str,
     value:date|datetime|str|None=None,
@@ -135,9 +180,9 @@ def trading_day_info(
     market=_market(market_id)
     day=_date(value,market)
     years=coverage_years(market)
-    source=OFFICIAL_SOURCES[market]
+    calendar=_calendar_for_year(market,day.year)
 
-    if day.year not in years:
+    if calendar is None:
         return {
             "version":VERSION,
             "market_id":market,
@@ -148,7 +193,8 @@ def trading_day_info(
             "early_close":False,
             "early_close_time":None,
             "coverage_years":years,
-            "official_source":source,
+            "calendar_origin":None,
+            "official_source":OFFICIAL_SOURCES[market],
         }
 
     if day.weekday()>=5:
@@ -162,11 +208,11 @@ def trading_day_info(
             "early_close":False,
             "early_close_time":None,
             "coverage_years":years,
-            "official_source":source,
+            "calendar_origin":calendar["origin"],
+            "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
         }
 
-    closed=US_CLOSED if market=="US" else CN_CLOSED
-    if day in closed.get(day.year,set()):
+    if day in calendar["closed"]:
         return {
             "version":VERSION,
             "market_id":market,
@@ -177,13 +223,11 @@ def trading_day_info(
             "early_close":False,
             "early_close_time":None,
             "coverage_years":years,
-            "official_source":source,
+            "calendar_origin":calendar["origin"],
+            "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
         }
 
-    early=None
-    if market=="US":
-        early=US_EARLY_CLOSE.get(day.year,{}).get(day)
-
+    early=(calendar.get("early_close") or {}).get(day)
     return {
         "version":VERSION,
         "market_id":market,
@@ -194,7 +238,8 @@ def trading_day_info(
         "early_close":early is not None,
         "early_close_time":early.strftime("%H:%M") if early else None,
         "coverage_years":years,
-        "official_source":source,
+        "calendar_origin":calendar["origin"],
+        "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
     }
 
 
@@ -239,10 +284,13 @@ def calendar_status(market_id:str|None=None)->dict:
     markets=[_market(market_id)] if market_id else ["US","CN"]
     return {
         "version":VERSION,
-        "policy":"OFFICIAL_EXCHANGE_CALENDAR_FAIL_CLOSED_WHEN_YEAR_UNAVAILABLE",
+        "policy":"OFFICIAL_EXCHANGE_CALENDAR; AUTO_SYNCED_OFFICIAL_OVERRIDES_BUILT_IN; FAIL_CLOSED_WHEN_YEAR_UNAVAILABLE",
+        "sync_metadata":dict(_SYNC_METADATA),
         "markets":{
             market:{
                 "coverage_years":coverage_years(market),
+                "built_in_years":built_in_years(market),
+                "synced_years":synced_years(market),
                 "official_source":OFFICIAL_SOURCES[market],
                 "today":trading_day_info(market),
                 "session_phase":official_session_phase(market),
