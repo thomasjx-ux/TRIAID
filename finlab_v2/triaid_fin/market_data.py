@@ -10,6 +10,8 @@ from datetime import datetime, time as dt_time
 from threading import RLock
 from zoneinfo import ZoneInfo
 
+from .alpaca_data import AlpacaMarketDataProvider
+
 
 class MarketDataError(RuntimeError):
     pass
@@ -144,13 +146,162 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.1.0"
+    version="market-data-hub@0.2.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
+        self.alpaca=AlpacaMarketDataProvider()
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
         self._lock=RLock()
+
+    def provider_status(self)->dict:
+        return {
+            "bar_provider":{
+                "provider":self.provider.version,
+                "configured":True,
+                "role":"default research bars",
+            },
+            "us_l1_quote_provider":self.alpaca.configuration_status(),
+            "routing":{
+                "US:DAILY":self.provider.version,
+                "US:INTRADAY":self.provider.version,
+                "US:PREOPEN":self.provider.version,
+                "US:REALTIME":self.provider.version,
+                "US:QUOTE_L1":self.alpaca.version if self.alpaca.configured else None,
+                "CN:DAILY":self.provider.version,
+                "CN:INTRADAY":self.provider.version,
+                "CN:REALTIME":self.provider.version,
+                "CN:PREOPEN_AUCTION":None,
+                "CN:QUOTE_L1":None,
+            },
+        }
+
+    def product_capabilities(self,market_id:str|None=None)->dict:
+        markets=[market_id.upper()] if market_id else ["US","CN"]
+        out={}
+        for market in markets:
+            if market=="US":
+                out[market]={
+                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "QUOTE_L1":{
+                        "available":self.alpaca.configured,
+                        "provider":self.alpaca.version if self.alpaca.configured else None,
+                        "grade":"provider_entitlement_dependent",
+                        "note":"Best bid/ask requires Alpaca credentials. No production trading decision is enabled by this capability alone.",
+                    },
+                    "ORDERBOOK_L2":{
+                        "available":False,"provider":None,"grade":"unavailable",
+                        "note":"No L2 order-book provider connected.",
+                    },
+                    "PREOPEN_EXTENDED":{
+                        "available":True,"provider":self.provider.version,"grade":"indicative",
+                    },
+                    "PREOPEN_AUCTION":{
+                        "available":False,"provider":None,"grade":"not_applicable",
+                    },
+                    "SECTOR_BARS":{
+                        "available":False,"provider":None,"grade":"interface_reserved",
+                        "note":"Sector/industry universe provider not connected yet.",
+                    },
+                    "STOCK_BARS":{
+                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
+                        "note":"Arbitrary Yahoo-supported US symbols can be requested for research bars; not yet part of the active strategy universe.",
+                    },
+                    "DERIVATIVES_CHAIN":{
+                        "available":False,"provider":None,"grade":"interface_reserved",
+                        "note":"Options/futures chain provider not connected yet.",
+                    },
+                    "BROKER_FILLS":{
+                        "available":False,"provider":None,"grade":"unavailable",
+                        "note":"No broker execution/fill connector is attached.",
+                    },
+                }
+            elif market=="CN":
+                out[market]={
+                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
+                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
+                    "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_applicable"},
+                    "PREOPEN_AUCTION":{
+                        "available":False,"provider":None,"grade":"unavailable",
+                        "note":"Dedicated A-share call-auction feed required.",
+                    },
+                    "SECTOR_BARS":{
+                        "available":False,"provider":None,"grade":"interface_reserved",
+                        "note":"A-share sector/industry provider not connected yet.",
+                    },
+                    "STOCK_BARS":{
+                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
+                        "note":"Yahoo-supported A-share symbols can be requested for research bars; not execution-grade.",
+                    },
+                    "DERIVATIVES_CHAIN":{
+                        "available":False,"provider":None,"grade":"interface_reserved",
+                        "note":"China futures/options chain provider not connected yet.",
+                    },
+                    "BROKER_FILLS":{
+                        "available":False,"provider":None,"grade":"unavailable",
+                    },
+                }
+        return out
+
+    def latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
+        market=market_id.upper()
+        if market!="US":
+            return {
+                "available":False,
+                "market_id":market,
+                "product":"QUOTE_L1",
+                "provider":None,
+                "symbols":{},
+                "reason":"NO_AUTHORIZED_L1_PROVIDER",
+            }
+        if not self.alpaca.configured:
+            return {
+                "available":False,
+                "market_id":"US",
+                "product":"QUOTE_L1",
+                "provider":None,
+                "symbols":{},
+                "reason":"ALPACA_CREDENTIALS_NOT_CONFIGURED",
+            }
+        result=self.alpaca.latest_quotes(symbols)
+        return {
+            "available":True,
+            "market_id":"US",
+            "product":"QUOTE_L1",
+            **result,
+        }
+
+    def instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
+        market=market_id.upper();mode=mode.upper()
+        if market not in {"US","CN"}:
+            raise MarketDataError(f"unsupported_market:{market}")
+        if mode not in MODE_CONFIGS:
+            raise MarketDataError(f"unsupported_mode:{mode}")
+        cfg=MODE_CONFIGS[mode]
+        if market=="CN" and mode=="PREOPEN":
+            raise MarketDataError("unsupported_market_mode:CN:PREOPEN")
+        s=self.provider.fetch_series(
+            symbol,
+            range_=cfg.range_,
+            interval=cfg.interval,
+            include_prepost=cfg.include_prepost,
+            min_points=cfg.min_points if mode=="DAILY" else 2,
+        )
+        return {
+            "market_id":market,
+            "symbol":symbol,
+            "mode":mode,
+            "provider":self.provider.version,
+            "quality":cfg.quality,
+            "execution_grade":False,
+            "points":len(s.ts),
+            "source_latest_ts":s.ts[-1],
+            "latest":{"close":s.close[-1],"volume":s.volume[-1]},
+        }
 
     def capabilities(self,market_id:str|None=None)->dict:
         markets=[market_id.upper()] if market_id else ["US","CN"]
@@ -282,6 +433,8 @@ class MarketDataHub:
         return {
             "version":self.version,
             "provider":self.provider.version,
+            "providers":self.provider_status(),
+            "products":self.product_capabilities(),
             "cache":cache,
             "errors":errors,
             "capabilities":self.capabilities(),
