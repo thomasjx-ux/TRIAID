@@ -4,8 +4,9 @@ from dataclasses import asdict, dataclass
 from statistics import mean
 from typing import Iterable
 
-from .contracts import RunRecord, StrategyState
+from .contracts import RunRecord
 from .store import RunStore
+from .strategy_population import StrategyPopulationModule
 
 
 @dataclass
@@ -18,6 +19,11 @@ class StrategyRuleProfile:
     entry_confirm_days: int
     exit_confirm_days: int
     cooldown_days: int
+    near_duplicate_corr: float = 0.995
+    family_cap: int = 3
+    redundancy_penalty: float = 0.35
+    uncertainty_penalty: float = 0.50
+    switch_hurdle_bps: float = 5.0
     status: str = "active"
     parent_version: str | None = None
     hypothesis: str | None = None
@@ -27,7 +33,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
     market_id=market_id.upper()
     if market_id=="CN":
         return StrategyRuleProfile(
-            version="strategy-rules-cn@0.1.0",
+            version="strategy-rules-cn@0.2.0",
             market_id="CN",
             window_weights=(0.35,0.30,0.20,0.15),
             max_group_size=12,
@@ -35,9 +41,14 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
             entry_confirm_days=5,
             exit_confirm_days=3,
             cooldown_days=10,
+            near_duplicate_corr=0.990,
+            family_cap=3,
+            redundancy_penalty=0.30,
+            uncertainty_penalty=0.60,
+            switch_hurdle_bps=8.0,
         )
     return StrategyRuleProfile(
-        version="strategy-rules-us@0.1.0",
+        version="strategy-rules-us@0.2.0",
         market_id="US",
         window_weights=(0.35,0.30,0.20,0.15),
         max_group_size=12,
@@ -45,17 +56,18 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
         entry_confirm_days=3,
         exit_confirm_days=3,
         cooldown_days=5,
+        near_duplicate_corr=0.995,
+        family_cap=3,
+        redundancy_penalty=0.35,
+        uncertainty_penalty=0.50,
+        switch_hurdle_bps=5.0,
     )
 
 
 class StrategyEvolutionModule:
-    """Independent evolution loop for Strategy Population rules.
+    """Independent self-evolution loop for Strategy Population rules."""
 
-    It never edits production rules in place. Candidate rules are created from
-    verified outcomes and require replay/holdout/shadow/audit gates before promotion.
-    """
-
-    version="strategy-evolution@0.1.0"
+    version="strategy-evolution@0.2.0"
     min_verified_runs=20
 
     def __init__(self,store:RunStore) -> None:
@@ -63,15 +75,35 @@ class StrategyEvolutionModule:
         raw=store.load_json("strategy_evolution.json",default={})
         if not raw:
             raw={"markets":{}}
-            for market_id in ("US","CN"):
+        for market_id in ("US","CN"):
+            if market_id not in raw.setdefault("markets",{}):
                 seed=_seed_profile(market_id)
                 raw["markets"][market_id]={
                     "active_version":seed.version,
                     "profiles":{seed.version:asdict(seed)},
                     "history":[],
                 }
-            store.save_json("strategy_evolution.json",raw)
+            else:
+                self._migrate_market(raw["markets"][market_id],market_id)
         self.state=raw
+        self._save()
+
+    def _defaults(self,market_id:str)->dict:
+        return asdict(_seed_profile(market_id))
+
+    def _migrate_market(self,m:dict,market_id:str)->None:
+        defaults=self._defaults(market_id)
+        for version,p in list(m.get("profiles",{}).items()):
+            for key,value in defaults.items():
+                if key not in p and key not in {"version","status","parent_version","hypothesis"}:
+                    p[key]=value
+            p["market_id"]=market_id
+        active=m.get("active_version")
+        if active not in m.get("profiles",{}):
+            seed=_seed_profile(market_id)
+            m["active_version"]=seed.version
+            m.setdefault("profiles",{})[seed.version]=asdict(seed)
+        m.setdefault("history",[])
 
     def _market(self,market_id:str)->dict:
         key=market_id.upper()
@@ -83,6 +115,7 @@ class StrategyEvolutionModule:
                 "history":[],
             }
             self._save()
+        self._migrate_market(self.state["markets"][key],key)
         return self.state["markets"][key]
 
     def _save(self)->None:
@@ -97,67 +130,32 @@ class StrategyEvolutionModule:
             return self._market(market_id)
         return self.state
 
-    @staticmethod
-    def _score_state(state:StrategyState,profile:StrategyRuleProfile)->float:
-        windows=(21,63,126,252)
-        vals=[]
-        used=[]
-        for h,w in zip(windows,profile.window_weights):
-            key=f"return_{h}d_ann"
-            if key in state.metrics:
-                vals.append(float(state.metrics[key])*float(w))
-                used.append(float(w))
-        if used and sum(used)>0:
-            return sum(vals)/sum(used)
-        return float(state.expected_net_return)
-
-    @staticmethod
-    def _allocate(scored:list[tuple[float,StrategyState]],profile:StrategyRuleProfile)->dict[str,float]:
-        selected=[(score,state) for score,state in scored if score>0][:profile.max_group_size]
-        positive={s.strategy_id:score for score,s in selected}
-        active=set(positive)
-        weights={}
-        remaining=1.0
-        while active and remaining>1e-12:
-            total=sum(positive[k] for k in active)
-            if total<=0:
-                break
-            tentative={k:remaining*positive[k]/total for k in active}
-            capped=[k for k,w in tentative.items() if w>profile.max_weight]
-            if not capped:
-                weights.update(tentative)
-                remaining=0.0
-                break
-            for k in capped:
-                weights[k]=profile.max_weight
-                remaining-=profile.max_weight
-                active.remove(k)
-        if remaining>1e-12:
-            weights["P28_CASH"]=remaining
-        return weights
-
-    def _simulated_group_return(self,run:RunRecord,profile:StrategyRuleProfile)->float|None:
-        if not run.evaluation or run.evaluation.status!="EVALUATED":
-            return None
-        realized=run.evaluation.strategy_realized_returns
-        if not realized:
-            return None
-        feasible=[
-            s for s in run.strategy_states
-            if s.strategy_id!="P28_CASH"
-            and s.lifecycle in {"active","reduced"}
-            and s.eligible and not s.hard_failure
-            and s.risk_ok and s.capacity_ok and s.liquidity_ok and s.concentration_ok
-        ]
-        scored=sorted(
-            [(self._score_state(s,profile),s) for s in feasible],
-            key=lambda x:x[0],
-            reverse=True,
-        )
-        weights=self._allocate(scored,profile)
-        gross=sum(weights.get(k,0.0)*float(realized.get(k,0.0)) for k in weights)
-        bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0)
-        return gross-bps/10000.0*sum(abs(v) for k,v in weights.items() if k!="P28_CASH")
+    def _simulate_profile(self,runs:list[RunRecord],profile:StrategyRuleProfile)->list[float]:
+        population=StrategyPopulationModule()
+        population.configure_market(profile)
+        previous_group=None
+        returns=[]
+        for run in sorted(runs,key=lambda r:(r.market.as_of,r.created_at)):
+            if not run.evaluation or run.evaluation.status!="EVALUATED":
+                continue
+            group=population.select(
+                profile.market_id,
+                run.strategy_states,
+                profile.max_group_size,
+                previous_group=previous_group,
+                base_cost_bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0),
+            )
+            realized=run.evaluation.strategy_realized_returns
+            gross=sum(group.weights.get(k,0.0)*float(realized.get(k,0.0)) for k in group.weights)
+            if previous_group is None:
+                turnover=sum(abs(v) for k,v in group.weights.items() if k!="P28_CASH")
+            else:
+                turnover=sum(abs(group.weights.get(k,0.0)-previous_group.weights.get(k,0.0)) for k in set(group.weights)|set(previous_group.weights))
+            bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0)
+            net=gross-turnover*bps/10000.0
+            returns.append(net)
+            previous_group=group
+        return returns
 
     def diagnose(self,market_id:str,runs:Iterable[RunRecord])->dict:
         rows=[
@@ -193,22 +191,33 @@ class StrategyEvolutionModule:
             ("long",(0.20,0.25,0.25,0.30)),
         ]
         sizes=sorted(set([max(6,active.max_group_size-2),active.max_group_size,min(16,active.max_group_size+2)]))
+        redundancy_values=sorted(set([
+            max(0.10,active.redundancy_penalty-0.15),
+            active.redundancy_penalty,
+            min(0.80,active.redundancy_penalty+0.15),
+        ]))
         out=[]
         for label,weights in weight_sets:
             for size in sizes:
-                out.append(StrategyRuleProfile(
-                    version="",
-                    market_id=active.market_id,
-                    window_weights=weights,
-                    max_group_size=size,
-                    max_weight=active.max_weight,
-                    entry_confirm_days=active.entry_confirm_days,
-                    exit_confirm_days=active.exit_confirm_days,
-                    cooldown_days=active.cooldown_days,
-                    status="candidate",
-                    parent_version=active.version,
-                    hypothesis=f"{label}-horizon weighting with group size {size}",
-                ))
+                for redundancy in redundancy_values:
+                    out.append(StrategyRuleProfile(
+                        version="",
+                        market_id=active.market_id,
+                        window_weights=weights,
+                        max_group_size=size,
+                        max_weight=active.max_weight,
+                        entry_confirm_days=active.entry_confirm_days,
+                        exit_confirm_days=active.exit_confirm_days,
+                        cooldown_days=active.cooldown_days,
+                        near_duplicate_corr=active.near_duplicate_corr,
+                        family_cap=active.family_cap,
+                        redundancy_penalty=redundancy,
+                        uncertainty_penalty=active.uncertainty_penalty,
+                        switch_hurdle_bps=active.switch_hurdle_bps,
+                        status="candidate",
+                        parent_version=active.version,
+                        hypothesis=f"{label}-horizon weighting, max group {size}, redundancy penalty {redundancy:.2f}",
+                    ))
         return out
 
     def propose_candidate(self,market_id:str,runs:Iterable[RunRecord])->dict:
@@ -232,16 +241,14 @@ class StrategyEvolutionModule:
         dev_count=max(1,int(len(rows)*0.70))
         dev=rows[:dev_count]
         active=self.active(market_id)
-        active_scores=[self._simulated_group_return(r,active) for r in dev]
-        active_scores=[x for x in active_scores if x is not None]
+        active_scores=self._simulate_profile(dev,active)
         if not active_scores:
             return {"created":False,"reason":"NO_SIMULATABLE_DEVELOPMENT_RUNS","diagnosis":diag}
         active_mean=mean(active_scores)
 
         best=None
         for candidate in self._candidate_profiles(active):
-            vals=[self._simulated_group_return(r,candidate) for r in dev]
-            vals=[x for x in vals if x is not None]
+            vals=self._simulate_profile(dev,candidate)
             if not vals:
                 continue
             score=mean(vals)
@@ -262,7 +269,7 @@ class StrategyEvolutionModule:
         candidate.version=f"strategy-rules-{market_id.lower()}-candidate-{n:03d}"
         candidate.hypothesis=(
             f"{candidate.hypothesis}; development mean {best[0]:+.6f} vs active {active_mean:+.6f}. "
-            "Holdout observations were not used for candidate selection."
+            "Reserved holdout observations were not used for candidate selection."
         )
         m["profiles"][candidate.version]=asdict(candidate)
         m["history"].append({
