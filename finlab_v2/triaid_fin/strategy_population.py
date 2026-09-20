@@ -23,6 +23,7 @@ class PopulationConfig:
     redundancy_penalty: float = 0.35
     uncertainty_penalty: float = 0.50
     switch_hurdle_bps: float = 5.0
+    switch_uncertainty_fraction: float = 0.25
     scan_frequency: str = "hourly"
     allocation_review_frequency: str = "daily"
     population_review_frequency: str = "weekly"
@@ -48,6 +49,7 @@ US_CONFIG = PopulationConfig(
     redundancy_penalty=0.35,
     uncertainty_penalty=0.50,
     switch_hurdle_bps=5.0,
+    switch_uncertainty_fraction=0.25,
 )
 
 CN_CONFIG = PopulationConfig(
@@ -63,6 +65,7 @@ CN_CONFIG = PopulationConfig(
     redundancy_penalty=0.30,
     uncertainty_penalty=0.60,
     switch_hurdle_bps=8.0,
+    switch_uncertainty_fraction=0.25,
 )
 
 
@@ -90,6 +93,7 @@ class StrategyPopulationModule:
             redundancy_penalty=float(getattr(profile,"redundancy_penalty",0.35 if key=="US" else 0.30)),
             uncertainty_penalty=float(getattr(profile,"uncertainty_penalty",0.50 if key=="US" else 0.60)),
             switch_hurdle_bps=float(getattr(profile,"switch_hurdle_bps",5.0 if key=="US" else 8.0)),
+            switch_uncertainty_fraction=float(getattr(profile,"switch_uncertainty_fraction",0.25)),
         )
 
     def config_for(self, market_id: str) -> PopulationConfig:
@@ -261,8 +265,11 @@ class StrategyPopulationModule:
                 family_rejections.append(state.strategy_id)
                 continue
 
-            correlations=[abs(self._corr(state.recent_returns,s.recent_returns)) for s in selected]
-            max_corr=max(correlations) if correlations else 0.0
+            if cfg.redundancy_penalty<=0 and cfg.near_duplicate_corr>1.0:
+                max_corr=0.0
+            else:
+                correlations=[abs(self._corr(state.recent_returns,s.recent_returns)) for s in selected]
+                max_corr=max(correlations) if correlations else 0.0
             if max_corr>=cfg.near_duplicate_corr:
                 duplicate_rejections.append({"strategy_id":state.strategy_id,"max_corr":max_corr})
                 continue
@@ -338,7 +345,7 @@ class StrategyPopulationModule:
                 holding_days=max(1,min(cfg.review_windows))
                 annualizer=252.0/holding_days
                 switching_cost=turnover*max(0.0,float(base_cost_bps))/10000.0*annualizer
-                uncertainty_guard=0.25*sum(
+                uncertainty_guard=cfg.switch_uncertainty_fraction*sum(
                     candidate_weights.get(sid,0.0)*max(0.0,state_map[sid].uncertainty)
                     for sid in candidate_weights if sid in state_map
                 )
