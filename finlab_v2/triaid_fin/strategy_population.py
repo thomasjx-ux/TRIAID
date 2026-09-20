@@ -112,7 +112,7 @@ class StrategyPopulationModule:
         cfg = self.config_for(market_id)
         result = asdict(cfg)
         result["selection_objective"] = "maximize robust expected group net return subject to lifecycle, liquidity, capacity, concentration and redundancy constraints"
-        result["group_optimizer"] = "greedy marginal group value with near-duplicate removal and strategy-family concentration limits"
+        result["group_optimizer"] = "return-first group construction with versioned marginal-value, redundancy and switching constraints; unvalidated diversity penalties remain disabled"
         result["switch_rule"] = "replace the current group only when robust expected improvement exceeds annualized switching cost, uncertainty guard and switching hurdle"
         result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive experimental weight; SHADOW receives no exposure"
         result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
@@ -328,7 +328,9 @@ class StrategyPopulationModule:
         candidate_weights,diagnostics=self._candidate_group(cfg,states,max_members)
 
         use_previous=False
-        if cfg.switch_guard_enabled and previous_group is not None and previous_group.market_id.upper()==market_id.upper():
+        if not cfg.switch_guard_enabled:
+            diagnostics["selection_mode"]="RETURN_FIRST_RESELECT"
+        elif previous_group is not None and previous_group.market_id.upper()==market_id.upper():
             invalid=[
                 sid for sid in previous_group.members
                 if sid!="P28_CASH" and (
