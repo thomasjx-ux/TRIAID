@@ -272,24 +272,26 @@ const T={
 };
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+const el=id=>document.getElementById(id);
 function applyText(){
- const t=T[lang]; title.textContent=t.title;subtitle.textContent=t.subtitle;overviewTitle.textContent=t.overview;
- archLabel.textContent=t.arch;coreLabel.textContent=t.core;dateLabel.textContent=t.date;excessLabel.textContent=t.excess;
- curveTitle.textContent=t.curve;dailyTitle.textContent=t.daily;strategyTitle.textContent=t.strategies;
- thStrategy.textContent=t.strategy;thState.textContent=t.state;thExp.textContent=t.exp;thRisk.textContent=t.risk;thWeight.textContent=t.weight;thWhy.textContent=t.why;
- evolutionTitle.textContent=t.evolution;diagLabel.textContent=t.diag;gateLabel.textContent=t.gate;gateText.textContent=t.gateText;
- runBtn.textContent=t.run;runAllBtn.textContent=t.runAll;
+ const t=T[lang];
+ el('title').textContent=t.title;el('subtitle').textContent=t.subtitle;el('overviewTitle').textContent=t.overview;
+ el('archLabel').textContent=t.arch;el('coreLabel').textContent=t.core;el('dateLabel').textContent=t.date;el('excessLabel').textContent=t.excess;
+ el('curveTitle').textContent=t.curve;el('dailyTitle').textContent=t.daily;el('strategyTitle').textContent=t.strategies;
+ el('thStrategy').textContent=t.strategy;el('thState').textContent=t.state;el('thExp').textContent=t.exp;el('thRisk').textContent=t.risk;el('thWeight').textContent=t.weight;el('thWhy').textContent=t.why;
+ el('evolutionTitle').textContent=t.evolution;el('diagLabel').textContent=t.diag;el('gateLabel').textContent=t.gate;el('gateText').textContent=t.gateText;
+ el('runBtn').textContent=t.run;el('runAllBtn').textContent=t.runAll;
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function runNow(){
- const m=market.value;const x=await json('/api/live/run/'+m,{method:'POST'});runStatus.textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
+ const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
 }
 async function runAll(){
- const x=await json('/api/live/run-all',{method:'POST'});runStatus.textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
+ const x=await json('/api/live/run-all',{method:'POST'});el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
  x.runs.forEach(r=>pollRun(r.run_id));
 }
 async function pollRun(id){
- for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,1000));try{const x=await json('/api/runs/'+id);runStatus.textContent=id+' · '+x.status;if(!['CREATED','FETCHING_DATA'].includes(x.status)){refreshAll();return}}catch(e){}}
+ for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,1000));try{const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;if(!['CREATED','FETCHING_DATA'].includes(x.status)){refreshAll();return}}catch(e){}}
 }
 function drawCurve(points){
  const c=document.getElementById('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
@@ -301,23 +303,25 @@ function drawCurve(points){
  [['baseline_equity','#69707d'],['triaid_equity','#111827']].forEach(([key,color])=>{g.strokeStyle=color;g.lineWidth=2;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke()});
 }
 async function refreshAll(){
- const m=market.value;
+ const m=el('market').value;
+ try{
  const [s,d,cards,curves,evo]=await Promise.all([
   json('/api/status'),json('/api/daily?market_id='+m),json('/api/strategies?market_id='+m+'&lang='+lang),json('/api/curves?market_id='+m),json('/api/evolution')
  ]);
- arch.textContent=s.architecture_version;core.textContent=s.active_core.version;date.textContent=d.date||'-';
+ el('arch').textContent=s.architecture_version;el('core').textContent=s.active_core.version;el('date').textContent=d.date||'-';
  const last=curves.length?curves[curves.length-1]:null;const ex=last?last.cumulative_excess_return:null;
- excess.textContent=fmtPct(ex);excess.className='kpi '+(ex>0?'good':ex<0?'bad':'');
- daily.textContent=JSON.stringify(d,null,2);evolution.textContent=JSON.stringify({active_version:evo.active_version,diagnosis:evo.diagnosis,history:(evo.history||[]).slice(-5)},null,2);
+ el('excess').textContent=fmtPct(ex);el('excess').className='kpi '+(ex>0?'good':ex<0?'bad':'');
+ el('daily').textContent=JSON.stringify(d,null,2);el('evolution').textContent=JSON.stringify({active_version:evo.active_version,diagnosis:evo.diagnosis,history:(evo.history||[]).slice(-5)},null,2);
  drawCurve(curves);
- strategyRows.innerHTML=cards.map(x=>{
+ el('strategyRows').innerHTML=cards.map(x=>{
   const cls=x.selected?'selected':'';
-  const explain=[x.summary,x.best_conditions,x.selection_reason,x.triaid_reason].filter(Boolean).join('\n');
-  return '<tr class="'+cls+'"><td><b>'+esc(x.name)+'</b><br><span class="small muted">'+esc(x.strategy_id)+'</span></td><td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td><td>'+fmtPct(x.expected_net_return)+'</td><td>'+fmtPct(x.risk)+'</td><td class="weights">'+fmtPct(x.baseline_weight)+' → '+fmtPct(x.triaid_weight)+'</td><td class="reason">'+esc(explain).replace(/\n/g,'<br>')+'</td></tr>'
+  const explain=[x.summary,x.best_conditions,x.selection_reason,x.triaid_reason].filter(Boolean).join('\\n');
+  return '<tr class="'+cls+'"><td><b>'+esc(x.name)+'</b><br><span class="small muted">'+esc(x.strategy_id)+'</span></td><td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td><td>'+fmtPct(x.expected_net_return)+'</td><td>'+fmtPct(x.risk)+'</td><td class="weights">'+fmtPct(x.baseline_weight)+' → '+fmtPct(x.triaid_weight)+'</td><td class="reason">'+esc(explain).replace(/\\n/g,'<br>')+'</td></tr>'
  }).join('');
+ }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
 }
 async function propose(){
- const x=await json('/api/evolution/propose',{method:'POST'});runStatus.textContent=JSON.stringify(x);refreshAll();
+ const x=await json('/api/evolution/propose',{method:'POST'});el('runStatus').textContent=JSON.stringify(x);refreshAll();
 }
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll()}
 applyText();refreshAll();setInterval(refreshAll,15000);
