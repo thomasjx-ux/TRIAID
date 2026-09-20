@@ -12,6 +12,10 @@ assert "triaid_weight" in html
 assert "JSON.stringify(d,null,2)" not in html
 assert "const el=id=>document.getElementById(id);" in html
 assert "UI data error:" in html
+assert 'id="candidatePoolTitle"' in html
+assert 'id="candidateRows"' in html
+assert "cards.filter(x=>x.selected)" in html
+assert "cards.filter(x=>!x.selected)" in html
 assert html.index('id="strategyTitle"') < html.index('id="dailyTitle"')
 assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
