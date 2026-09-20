@@ -9,7 +9,7 @@ from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
-from .market_lab import prepare_live_market
+from .market_lab import market_data_capabilities, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
 from .population_state import PopulationStateTracker
 from .review import ReviewModule
 from .store import RunStore
@@ -18,8 +18,8 @@ from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.6.2"
-    market_adapter_version = "market-lab@0.2.0"
+    architecture_version = "fin-evolution-lab@0.7.0"
+    market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
         self.store=RunStore()
@@ -47,6 +47,7 @@ class EvolutionLabEngine:
         return {
             "architecture":self.architecture_version,
             "market_data":self.market_adapter_version,
+            "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
             "strategy_population":self.strategy_population.version,
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,
@@ -269,7 +270,25 @@ class EvolutionLabEngine:
             "strategy_registry_count":len(self.strategy_population.definitions()),
             "markets":["US","CN"],
             "run_counts":counts,
+            "market_data":{
+                "status":market_data_status(),
+                "capabilities":market_data_capabilities(),
+            },
         }
+
+
+
+    def market_data_status(self)->dict:
+        return market_data_status()
+
+    def market_data_capabilities(self,market_id:str|None=None)->dict:
+        return market_data_capabilities(market_id)
+
+    def market_data_snapshot(self,market_id:str,mode:str,refresh:bool=False)->dict:
+        return market_data_snapshot(market_id,mode,refresh)
+
+    def refresh_market_data(self,market_id:str,mode:str)->dict:
+        return refresh_market_data(market_id,mode)
 
     def daily_summary(self,market_id:str|None=None)->dict:
         rows=self.all_runs()
