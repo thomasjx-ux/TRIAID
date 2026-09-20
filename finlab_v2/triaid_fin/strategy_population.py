@@ -24,6 +24,7 @@ class PopulationConfig:
     uncertainty_penalty: float = 0.50
     switch_hurdle_bps: float = 5.0
     switch_uncertainty_fraction: float = 0.25
+    switch_guard_enabled: bool = True
     scan_frequency: str = "hourly"
     allocation_review_frequency: str = "daily"
     population_review_frequency: str = "weekly"
@@ -49,7 +50,8 @@ US_CONFIG = PopulationConfig(
     redundancy_penalty=0.35,
     uncertainty_penalty=0.50,
     switch_hurdle_bps=5.0,
-    switch_uncertainty_fraction=0.25,
+    switch_uncertainty_fraction=0.0,
+    switch_guard_enabled=False,
 )
 
 CN_CONFIG = PopulationConfig(
@@ -65,12 +67,13 @@ CN_CONFIG = PopulationConfig(
     redundancy_penalty=0.30,
     uncertainty_penalty=0.60,
     switch_hurdle_bps=8.0,
-    switch_uncertainty_fraction=0.25,
+    switch_uncertainty_fraction=0.0,
+    switch_guard_enabled=True,
 )
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.0"
+    version = "strategy-population@0.5.1"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -94,6 +97,7 @@ class StrategyPopulationModule:
             uncertainty_penalty=float(getattr(profile,"uncertainty_penalty",0.50 if key=="US" else 0.60)),
             switch_hurdle_bps=float(getattr(profile,"switch_hurdle_bps",5.0 if key=="US" else 8.0)),
             switch_uncertainty_fraction=float(getattr(profile,"switch_uncertainty_fraction",0.25)),
+            switch_guard_enabled=bool(getattr(profile,"switch_guard_enabled",True)),
         )
 
     def config_for(self, market_id: str) -> PopulationConfig:
@@ -324,7 +328,7 @@ class StrategyPopulationModule:
         candidate_weights,diagnostics=self._candidate_group(cfg,states,max_members)
 
         use_previous=False
-        if previous_group is not None and previous_group.market_id.upper()==market_id.upper():
+        if cfg.switch_guard_enabled and previous_group is not None and previous_group.market_id.upper()==market_id.upper():
             invalid=[
                 sid for sid in previous_group.members
                 if sid!="P28_CASH" and (
@@ -390,9 +394,16 @@ class StrategyPopulationModule:
                 )
             else:
                 family=FAMILIES.get(sid,"unknown")
+                diversification_on=cfg.redundancy_penalty>0 or cfg.near_duplicate_corr<=1.0 or cfg.family_cap<max_members
+                if diversification_on:
+                    zh_reason=f"并通过相关性、{family} 家族集中度、风险、流动性和容量约束后仍有正的群组边际价值。"
+                    en_reason=f"and retains positive marginal group value after correlation, {family} family concentration, risk, liquidity and capacity constraints."
+                else:
+                    zh_reason="并通过风险、流动性、容量与收益约束后进入当前收益优先策略群。"
+                    en_reason="and enters the return-first group after risk, liquidity, capacity and return constraints."
                 reasons[sid]=BilingualText(
-                    zh=f"{definition.name.zh if definition else sid} 的稳健预期净回报为 {self._robust_return(s,cfg):.2%}，并通过相关性、{family} 家族集中度、风险、流动性和容量约束后仍有正的群组边际价值。",
-                    en=f"{definition.name.en if definition else sid} has robust expected net return {self._robust_return(s,cfg):.2%} and retains positive marginal group value after correlation, {family} family concentration, risk, liquidity and capacity constraints.",
+                    zh=f"{definition.name.zh if definition else sid} 的稳健预期净回报为 {self._robust_return(s,cfg):.2%}，{zh_reason}",
+                    en=f"{definition.name.en if definition else sid} has robust expected net return {self._robust_return(s,cfg):.2%} {en_reason}",
                 )
 
         return StrategyGroup(
