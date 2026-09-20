@@ -314,6 +314,14 @@ class EvolutionLabEngine:
     def market_observation_status(self)->dict:
         return self.observations.status()
 
+    def market_transitions(
+        self,
+        market_id:str|None=None,
+        mode:str|None=None,
+        limit:int=500,
+    )->list[dict]:
+        return self.observations.transitions(market_id,mode,limit)
+
     def market_data_snapshot(self,market_id:str,mode:str,refresh:bool=False)->dict:
         return market_data_snapshot(market_id,mode,refresh)
 
