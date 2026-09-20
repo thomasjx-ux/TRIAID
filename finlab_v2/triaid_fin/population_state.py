@@ -5,11 +5,13 @@ from copy import deepcopy
 from .contracts import StrategyState
 from .store import RunStore
 from .strategy_population import StrategyPopulationModule
+from .cn_incubator import CN_SHADOW_IDS
 from .strategy_registry import POLICY_IDS
 
 
 class PopulationStateTracker:
-    version="population-state@0.1.0"
+    version="population-state@0.2.0"
+    incubator_min_shadow_days=20
 
     def __init__(self,store:RunStore,population:StrategyPopulationModule) -> None:
         self.store=store
@@ -29,9 +31,21 @@ class PopulationStateTracker:
                     "cooldown_remaining":0,
                     "observations":0,
                     "last_expected_net_return":None,
+                    "shadow_cumulative_return":0.0,
                 }
                 for pid in POLICY_IDS
             }
+            if key=="CN":
+                for pid in CN_SHADOW_IDS:
+                    self.state["markets"][key][pid]={
+                        "lifecycle":"shadow",
+                        "positive_streak":0,
+                        "negative_streak":0,
+                        "cooldown_remaining":0,
+                        "observations":0,
+                        "last_expected_net_return":None,
+                        "shadow_cumulative_return":0.0,
+                    }
         return self.state["markets"][key]
 
     def apply(self,market_id:str,raw_states:list[StrategyState]) -> list[StrategyState]:
@@ -48,9 +62,12 @@ class PopulationStateTracker:
                     "cooldown_remaining":0,
                     "observations":0,
                     "last_expected_net_return":None,
+                    "shadow_cumulative_return":0.0,
                 },
             )
             m["observations"]+=1
+            if state.strategy_id in CN_SHADOW_IDS and market_id.upper()=="CN":
+                m["shadow_cumulative_return"]=(1.0+float(m.get("shadow_cumulative_return",0.0)))*(1.0+float(state.metrics.get("latest_return",0.0)))-1.0
             positive=(
                 state.eligible
                 and not state.hard_failure
@@ -75,6 +92,13 @@ class PopulationStateTracker:
                 m["cooldown_remaining"]=cfg.cooldown_days
             elif lifecycle=="candidate" and m["positive_streak"]>=cfg.entry_confirm_days:
                 lifecycle="shadow"
+            elif lifecycle=="shadow" and state.strategy_id in CN_SHADOW_IDS and market_id.upper()=="CN":
+                if (
+                    m["observations"]>=self.incubator_min_shadow_days
+                    and float(m.get("shadow_cumulative_return",0.0))>0
+                    and state.expected_net_return>0
+                ):
+                    lifecycle="active"
             elif lifecycle=="shadow" and m["positive_streak"]>=cfg.entry_confirm_days*2:
                 lifecycle="active"
             elif lifecycle=="active" and m["negative_streak"]>=cfg.exit_confirm_days:
@@ -97,7 +121,16 @@ class PopulationStateTracker:
             s.independent_decisions=max(s.independent_decisions,m["observations"])
             s.horizon_multiples=max(s.horizon_multiples,m["observations"]/max(1,cfg.review_windows[0]))
             s.oos_marginal_value=s.expected_net_return
-            s.shadow_evidence_pass=(lifecycle in {"active","reduced"} or m["positive_streak"]>=cfg.entry_confirm_days*2)
+            if state.strategy_id in CN_SHADOW_IDS and market_id.upper()=="CN":
+                s.shadow_evidence_pass=(
+                    m["observations"]>=self.incubator_min_shadow_days
+                    and float(m.get("shadow_cumulative_return",0.0))>0
+                    and state.expected_net_return>0
+                )
+                s.metrics["shadow_live_days"]=float(m["observations"])
+                s.metrics["shadow_cumulative_return"]=float(m.get("shadow_cumulative_return",0.0))
+            else:
+                s.shadow_evidence_pass=(lifecycle in {"active","reduced"} or m["positive_streak"]>=cfg.entry_confirm_days*2)
             out.append(s)
 
         self.store.save_json("population_state.json",self.state)
