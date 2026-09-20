@@ -241,7 +241,7 @@ class TradingCalendarSync:
         )
         self._fetcher=fetcher or self._fetch
         self.state=self.store.load_json(self.state_name,default={}) or {}
-        self.state.setdefault("version",self.version)
+        self.state["version"]=self.version
         self.state.setdefault("markets",{})
         self.state.setdefault("last_check_at",None)
         self.state.setdefault("last_success_at",None)
