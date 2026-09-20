@@ -14,28 +14,33 @@ from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
 from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION
+from triaid_fin.trading_calendar_sync import TradingCalendarSync
 
 engine=EvolutionLabEngine()
 decision_scheduler=DecisionScheduler(engine)
+calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(engine,decision_scheduler)
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
-    task=None
+    tasks=[]
+    if calendar_sync.enabled:
+        tasks.append(asyncio.create_task(calendar_sync.run()))
     if market_automation.enabled:
-        task=asyncio.create_task(market_automation.run())
+        tasks.append(asyncio.create_task(market_automation.run()))
     try:
         yield
     finally:
-        if task is not None:
+        for task in tasks:
             task.cancel()
+        for task in tasks:
             try:
                 await task
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.1",lifespan=lifespan)
-app.include_router(build_market_data_router(engine,market_automation))
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.2",lifespan=lifespan)
+app.include_router(build_market_data_router(engine,market_automation,calendar_sync))
 app.include_router(build_decision_router(decision_scheduler))
 
 
@@ -54,6 +59,8 @@ def health()->dict:
         "decision_automation_enabled":decision_scheduler.enabled,
         "broker_execution_enabled":False,
         "official_trading_calendar_version":TRADING_CALENDAR_VERSION,
+        "calendar_sync_enabled":calendar_sync.enabled,
+        "calendar_sync_version":calendar_sync.version,
     }
 
 
