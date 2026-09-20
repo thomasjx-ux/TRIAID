@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.4.2")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.4.3")
 engine = EvolutionLabEngine()
 
 
@@ -256,29 +256,6 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     </div>
   </div>
 
-  <h2 id="overviewTitle">当前状态</h2>
-  <div class="grid">
-    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
-    <div class="card"><div class="label" id="coreLabel">当前 Core</div><div class="value triaid" id="core">-</div></div>
-    <div class="card"><div class="label" id="selectedLabel">当前策略数</div><div class="value" id="selectedCount">-</div></div>
-    <div class="card"><div class="label" id="cumLabel">累计 TRIAID 超额</div><div class="value" id="cumExcess">-</div></div>
-  </div>
-
-  <h2 id="curveTitle">连续回顾</h2>
-  <div class="legend">
-    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
-    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
-  </div>
-  <canvas id="curve" width="1220" height="270"></canvas>
-
-  <h2 id="dailyTitle">今日摘要</h2>
-  <div class="summary">
-    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
-    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
-    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
-    <div class="item"><span class="label" id="dailyAnalysisLabel">今日结论</span><b id="dailyAnalysis">-</b></div>
-  </div>
-
   <h2 id="strategyTitle">策略群与 TRIAID 调整</h2>
   <div class="tablewrap">
     <table>
@@ -295,6 +272,29 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <tbody id="strategyRows"></tbody>
     </table>
   </div>
+
+  <h2 id="dailyTitle">今日摘要</h2>
+  <div class="summary">
+    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
+    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
+    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
+    <div class="item"><span class="label" id="dailyAnalysisLabel">今日结论</span><b id="dailyAnalysis">-</b></div>
+  </div>
+
+  <h2 id="overviewTitle">当前状态</h2>
+  <div class="grid">
+    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
+    <div class="card"><div class="label" id="coreLabel">当前 Core</div><div class="value triaid" id="core">-</div></div>
+    <div class="card"><div class="label" id="selectedLabel">当前策略数</div><div class="value" id="selectedCount">-</div></div>
+    <div class="card"><div class="label" id="cumLabel">累计 TRIAID 超额</div><div class="value" id="cumExcess">-</div></div>
+  </div>
+
+  <h2 id="curveTitle">连续回顾</h2>
+  <div class="legend">
+    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
+    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
+  </div>
+  <canvas id="curve" width="1220" height="270"></canvas>
 
   <h2 id="evolutionTitle">Core 进化状态</h2>
   <div class="corebox">
