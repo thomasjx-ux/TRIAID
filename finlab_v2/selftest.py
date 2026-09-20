@@ -226,6 +226,21 @@ try:
     assert auto["event"]["decision"]["action_generated"] is False
     assert scheduler.status()["broker_execution_enabled"] is False
 
+    negative_transition={
+        "source_latest_ts":1234568790,
+        "mean_return":-0.02,
+        "mean_abs_return":0.02,
+        "max_abs_return":0.03,
+        "cross_sectional_dispersion":0.01,
+        "advancers":0,
+        "decliners":3,
+    }
+    negative_recompute=engine.recompute_transition_research("US",negative_transition,"INTRADAY")
+    assert negative_recompute["status"]=="RECOMPUTED"
+    assert negative_recompute["transition_regime"]=="intraday_risk_off"
+    assert negative_recompute["diagnostics"]["risk_off_detected"] is True
+    assert sum(negative_recompute["weights_after"].values()) < sum(negative_recompute["weights_before"].values())
+
     curves=engine.curves("US")
     assert len(curves)>=1
     daily=engine.daily_summary("US")
