@@ -24,6 +24,7 @@ class StrategyRuleProfile:
     redundancy_penalty: float = 0.35
     uncertainty_penalty: float = 0.50
     switch_hurdle_bps: float = 5.0
+    switch_uncertainty_fraction: float = 0.25
     status: str = "active"
     parent_version: str | None = None
     hypothesis: str | None = None
@@ -46,6 +47,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
             redundancy_penalty=0.30,
             uncertainty_penalty=0.60,
             switch_hurdle_bps=8.0,
+            switch_uncertainty_fraction=0.25,
         )
     return StrategyRuleProfile(
         version="strategy-rules-us@0.2.0",
@@ -61,6 +63,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
         redundancy_penalty=0.35,
         uncertainty_penalty=0.50,
         switch_hurdle_bps=5.0,
+        switch_uncertainty_fraction=0.25,
     )
 
 
@@ -214,6 +217,7 @@ class StrategyEvolutionModule:
                         redundancy_penalty=redundancy,
                         uncertainty_penalty=active.uncertainty_penalty,
                         switch_hurdle_bps=active.switch_hurdle_bps,
+                        switch_uncertainty_fraction=active.switch_uncertainty_fraction,
                         status="candidate",
                         parent_version=active.version,
                         hypothesis=f"{label}-horizon weighting, max group {size}, redundancy penalty {redundancy:.2f}",
