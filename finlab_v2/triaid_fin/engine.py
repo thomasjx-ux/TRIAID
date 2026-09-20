@@ -18,7 +18,7 @@ from .strategy_population import StrategyPopulationModule
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.5.0"
+    architecture_version = "fin-evolution-lab@0.6.0"
     market_adapter_version = "market-lab@0.2.0"
 
     def __init__(self) -> None:
@@ -87,12 +87,25 @@ class EvolutionLabEngine:
             self.store.save_run(run)
         return run
 
+    def _previous_group_for(self,market_id:str,exclude_run_id:str|None=None):
+        rows=[
+            r for r in self.all_runs()
+            if r.run_id!=exclude_run_id
+            and r.market.market_id.upper()==market_id.upper()
+            and r.strategy_group is not None
+            and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+        ]
+        return rows[-1].strategy_group if rows else None
+
     def execute(self,run_id:str,request:RunRequest)->None:
         try:
+            previous_group=self._previous_group_for(request.market.market_id,run_id)
             group=self.strategy_population.select(
                 request.market.market_id,
                 request.strategy_states,
                 request.max_group_size,
+                previous_group=previous_group,
+                base_cost_bps=float(request.market.metadata.get("base_cost_bps",2.0) or 2.0),
             )
             decision=self.core.decide(request.market,group,request.strategy_states)
             with self._lock:
