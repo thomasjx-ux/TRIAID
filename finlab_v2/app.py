@@ -36,7 +36,12 @@ app.include_router(build_market_data_router(engine,market_automation))
 
 @app.get("/health")
 def health()->dict:
-    return {"ok":True,**engine.status()}
+    return {
+        "ok":True,
+        "architecture_version":engine.architecture_version,
+        "storage_backend":engine.store.backend.status()["backend"],
+        "storage_durability":engine.store.backend.durability,
+    }
 
 
 @app.get("/api/status")
