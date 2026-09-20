@@ -165,13 +165,29 @@ class FileStorageBackend:
         with self._lock:
             return path.read_text(encoding="utf-8")
 
-    def list_files(self,prefix:str,suffix:str="")->list[Path]:
+    def read_lines(self,name:str,limit:int|None=None)->list[str]:
+        path=self.path(name)
+        if not path.exists():
+            return []
+        with self._lock:
+            lines=path.read_text(encoding="utf-8").splitlines()
+        if limit is not None and limit>0:
+            lines=lines[-limit:]
+        return lines
+
+    def list_names(self,prefix:str,suffix:str="")->list[str]:
         base=self.path(prefix)
         if not base.exists():
             return []
         pattern=f"*{suffix}" if suffix else "*"
         with self._lock:
-            return sorted(base.glob(pattern))
+            return [
+                str(path.relative_to(self.root)).replace("\\","/")
+                for path in sorted(base.glob(pattern))
+            ]
+
+    def list_files(self,prefix:str,suffix:str="")->list[Path]:
+        return [self.root/name for name in self.list_names(prefix,suffix)]
 
     def status(self)->dict:
         mount=self._mount_details()
