@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .contracts import BilingualText, StrategyDefinition
+from .cn_incubator import CN_SHADOW_IDS, definitions as cn_shadow_definitions
 
 POLICY_IDS = (
     "P00_BUY_HOLD","P01_VOL10","P02_VOL15","P03_DD_GUARD","P04_TREND50",
@@ -191,4 +192,12 @@ def build_definitions() -> list[StrategyDefinition]:
                 main_risks=BilingualText(zh=zh_risk,en=en_risk),
             )
         )
+    out.extend(cn_shadow_definitions())
     return out
+
+
+def strategy_ids_for_market(market_id: str) -> tuple[str, ...]:
+    key=market_id.upper()
+    if key in {"CN","A","A_SHARE","ASHARE"}:
+        return POLICY_IDS + CN_SHADOW_IDS
+    return POLICY_IDS
