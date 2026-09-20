@@ -11,6 +11,7 @@ from threading import RLock
 from zoneinfo import ZoneInfo
 
 from .alpaca_data import AlpacaMarketDataProvider
+from .eastmoney_data import EastmoneyMarketDataProvider
 from .provider_registry import ProviderRegistry
 
 
@@ -147,11 +148,12 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.3.0"
+    version="market-data-hub@0.4.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
         self.alpaca=AlpacaMarketDataProvider()
+        self.eastmoney=EastmoneyMarketDataProvider()
         self.registry=ProviderRegistry()
         self.registry.register(
             "research_bars",
@@ -166,17 +168,36 @@ class MarketDataHub:
             self.alpaca,
             routes=("US:QUOTE_L1",),
         )
+        self.registry.register("eastmoney_backup",self.eastmoney)
+        for route in (
+            "US:DAILY","US:INTRADAY","US:REALTIME",
+            "CN:DAILY","CN:INTRADAY","CN:REALTIME",
+        ):
+            self.registry.add_fallback(route,"eastmoney_backup")
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
+        self._failovers:list[dict]=[]
         self._lock=RLock()
 
     def provider_status(self)->dict:
         registry=self.registry.status()
         routing={}
-        for route,provider_name in registry["routes"].items():
-            provider=self.registry.provider(provider_name)
-            configured=bool(getattr(provider,"configured",True)) if provider else False
-            routing[route]=getattr(provider,"version",None) if configured else None
+        chains={}
+        for route,provider_names in registry.get("chains",{}).items():
+            chain=[]
+            for provider_name in provider_names:
+                provider=self.registry.provider(provider_name)
+                configured=bool(getattr(provider,"configured",True)) if provider else False
+                chain.append({
+                    "name":provider_name,
+                    "version":getattr(provider,"version",None),
+                    "configured":configured,
+                })
+            chains[route]=chain
+            routing[route]=next(
+                (x["version"] for x in chain if x["configured"]),
+                None,
+            )
         routing.setdefault("CN:PREOPEN_AUCTION",None)
         routing.setdefault("CN:QUOTE_L1",None)
         return {
@@ -186,8 +207,15 @@ class MarketDataHub:
                 "configured":True,
                 "role":"default research bars",
             },
+            "backup_bar_provider":{
+                "provider":self.eastmoney.version,
+                "configured":True,
+                "role":"automatic fallback for regular-session US/CN bars",
+            },
             "us_l1_quote_provider":self.alpaca.configuration_status(),
             "routing":routing,
+            "chains":chains,
+            "recent_failovers":list(self._failovers[-50:]),
         }
 
     def product_capabilities(self,market_id:str|None=None)->dict:
@@ -298,27 +326,128 @@ class MarketDataHub:
         cfg=MODE_CONFIGS[mode]
         if market=="CN" and mode=="PREOPEN":
             raise MarketDataError("unsupported_market_mode:CN:PREOPEN")
-        provider=self.registry.provider_for(f"{market}:{mode}")
-        if provider is None:
+        providers=self.registry.providers_for(f"{market}:{mode}")
+        if not providers:
             raise MarketDataError(f"provider_route_missing:{market}:{mode}")
-        s=provider.fetch_series(
-            symbol,
-            range_=cfg.range_,
-            interval=cfg.interval,
-            include_prepost=cfg.include_prepost,
-            min_points=cfg.min_points if mode=="DAILY" else 2,
-        )
+        errors=[]
+        selected=None
+        s=None
+        for provider in providers:
+            try:
+                s=provider.fetch_series(
+                    symbol,
+                    range_=cfg.range_,
+                    interval=cfg.interval,
+                    include_prepost=cfg.include_prepost,
+                    min_points=cfg.min_points if mode=="DAILY" else 2,
+                )
+                selected=provider
+                if errors:
+                    self._record_failover(market,mode,errors,provider.version,[symbol])
+                break
+            except Exception as exc:
+                errors.append(f"{provider.version}:{type(exc).__name__}:{exc}")
+        if s is None or selected is None:
+            raise MarketDataError(f"all_providers_failed:{market}:{mode}:{' | '.join(errors)}")
         return {
             "market_id":market,
             "symbol":symbol,
             "mode":mode,
-            "provider":provider.version,
+            "provider":selected.version,
             "quality":cfg.quality,
             "execution_grade":False,
             "points":len(s.ts),
             "source_latest_ts":s.ts[-1],
             "latest":{"close":s.close[-1],"volume":s.volume[-1]},
         }
+
+    def _record_failover(
+        self,
+        market:str,
+        mode:str,
+        errors:list[str],
+        provider_version:str,
+        symbols:list[str]|tuple[str,...],
+    )->None:
+        event={
+            "at":time.time(),
+            "market_id":market,
+            "mode":mode,
+            "selected_provider":provider_version,
+            "failed_attempts":list(errors),
+            "symbols":list(symbols),
+        }
+        with self._lock:
+            self._failovers.append(event)
+            if len(self._failovers)>200:
+                del self._failovers[:-200]
+
+    def _panel_from_provider(
+        self,
+        provider,
+        market:str,
+        mode:str,
+        symbols:list[str]|tuple[str,...],
+        benchmark:str,
+        cfg:ModeConfig,
+        now:float,
+    )->ProviderPanel:
+        series=[]
+        fetch_errors=[]
+        for symbol in symbols:
+            try:
+                series.append(
+                    provider.fetch_series(
+                        symbol,
+                        range_=cfg.range_,
+                        interval=cfg.interval,
+                        include_prepost=cfg.include_prepost,
+                        min_points=cfg.min_points,
+                    )
+                )
+            except Exception as exc:
+                fetch_errors.append(f"{symbol}:{type(exc).__name__}:{exc}")
+        if fetch_errors:
+            raise MarketDataError(
+                f"provider_incomplete:{provider.version}:{' | '.join(fetch_errors)}"
+            )
+
+        by={s.symbol:s for s in series}
+        if benchmark not in by:
+            raise MarketDataError(f"benchmark_missing:{provider.version}:{market}:{mode}")
+
+        common=set(by[benchmark].ts)
+        for s in series:
+            common &= set(s.ts)
+        ts=[t for t in by[benchmark].ts if t in common]
+        aligned_min=max(2,min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points))
+        if len(ts)<aligned_min:
+            raise MarketDataError(
+                f"insufficient_aligned_points:{provider.version}:{market}:{mode}:{len(ts)}<{aligned_min}"
+            )
+
+        close={}
+        volume={}
+        for symbol,s in by.items():
+            cm={t:c for t,c in zip(s.ts,s.close)}
+            vm={t:v for t,v in zip(s.ts,s.volume)}
+            close[symbol]=[cm[t] for t in ts]
+            volume[symbol]=[vm.get(t,0.0) for t in ts]
+
+        return ProviderPanel(
+            market_id=market,
+            mode=mode,
+            provider=provider.version,
+            ts=ts,
+            close=close,
+            volume=volume,
+            fetched_at=now,
+            source_latest_ts=ts[-1],
+            interval=cfg.interval,
+            include_prepost=cfg.include_prepost,
+            quality=cfg.quality,
+            execution_grade=cfg.execution_grade,
+        )
 
     def capabilities(self,market_id:str|None=None)->dict:
         markets=[market_id.upper()] if market_id else ["US","CN"]
@@ -367,71 +496,40 @@ class MarketDataHub:
             if cached and not force and now-cached.fetched_at<=cfg.cache_ttl_seconds:
                 return cached
 
-        provider=self.registry.provider_for(f"{market}:{mode}")
-        if provider is None:
+        providers=self.registry.providers_for(f"{market}:{mode}")
+        if not providers:
             raise MarketDataError(f"provider_route_missing:{market}:{mode}")
 
-        series=[]
-        errors=[]
-        for symbol in symbols:
+        attempt_errors=[]
+        panel=None
+        for provider in providers:
+            if not bool(getattr(provider,"configured",True)):
+                attempt_errors.append(f"{getattr(provider,'version',type(provider).__name__)}:not_configured")
+                continue
             try:
-                series.append(
-                    provider.fetch_series(
-                        symbol,
-                        range_=cfg.range_,
-                        interval=cfg.interval,
-                        include_prepost=cfg.include_prepost,
-                        min_points=cfg.min_points,
-                    )
+                panel=self._panel_from_provider(
+                    provider,market,mode,symbols,benchmark,cfg,now
                 )
+                if attempt_errors:
+                    self._record_failover(market,mode,attempt_errors,provider.version,symbols)
+                break
             except Exception as exc:
-                errors.append(f"{symbol}:{type(exc).__name__}:{exc}")
-                if symbol==benchmark:
-                    with self._lock:
-                        self._errors[key]={
-                            "at":now,
-                            "errors":errors,
-                            "mode":mode,
-                            "market_id":market,
-                        }
-                    raise
+                attempt_errors.append(
+                    f"{getattr(provider,'version',type(provider).__name__)}:{type(exc).__name__}:{exc}"
+                )
 
-        by={s.symbol:s for s in series}
-        if benchmark not in by:
-            raise MarketDataError(f"benchmark_missing:{market}:{mode}")
-
-        common=set(by[benchmark].ts)
-        for s in series:
-            common &= set(s.ts)
-        ts=[t for t in by[benchmark].ts if t in common]
-        aligned_min=max(2,min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points))
-        if len(ts)<aligned_min:
+        if panel is None:
+            with self._lock:
+                self._errors[key]={
+                    "at":now,
+                    "errors":list(attempt_errors),
+                    "mode":mode,
+                    "market_id":market,
+                }
             raise MarketDataError(
-                f"insufficient_aligned_points:{market}:{mode}:{len(ts)}<{aligned_min}"
+                f"all_providers_failed:{market}:{mode}:{' | '.join(attempt_errors)}"
             )
 
-        close={}
-        volume={}
-        for symbol,s in by.items():
-            cm={t:c for t,c in zip(s.ts,s.close)}
-            vm={t:v for t,v in zip(s.ts,s.volume)}
-            close[symbol]=[cm[t] for t in ts]
-            volume[symbol]=[vm.get(t,0.0) for t in ts]
-
-        panel=ProviderPanel(
-            market_id=market,
-            mode=mode,
-            provider=provider.version,
-            ts=ts,
-            close=close,
-            volume=volume,
-            fetched_at=now,
-            source_latest_ts=ts[-1],
-            interval=cfg.interval,
-            include_prepost=cfg.include_prepost,
-            quality=cfg.quality,
-            execution_grade=cfg.execution_grade,
-        )
         with self._lock:
             self._cache[key]=panel
             self._errors.pop(key,None)
@@ -456,6 +554,10 @@ class MarketDataHub:
             "provider":self.provider.version,
             "providers":self.provider_status(),
             "products":self.product_capabilities(),
+            "provider_failover":{
+                "enabled":True,
+                "recent_events":list(self._failovers[-50:]),
+            },
             "cache":cache,
             "errors":errors,
             "capabilities":self.capabilities(),
