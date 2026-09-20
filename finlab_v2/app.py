@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 
-app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.5.1")
+app = FastAPI(title="TRIAID FIN Evolution Lab V2", version="0.6.3")
 engine = EvolutionLabEngine()
 
 
@@ -249,6 +249,8 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .num{white-space:nowrap;font-variant-numeric:tabular-nums}.reason{min-width:320px;line-height:1.45}.strategy-name{font-weight:650}
 .delta{font-weight:700}.corebox{display:flex;gap:12px;flex-wrap:wrap}.corebox .card{flex:1;min-width:240px}
 .small{font-size:12px}.nowrap{white-space:nowrap}
+.has-tip{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#aeb7c4;text-underline-offset:4px}
+#hoverTip{position:fixed;display:none;z-index:9999;max-width:360px;padding:9px 11px;border-radius:8px;background:#172033;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:none}
 @media(max-width:760px){.compare{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
 </style>
 </head>
@@ -291,14 +293,14 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th id="thStrategy">策略</th>
-        <th id="thState">状态</th>
-        <th id="thExp">预期净回报</th>
-        <th id="thRisk">风险</th>
-        <th id="thBase">介入前</th>
-        <th id="thTriaid">TRIAID 后</th>
-        <th id="thDelta">增减</th>
-        <th id="thWhy">策略说明与选择原因</th>
+        <th id="thStrategy" class="has-tip">策略</th>
+        <th id="thState" class="has-tip">状态</th>
+        <th id="thExp" class="has-tip">预期净回报</th>
+        <th id="thRisk" class="has-tip">风险</th>
+        <th id="thBase" class="has-tip">介入前</th>
+        <th id="thTriaid" class="has-tip">TRIAID 后</th>
+        <th id="thDelta" class="has-tip">增减</th>
+        <th id="thWhy" class="has-tip">策略说明与选择原因</th>
       </tr></thead>
       <tbody id="strategyRows"></tbody>
     </table>
@@ -308,7 +310,11 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     <div class="tablewrap" style="margin-top:10px;max-height:420px">
       <table>
         <thead><tr>
-          <th>策略</th><th>状态</th><th>预期净回报</th><th>风险</th><th>说明</th>
+          <th id="cthStrategy" class="has-tip">策略</th>
+          <th id="cthState" class="has-tip">状态</th>
+          <th id="cthExp" class="has-tip">预期净回报</th>
+          <th id="cthRisk" class="has-tip">风险</th>
+          <th id="cthWhy" class="has-tip">说明</th>
         </tr></thead>
         <tbody id="candidateRows"></tbody>
       </table>
@@ -357,6 +363,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     </div>
   </div>
 </div>
+<div id="hoverTip" role="tooltip"></div>
 
 <script>
 let lang='zh';
@@ -393,6 +400,44 @@ const T={
   positive:'TRIAID produced positive uplift in the latest evaluated run',negativeResult:'TRIAID produced negative uplift; intervention attribution should be reviewed',flat:'TRIAID is approximately in line with baseline'
  }
 };
+const TIP={
+ zh:{
+  strategy:'策略名称和策略编号。当前策略群主表只显示真正获得配置权重的策略。',
+  state:'策略生命周期：ACTIVE=正式参与配置；SHADOW=只做真实前瞻验证、不获得生产权重；REDUCED=降级观察；FROZEN=暂停；CANDIDATE=候选阶段。',
+  exp:'基于当前时点可见的 21/63/126/252 日真实净收益轨迹估计的年化预期净收益。它是预测值，不是已经实现的收益。',
+  risk:'策略近期收益波动的年化值。数值越大，代表收益越不稳定；这里不是“亏损概率”。',
+  before:'Strategy Population 完成选群以后、TRIAID Core 尚未介入时的基础资金权重。',
+  after:'TRIAID Core 根据当前市场状态、策略风险与不确定性调整后的最终权重。',
+  delta:'TRIAID 后权重 − 介入前权重。正数表示 TRIAID 增配，负数表示减配。',
+  why:'说明这个策略做什么、为什么今天进入当前策略群，以及 TRIAID 为什么增配或减配。',
+  candidateWhy:'说明候选策略的核心逻辑和适用市场。未入选策略不会获得当前正式配置权重。',
+  active:'ACTIVE：已通过当前准入条件，可以正式参与策略群并获得生产权重。',
+  shadow:'SHADOW：只记录真实未来表现进行前瞻验证，暂时不获得任何正式配置权重。',
+  reduced:'REDUCED：策略被降级观察，仍可能保留少量权重，但正在接受进一步验证。',
+  frozen:'FROZEN：策略已冻结，暂停进入正式策略群。',
+  candidate:'CANDIDATE：候选阶段，尚未满足进入正式策略群的证据要求。',
+  research:'RESEARCH：研究阶段，只用于开发和验证。',
+  retired:'RETIRED：已退出当前策略体系，除非出现新的证据，否则不再参与选群。'
+ },
+ en:{
+  strategy:'Strategy name and ID. The main group table shows only strategies that actually receive allocation weight.',
+  state:'Strategy lifecycle: ACTIVE=eligible for live allocation; SHADOW=prospective observation only with no live weight; REDUCED=degraded monitoring; FROZEN=paused; CANDIDATE=pre-admission.',
+  exp:'Annualized expected net return estimated only from information visible at the current time across 21/63/126/252-day realized net-return histories. It is a forecast, not realized profit.',
+  risk:'Annualized volatility of recent strategy returns. Higher means less stable returns; it is not the probability of losing money.',
+  before:'Baseline capital weight assigned by Strategy Population before TRIAID Core intervenes.',
+  after:'Final weight after TRIAID Core adjusts for current market state, risk and uncertainty.',
+  delta:'After-TRIAID weight minus baseline weight. Positive means TRIAID adds allocation; negative means it reduces allocation.',
+  why:'Explains what the strategy does, why it entered the current group, and why TRIAID increased or reduced it.',
+  candidateWhy:'Explains the candidate strategy logic and suitable conditions. Unselected strategies receive no current live allocation.',
+  active:'ACTIVE: eligible for the live strategy group and production allocation.',
+  shadow:'SHADOW: prospectively tracked on real future data but receives no production allocation.',
+  reduced:'REDUCED: downgraded for further observation and may retain only limited allocation.',
+  frozen:'FROZEN: paused and excluded from the live strategy group.',
+  candidate:'CANDIDATE: not yet supported by enough evidence for live admission.',
+  research:'RESEARCH: development and validation only.',
+  retired:'RETIRED: removed from the current strategy system unless new evidence justifies reconsideration.'
+ }
+};
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return (v>0?'+':'')+v.toFixed(2)+'%'}
 function cls(x){return x>1e-12?'good':x<-1e-12?'bad':''}
@@ -408,6 +453,16 @@ function applyText(){
  evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
  proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
  Object.entries(map).forEach(([id,key])=>el(id).textContent=t[key]);
+ const tips=TIP[lang];
+ const headerTips={
+  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+  cthStrategy:'strategy',cthState:'state',cthExp:'exp',cthRisk:'risk',cthWhy:'candidateWhy'
+ };
+ Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
+}
+function statusTip(status){
+ const key=String(status||'').toLowerCase();
+ return TIP[lang][key]||TIP[lang].state;
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function runNow(){
@@ -479,7 +534,7 @@ async function refreshAll(){
    const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
    return '<tr class="selected">'+
     '<td><span class="strategy-name">'+esc(x.name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
-    '<td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
@@ -490,7 +545,7 @@ async function refreshAll(){
   el('candidateRows').innerHTML=candidateCards.map(x=>{
    return '<tr>'+
     '<td><span class="strategy-name">'+esc(x.name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
-    '<td><span class="tag">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
@@ -510,6 +565,24 @@ async function propose(){
  el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
  refreshAll();
 }
+const hoverTip=el('hoverTip');
+document.addEventListener('mouseover',e=>{
+ const target=e.target.closest('[data-tip]');
+ if(!target||!target.dataset.tip)return;
+ hoverTip.textContent=target.dataset.tip;hoverTip.style.display='block';
+});
+document.addEventListener('mousemove',e=>{
+ if(hoverTip.style.display!=='block')return;
+ const pad=14;let x=e.clientX+14,y=e.clientY+16;
+ const w=hoverTip.offsetWidth,h=hoverTip.offsetHeight;
+ if(x+w>window.innerWidth-pad)x=e.clientX-w-14;
+ if(y+h>window.innerHeight-pad)y=e.clientY-h-14;
+ hoverTip.style.left=Math.max(pad,x)+'px';hoverTip.style.top=Math.max(pad,y)+'px';
+});
+document.addEventListener('mouseout',e=>{
+ const target=e.target.closest('[data-tip]');
+ if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
+});
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll()}
 applyText();refreshAll();setInterval(refreshAll,15000);
 </script>
