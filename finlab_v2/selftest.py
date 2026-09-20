@@ -9,7 +9,7 @@ from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, Str
 from triaid_fin.engine import EvolutionLabEngine
 
 
-def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active"):
+def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active",recent=None):
     return StrategyState(
         strategy_id=strategy_id,
         lifecycle=lifecycle,
@@ -18,6 +18,7 @@ def state(strategy_id,expected,risk=0.05,uncertainty=0.01,lifecycle="active"):
         uncertainty=uncertainty,
         oos_marginal_value=expected,
         shadow_evidence_pass=True,
+        recent_returns=list(recent or []),
     )
 
 
@@ -38,9 +39,10 @@ try:
             regime="risk_on_trend",
         ),
         strategy_states=[
-            state("P00_BUY_HOLD",0.12,0.18,0.02),
-            state("P04_TREND50",0.16,0.12,0.02),
-            state("P18_XMOM20",0.20,0.20,0.04),
+            state("P00_BUY_HOLD",0.12,0.18,0.02,recent=[0.001*((i%7)-3) for i in range(80)]),
+            state("P09_SHOCK_GUARD",0.119,0.18,0.02,recent=[0.001*((i%7)-3) for i in range(80)]),
+            state("P04_TREND50",0.16,0.12,0.02,recent=[0.0015*((i%5)-2) for i in range(80)]),
+            state("P18_XMOM20",0.20,0.20,0.04,recent=[0.002*((i%9)-4) for i in range(80)]),
             state("P28_CASH",0.0,0.0,0.0),
             state("P16_REV5",0.50,0.20,0.04,lifecycle="shadow"),
         ],
@@ -54,6 +56,8 @@ try:
     assert decision.audit and decision.audit.passed
     assert decision.strategy_group
     assert "P16_REV5" not in decision.strategy_group.members
+    assert not ({"P00_BUY_HOLD","P09_SHOCK_GUARD"} <= set(decision.strategy_group.members))
+    assert decision.strategy_group.diagnostics["optimizer"]=="marginal-group-value-v1"
     assert all(w>=0 for w in decision.strategy_group.weights.values())
     assert sum(decision.strategy_group.weights.values())<=1.0000001
     assert max(decision.strategy_group.weights.values())<=1.0000001
@@ -109,7 +113,7 @@ try:
     assert us_rules["max_weight"]==0.28 and cn_rules["max_weight"]==0.28
 
     strategy_evo=reloaded.strategy_evolution_status("US")
-    assert strategy_evo["active_version"]=="strategy-rules-us@0.1.0"
+    assert strategy_evo["active_version"]=="strategy-rules-us@0.2.0"
     assert tuple(reloaded.strategy_evolution.active("US").window_weights)==(0.35,0.30,0.20,0.15)
     proposal_rules=reloaded.propose_strategy_candidate("US")
     assert proposal_rules["created"] is False
