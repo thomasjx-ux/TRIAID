@@ -9,7 +9,7 @@ from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
-from .market_lab import market_data_capabilities, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
+from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
 from .population_state import PopulationStateTracker
 from .review import ReviewModule
 from .store import RunStore
@@ -283,6 +283,18 @@ class EvolutionLabEngine:
 
     def market_data_capabilities(self,market_id:str|None=None)->dict:
         return market_data_capabilities(market_id)
+
+    def market_data_product_capabilities(self,market_id:str|None=None)->dict:
+        return market_data_product_capabilities(market_id)
+
+    def market_data_provider_status(self)->dict:
+        return market_data_provider_status()
+
+    def market_data_latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
+        return market_data_latest_quotes(market_id,symbols)
+
+    def market_data_instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
+        return market_data_instrument_series(market_id,symbol,mode)
 
     def market_data_snapshot(self,market_id:str,mode:str,refresh:bool=False)->dict:
         return market_data_snapshot(market_id,mode,refresh)
