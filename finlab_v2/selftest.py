@@ -108,6 +108,14 @@ try:
     assert cn_rules["entry_confirm_days"]==5 and cn_rules["cooldown_days"]==10
     assert us_rules["max_weight"]==0.28 and cn_rules["max_weight"]==0.28
 
+    strategy_evo=reloaded.strategy_evolution_status("US")
+    assert strategy_evo["active_version"]=="strategy-rules-us@0.1.0"
+    assert tuple(reloaded.strategy_evolution.active("US").window_weights)==(0.35,0.30,0.20,0.15)
+    proposal_rules=reloaded.propose_strategy_candidate("US")
+    assert proposal_rules["created"] is False
+    assert proposal_rules["reason"]=="INSUFFICIENT_VERIFIED_RUNS"
+    assert proposal_rules["required"]==20
+
     print("TRIAID_FIN_V2_SELFTEST_PASS")
     print(reloaded.module_manifest)
     print({"strategy_registry_count":reloaded.status()["strategy_registry_count"],"active_core":reloaded.evolution_status()["active_version"]})
