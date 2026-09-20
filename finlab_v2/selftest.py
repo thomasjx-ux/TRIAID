@@ -26,6 +26,14 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.7.0"
+    caps=engine.market_data_capabilities()
+    assert caps["US"]["DAILY"]["supported"] is True
+    assert caps["US"]["INTRADAY"]["supported"] is True
+    assert caps["US"]["PREOPEN"]["supported"] is True
+    assert caps["US"]["REALTIME"]["supported"] is True
+    assert caps["US"]["REALTIME"]["execution_grade"] is False
+    assert caps["CN"]["PREOPEN"]["supported"] is False
     zh=engine.strategy_population.strategy_cards("zh","US")
     en=engine.strategy_population.strategy_cards("en","US")
     cn=engine.strategy_population.strategy_cards("zh","CN")
