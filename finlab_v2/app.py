@@ -13,6 +13,7 @@ from triaid_fin.decision_api import build_decision_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
+from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 
 engine=EvolutionLabEngine()
 decision_scheduler=DecisionScheduler(engine)
@@ -33,7 +34,7 @@ async def lifespan(app:FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.0",lifespan=lifespan)
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.1",lifespan=lifespan)
 app.include_router(build_market_data_router(engine,market_automation))
 app.include_router(build_decision_router(decision_scheduler))
 
@@ -52,6 +53,7 @@ def health()->dict:
         "storage_persistence_confirmed":probe.get("confirmed_across_deployments"),
         "decision_automation_enabled":decision_scheduler.enabled,
         "broker_execution_enabled":False,
+        "official_trading_calendar_version":TRADING_CALENDAR_VERSION,
     }
 
 
