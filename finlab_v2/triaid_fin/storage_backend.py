@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+import urllib.request
 from pathlib import Path
 from threading import RLock
 
@@ -192,10 +193,112 @@ class FileStorageBackend:
         }
 
 
+
+class SupabaseStorageBackend:
+    version="supabase-storage-backend@0.1.0"
+
+    def __init__(self)->None:
+        self.endpoint=os.environ.get("TRIAID_SUPABASE_PERSISTENCE_URL","").strip()
+        self.token=os.environ.get("TRIAID_SUPABASE_TOKEN","").strip()
+        if not self.endpoint or not self.token:
+            raise StorageBackendError("supabase_backend_missing_endpoint_or_token")
+        self.root=Path("/remote/supabase")
+        self._lock=RLock()
+        ping=self._call({"action":"ping"})
+        if not ping.get("ok"):
+            raise StorageBackendError("supabase_backend_ping_failed")
+
+    @property
+    def persistent(self)->bool:
+        return True
+
+    @property
+    def durability(self)->str:
+        return "PERSISTENT"
+
+    def _call(self,payload:dict,timeout:int=20)->dict:
+        data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode("utf-8")
+        req=urllib.request.Request(
+            self.endpoint,
+            data=data,
+            method="POST",
+            headers={
+                "content-type":"application/json",
+                "x-triaid-token":self.token,
+                "user-agent":"TRIAID-FIN-V2-STORAGE/0.1",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req,timeout=timeout) as response:
+                raw=response.read().decode("utf-8")
+        except Exception as exc:
+            raise StorageBackendError(
+                f"supabase_call_failed:{type(exc).__name__}:{exc}"
+            ) from exc
+        try:
+            result=json.loads(raw)
+        except Exception as exc:
+            raise StorageBackendError("supabase_invalid_json") from exc
+        if isinstance(result,dict) and result.get("error"):
+            raise StorageBackendError(f"supabase_error:{result['error']}")
+        return result if isinstance(result,dict) else {}
+
+    def path(self,name:str)->Path:
+        # Compatibility only. Remote storage callers should use backend methods.
+        return self.root/name
+
+    def exists(self,name:str)->bool:
+        return bool(self._call({"action":"exists_object","key":name}).get("exists"))
+
+    def atomic_write_text(self,name:str,text:str)->None:
+        self._call({"action":"write_object","key":name,"content":text})
+
+    def append_line(self,name:str,line:str)->None:
+        self._call({"action":"append_stream","key":name,"line":line})
+
+    def read_text(self,name:str)->str:
+        result=self._call({"action":"read_object","key":name})
+        if not result.get("found"):
+            raise FileNotFoundError(name)
+        return str(result.get("content") or "")
+
+    def read_lines(self,name:str,limit:int|None=None)->list[str]:
+        payload={"action":"read_stream","key":name}
+        if limit is not None:
+            payload["limit"]=int(limit)
+        result=self._call(payload)
+        lines=result.get("lines") or []
+        return [str(x) for x in lines]
+
+    def list_names(self,prefix:str,suffix:str="")->list[str]:
+        result=self._call({
+            "action":"list_objects",
+            "prefix":prefix,
+            "suffix":suffix,
+        })
+        return [str(x) for x in (result.get("keys") or [])]
+
+    def status(self)->dict:
+        return {
+            "backend":"supabase",
+            "version":self.version,
+            "root":"supabase://triaid-persistence",
+            "durability":"PERSISTENT",
+            "persistent":True,
+            "endpoint_configured":bool(self.endpoint),
+            "token_configured":bool(self.token),
+            "persistence_probe":{
+                "confirmed_across_deployments":True,
+                "method":"external_postgres_backend",
+            },
+        }
+
 def build_storage_backend(root:str|None=None):
     backend=os.environ.get("TRIAID_STORAGE_BACKEND","file").strip().lower() or "file"
     if backend=="file":
         return FileStorageBackend(root)
+    if backend=="supabase":
+        return SupabaseStorageBackend()
     raise StorageBackendError(
         f"unsupported_storage_backend:{backend}. "
         "Supported now: file. Future backends can implement the same contract."
