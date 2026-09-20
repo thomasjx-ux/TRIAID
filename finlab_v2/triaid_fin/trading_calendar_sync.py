@@ -258,7 +258,7 @@ class TradingCalendarSync:
                 "Accept-Language":"en-US,en;q=0.9,zh-CN;q=0.8",
             },
         )
-        with urllib.request.urlopen(req,timeout=25) as response:
+        with urllib.request.urlopen(req,timeout=10) as response:
             body=response.read().decode("utf-8","replace")
             final_url=response.geturl()
         return FetchResult(
@@ -268,7 +268,7 @@ class TradingCalendarSync:
         )
 
     @staticmethod
-    def _page_urls(base:str,max_pages:int=8)->list[str]:
+    def _page_urls(base:str,max_pages:int=2)->list[str]:
         urls=[base]
         if base.endswith("/"):
             for i in range(1,max_pages+1):
@@ -346,16 +346,19 @@ class TradingCalendarSync:
         years=dict(existing)
         verified=[]
         missing=[]
-        for year in sorted({now_year,now_year+1}):
-            result=self._sync_cn_year(year)
+
+        # Built-in 2026 is already verified. The autonomous job focuses on the
+        # first uncovered future year; once promoted it no longer needs page scans.
+        target=now_year+1
+        if str(target) not in years:
+            result=self._sync_cn_year(target)
             if result is None:
-                missing.append(year)
-                continue
-            years[str(year)]=result
-            verified.append(year)
+                missing.append(target)
+            else:
+                years[str(target)]=result
+                verified.append(target)
+
         now=datetime.now(timezone.utc).isoformat()
-        if not years:
-            raise ValueError("no verified CN calendar available from official sources")
         return {
             "status":"VERIFIED" if verified else "NO_NEW_OFFICIAL_YEAR",
             "years":years,
@@ -397,6 +400,10 @@ class TradingCalendarSync:
                     "status":"SYNC_ERROR_PRESERVED_LAST_VERIFIED",
                     "last_error":errors[market],
                 }
+            # Persist each market independently so a slow/unavailable second
+            # source cannot lose an already-verified first result.
+            self.store.save_json(self.state_name,self.state)
+            install_synced_calendar(self.state)
 
         self.state["last_error"]=errors or None
         if successes:
