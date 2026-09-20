@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
 import math
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from statistics import mean, pstdev
 
 from .contracts import BilingualText, MarketSnapshot, StrategyState
+from .market_data import MarketDataError, get_market_data_hub, session_phase
 from .cn_incubator import CN_SHADOW_IDS, positions as cn_shadow_positions
 from .strategy_registry import POLICY_IDS, strategy_ids_for_market
 
@@ -54,81 +52,97 @@ class MarketPanel:
     ts:list[int]
     close:dict[str,list[float]]
     volume:dict[str,list[float]]
+    data_mode:str="DAILY"
+    provider:str="unknown"
+    quality:str="unknown"
 
     @property
     def assets(self)->list[str]:
         return [a for a in self.spec.assets if a in self.close]
 
 
-class MarketDataError(RuntimeError):
-    pass
-
-
-def _finite(x)->bool:
-    return isinstance(x,(int,float)) and math.isfinite(x)
-
-
 def fetch_yahoo(symbol:str,range_:str="10y",interval:str="1d",timeout:int=20)->Series:
-    query=urllib.parse.urlencode({"range":range_,"interval":interval,"includeAdjustedClose":"true"})
-    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?{query}"
-    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 TRIAID-FIN-V2/0.3"})
-    try:
-        with urllib.request.urlopen(req,timeout=timeout) as response:
-            payload=json.loads(response.read().decode("utf-8"))
-    except Exception as exc:
-        raise MarketDataError(f"fetch_failed:{symbol}:{type(exc).__name__}:{exc}") from exc
-    chart=payload.get("chart") or {}
-    if chart.get("error"):
-        raise MarketDataError(f"provider_error:{symbol}:{chart['error']}")
-    result=(chart.get("result") or [None])[0]
-    if not result:
-        raise MarketDataError(f"empty_result:{symbol}")
-    ts=result.get("timestamp") or []
-    quote=((result.get("indicators") or {}).get("quote") or [{}])[0]
-    adj=((result.get("indicators") or {}).get("adjclose") or [{}])[0].get("adjclose")
-    close=adj if adj else (quote.get("close") or [])
-    volume=quote.get("volume") or []
-    rows=[]
-    for i,(t,c) in enumerate(zip(ts,close)):
-        if c is None or not _finite(c) or c<=0:
-            continue
-        v=volume[i] if i<len(volume) else 0.0
-        v=float(v) if v is not None and _finite(v) and v>=0 else 0.0
-        rows.append((int(t),float(c),v))
-    if len(rows)<300:
-        raise MarketDataError(f"insufficient_points:{symbol}:{len(rows)}")
-    return Series(symbol,[x[0] for x in rows],[x[1] for x in rows],[x[2] for x in rows])
+    """Compatibility wrapper. New code should use MarketDataHub."""
+    hub=get_market_data_hub()
+    provider=hub.provider
+    include_prepost=interval!="1d"
+    min_points=300 if interval=="1d" else 2
+    s=provider.fetch_series(
+        symbol,
+        range_=range_,
+        interval=interval,
+        include_prepost=include_prepost,
+        min_points=min_points,
+        timeout=timeout,
+    )
+    return Series(s.symbol,s.ts,s.close,s.volume)
 
 
-def fetch_panel(market_id:str)->MarketPanel:
+def fetch_panel(market_id:str,mode:str="DAILY",force:bool=False)->MarketPanel:
     key=market_id.upper()
     if key not in MARKETS:
         raise MarketDataError(f"unsupported_market:{market_id}")
     spec=MARKETS[key]
-    series=[]
-    for symbol in spec.assets:
-        try:
-            series.append(fetch_yahoo(symbol))
-        except Exception:
-            if symbol==spec.benchmark:
-                raise
-    by={s.symbol:s for s in series}
-    if spec.benchmark not in by:
-        raise MarketDataError("benchmark_missing")
-    common=set(by[spec.benchmark].ts)
-    for s in series:
-        common &= set(s.ts)
-    ts=[t for t in by[spec.benchmark].ts if t in common]
-    if len(ts)<300:
-        raise MarketDataError(f"insufficient_aligned_points:{len(ts)}")
-    close={}
-    volume={}
-    for symbol,s in by.items():
-        cm={t:c for t,c in zip(s.ts,s.close)}
-        vm={t:v for t,v in zip(s.ts,s.volume)}
-        close[symbol]=[cm[t] for t in ts]
-        volume[symbol]=[vm.get(t,0.0) for t in ts]
-    return MarketPanel(spec,ts,close,volume)
+    raw=get_market_data_hub().refresh_panel(
+        key,
+        spec.assets,
+        spec.benchmark,
+        mode,
+        force=force,
+    )
+    return MarketPanel(
+        spec=spec,
+        ts=list(raw.ts),
+        close={k:list(v) for k,v in raw.close.items()},
+        volume={k:list(v) for k,v in raw.volume.items()},
+        data_mode=raw.mode,
+        provider=raw.provider,
+        quality=raw.quality,
+    )
+
+
+def refresh_market_data(market_id:str,mode:str)->dict:
+    panel=fetch_panel(market_id,mode,force=True)
+    raw=get_market_data_hub().cached_panel(market_id,mode)
+    return raw.metadata() if raw else {
+        "market_id":market_id.upper(),
+        "mode":mode.upper(),
+        "points":len(panel.ts),
+        "symbols":panel.assets,
+    }
+
+
+def market_data_snapshot(market_id:str,mode:str,refresh:bool=False)->dict:
+    key=market_id.upper();mode=mode.upper()
+    if refresh:
+        refresh_market_data(key,mode)
+    raw=get_market_data_hub().cached_panel(key,mode)
+    if raw is None:
+        refresh_market_data(key,mode)
+        raw=get_market_data_hub().cached_panel(key,mode)
+    if raw is None:
+        raise MarketDataError(f"snapshot_unavailable:{key}:{mode}")
+    latest={
+        symbol:{
+            "close":raw.close[symbol][-1],
+            "volume":raw.volume[symbol][-1],
+        }
+        for symbol in sorted(raw.close)
+    }
+    return {
+        **raw.metadata(),
+        "session_phase":session_phase(key),
+        "latest":latest,
+    }
+
+
+def market_data_status()->dict:
+    return get_market_data_hub().status()
+
+
+def market_data_capabilities(market_id:str|None=None)->dict:
+    return get_market_data_hub().capabilities(market_id)
+
 
 
 def _ret(xs:list[float])->list[float]:
@@ -426,7 +440,7 @@ def prepare_live_market(
     market_id:str,
     window_weights:tuple[float,float,float,float]|None=None,
 )->dict:
-    panel=fetch_panel(market_id)
+    panel=fetch_panel(market_id,"DAILY",force=True)
     history=policy_return_history(panel)
     states=build_strategy_states(panel,history,window_weights)
     latest_ts=panel.ts[-1]
@@ -441,7 +455,9 @@ def prepare_live_market(
         metadata={
             "benchmark":panel.spec.benchmark,
             "assets":panel.assets,
-            "source":"Yahoo Chart API",
+            "source":panel.provider,
+            "data_mode":panel.data_mode,
+            "data_quality":panel.quality,
             "source_latest_ts":latest_ts,
             "currency":panel.spec.currency,
             "reference_capital":panel.spec.reference_capital,
