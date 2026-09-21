@@ -1,0 +1,49 @@
+name: TRIAID FIN Manual Preview Once
+
+on:
+  push:
+    branches:
+      - manual-preview-once-20260922
+    paths:
+      - ".github/workflows/manual-preview-once.yml"
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run one production manual preview
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, time, urllib.request
+          base="https://triaid-fin-v2-runtime-production.up.railway.app"
+          req=urllib.request.Request(base+"/api/live/run-all",data=b"",method="POST",headers={"accept":"application/json"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              created=json.loads(r.read().decode())
+          print("MANUAL_PREVIEW_CREATED",json.dumps(created,sort_keys=True))
+          runs=created.get("runs") or []
+          assert len(runs)==2, created
+          finals=[]
+          for item in runs:
+              run_id=item["run_id"]
+              final=None
+              for _ in range(60):
+                  with urllib.request.urlopen(base+"/api/runs/"+run_id,timeout=20) as r:
+                      final=json.loads(r.read().decode())
+                  if final.get("status") not in {"CREATED","FETCHING_DATA","RUNNING"}:
+                      break
+                  time.sleep(2)
+              assert final is not None
+              assert final.get("status")!="FAILED", final
+              finals.append({
+                  "market_id": final.get("market",{}).get("market_id") or final.get("market_id"),
+                  "run_id": run_id,
+                  "status": final.get("status"),
+                  "run_scope": final.get("run_scope"),
+                  "evidence_eligible": final.get("evidence_eligible"),
+                  "selected_count": len((final.get("strategy_group") or {}).get("members") or []),
+                  "recovery_core_version": ((final.get("recovery_wave") or {}).get("core_version")),
+                  "us_route_version": ((final.get("us_return_max") or {}).get("route_version")),
+              })
+          print("MANUAL_PREVIEW_FINALS",json.dumps(finals,sort_keys=True))
+          PY
