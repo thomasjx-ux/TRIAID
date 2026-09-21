@@ -135,6 +135,14 @@ class EvolutionLabEngine:
         # lifecycle, prospective experiments, or posterior evaluation.
         return (run.market.metadata or {}).get("daily_bar_complete") is not False
 
+    def _previous_us_route_decision(self,market_as_of:str)->dict|None:
+        rows=[
+            row for row in self.us_return_max_ledger.decisions(2000)
+            if str(row.get("decision_status") or "")=="DAILY_FROZEN"
+            and str(row.get("market_as_of") or "")<str(market_as_of)
+        ]
+        return rows[-1] if rows else None
+
     def _previous_group_for(self,market_id:str,exclude_run_id:str|None=None):
         rows=[
             r for r in self.all_runs()
@@ -392,6 +400,7 @@ class EvolutionLabEngine:
                             existing.triaid_decision,
                             existing.strategy_states,
                             phase,
+                            self._previous_us_route_decision(snapshot.as_of),
                         )
                         us_route_bootstrap=self.us_return_max_ledger.freeze(
                             proposed_us_route,
@@ -469,6 +478,7 @@ class EvolutionLabEngine:
                         completed_run.triaid_decision,
                         completed_run.strategy_states,
                         phase,
+                        self._previous_us_route_decision(snapshot.as_of),
                     )
                     us_route_decision=self.us_return_max_ledger.freeze(
                         proposed_us_route,
