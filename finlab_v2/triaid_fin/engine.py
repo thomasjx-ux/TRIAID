@@ -930,8 +930,14 @@ class EvolutionLabEngine:
     def propose_strategy_candidate(self,market_id:str)->dict:
         return self.strategy_evolution.propose_candidate(market_id,self.all_runs())
 
-    def promote_strategy_rules(self,market_id:str,version:str,validation:dict)->dict:
-        result=self.strategy_evolution.promote(market_id,version,validation)
+    def validate_strategy_candidate(self,market_id:str,version:str)->dict:
+        return self.strategy_evolution.validate_candidate(market_id,version,self.all_runs())
+
+    def promote_strategy_rules(self,market_id:str,version:str,validation:dict|None=None)->dict:
+        receipt=self.validate_strategy_candidate(market_id,version)
+        result=self.strategy_evolution.promote(market_id,version,{"receipt_id":receipt.get("receipt_id")})
         if result.get("promoted"):
             self._apply_strategy_profiles()
+        else:
+            result["validation_receipt"]=receipt
         return result
