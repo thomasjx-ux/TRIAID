@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass,asdict
 from datetime import datetime,timezone
 
@@ -15,7 +17,7 @@ class FrequencyEvidence:
 
 
 class FrequencyPolicy:
-    version="frequency-policy@0.1.0"
+    version="frequency-policy@0.2.0"
 
     LADDERS={
         "REALTIME":[60,120,300,600,900,1800],
@@ -93,6 +95,14 @@ class FrequencyPolicy:
         confidence:float|None=None,
     )->dict:
         mode=self._mode(mode);key=self._key(market_id,mode)
+        for label,value in {
+            "incremental_net_return":incremental_net_return,
+            "incremental_information_gain":incremental_information_gain,
+            "incremental_cost":incremental_cost,
+            "confidence":confidence,
+        }.items():
+            if value is not None and not math.isfinite(float(value)):
+                raise ValueError(f"{label} must be finite when provided")
         evidence=FrequencyEvidence(
             evaluated_samples=max(0,int(evaluated_samples)),
             incremental_net_return=incremental_net_return,
@@ -107,27 +117,26 @@ class FrequencyPolicy:
         locked=bool((self.state["manual_locks"].get(key) or {}).get("locked"))
         enough_samples=evidence.evaluated_samples>=self.min_samples
         enough_confidence=(evidence.confidence or 0.0)>=self.min_confidence
-        net_value=(evidence.incremental_net_return if evidence.incremental_net_return is not None else float("inf"))
-        info_value=(evidence.incremental_information_gain if evidence.incremental_information_gain is not None else float("inf"))
+        observed=[]
+        if evidence.incremental_net_return is not None:
+            observed.append(float(evidence.incremental_net_return)>self.min_incremental_net_return)
+        if evidence.incremental_information_gain is not None:
+            observed.append(float(evidence.incremental_information_gain)>self.min_information_gain)
 
         current=self.level(market_id,mode)
         if locked:
             action="MANUAL_LOCK_HOLD"
         elif not enough_samples or not enough_confidence:
             action="HOLD_INSUFFICIENT_EVIDENCE"
-        elif (
-            net_value<=self.min_incremental_net_return
-            and info_value<=self.min_information_gain
-        ):
+        elif not observed:
+            action="HOLD_MISSING_VALUE_EVIDENCE"
+        elif not any(observed):
             if current<len(self.LADDERS[mode])-1:
                 self.state["levels"][key]=current+1
                 action="STEP_DOWN_ONE_LEVEL"
             else:
                 action="ALREADY_AT_LOWEST_FREQUENCY"
-        elif (
-            net_value>self.min_incremental_net_return
-            or info_value>self.min_information_gain
-        ):
+        elif any(observed):
             if current>0:
                 self.state["levels"][key]=current-1
                 action="STEP_UP_ONE_LEVEL"
