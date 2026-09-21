@@ -374,6 +374,7 @@ try:
         OutcomeRequest(
             realized_returns={
                 "P00_BUY_HOLD":0.004,
+                "P09_SHOCK_GUARD":0.003,
                 "P04_TREND50":0.005,
                 "P18_XMOM20":-0.003,
                 "P28_CASH":0.0,
