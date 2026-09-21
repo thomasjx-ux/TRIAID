@@ -91,6 +91,8 @@ A GitHub-native sidecar deployment was tested but Railway bound the service to t
 
 Production Python dependencies are exact-version pinned in requirements.txt. Dependency upgrades are treated as audited code changes: update the pins, run the full CI regression suite, then redeploy the explicit validated commit.
 
+Deployment preflight is evidence-isolated. `bootstrap_live.py` fails closed when pointed at a non-file storage backend unless `TRIAID_BOOTSTRAP_ALLOW_PERSISTENT=1` is explicitly set for a deliberate migration. Normal Railway validation runs bootstrap with `TRIAID_STORAGE_BACKEND=file` and a temporary data directory, so deployment checks cannot create official runs, lifecycle changes, prospective observations, Recovery Wave decisions or US Return-Max decisions in production persistence.
+
 ## External infrastructure dependency
 
 Current production persistence is external Supabase storage, not a Railway volume. Required production configuration includes:
@@ -106,7 +108,8 @@ Every infrastructure change must keep passing:
 - selftest.py
 - backend_audit_regression.py
 - manual_preview_isolation_smoke.py
-- bootstrap_live.py for US and CN
+- bootstrap_persistence_guard_smoke.py
+- bootstrap_live.py for US and CN on isolated file storage
 - ui_smoke.py
 - market-data capability boundaries
 - Observation/Transition no-action invariant
