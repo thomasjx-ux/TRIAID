@@ -569,7 +569,31 @@ class EvolutionLabEngine:
         rows=self.all_runs()
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
-        return self.review.daily_summary(rows)
+        summary=self.review.daily_summary(rows)
+        include_cn=(market_id is None) or market_id.upper()=="CN"
+        if include_cn:
+            prospective=self.prospective_experiment.daily_report()
+            if prospective:
+                try:
+                    source=self.get_run(str(prospective.get("source_run_id")))
+                except Exception:
+                    source=None
+                reason_map={}
+                if source and source.strategy_group:
+                    reason_map={
+                        sid:value.model_dump()
+                        for sid,value in source.strategy_group.reasons.items()
+                    }
+                for row in prospective.get("strategy_determination",[]):
+                    sid=row.get("strategy_id")
+                    definition=self.strategy_population.definition(str(sid))
+                    row["name"]={
+                        "zh":definition.name.zh if definition else str(sid),
+                        "en":definition.name.en if definition else str(sid),
+                    }
+                    row["selection_reason"]=reason_map.get(sid)
+                summary["prospective_experiment"]=prospective
+        return summary
 
     def curves(self,market_id:str|None=None)->List[dict]:
         rows=self.all_runs()
