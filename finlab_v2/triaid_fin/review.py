@@ -7,10 +7,23 @@ from .contracts import RunRecord
 
 
 class ReviewModule:
-    version="review@0.3.0"
+    version="review@0.4.0"
+
+    @staticmethod
+    def _evidence_eligible(run:RunRecord)->bool:
+        metadata=run.market.metadata or {}
+        return (
+            metadata.get("evidence_eligible") is not False
+            and str(metadata.get("run_scope") or "OFFICIAL_EVIDENCE")!="MANUAL_PREVIEW"
+            and run.status!="PREVIEW_READY"
+        )
 
     def daily_summary(self,runs:Iterable[RunRecord])->dict:
-        rows=[r for r in runs if r.market.snapshot_id!="PENDING"]
+        rows=[
+            r for r in runs
+            if r.market.snapshot_id!="PENDING"
+            and self._evidence_eligible(r)
+        ]
         dates=sorted({r.market.as_of for r in rows if r.market.as_of})
         target_date=dates[-1] if dates else datetime.now(timezone.utc).date().isoformat()
         day=[r for r in rows if r.market.as_of==target_date]
@@ -84,6 +97,7 @@ class ReviewModule:
             [
                 r for r in runs
                 if r.evaluation and r.evaluation.status=="EVALUATED"
+                and self._evidence_eligible(r)
                 and (r.market.metadata or {}).get("daily_bar_complete") is not False
             ],
             key=lambda r:(r.market.as_of,r.created_at),
