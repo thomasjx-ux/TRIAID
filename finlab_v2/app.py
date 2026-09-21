@@ -529,7 +529,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     <h3 id="usrmRealizedTitle">上一轮真实市场后验与模拟执行容量回顾</h3>
     <div class="tablewrap" style="max-height:360px">
       <table>
-        <thead><tr><th>起始资金</th><th>成交比例</th><th>当前净值</th><th>净利润</th><th>净收益率</th><th>执行成本</th></tr></thead>
+        <thead><tr><th>起始资金</th><th>模拟成交比例</th><th>模拟当前净值</th><th>模拟净损益</th><th>模拟净收益率</th><th>模型执行成本</th></tr></thead>
         <tbody id="usrmRealizedRows"></tbody>
       </table>
     </div>
@@ -814,7 +814,7 @@ const TABLE_HEADER_TIPS={
   '模拟当前净值':'基于真实后续价格路径与模型化成交/成本计算的模拟账户价值，不是券商账户净值。',
   '模拟净损益':'模拟当前净值减去起始资金后的净损益。',
   '模拟净收益率':'基于真实后续价格与模型化成交/成本计算的模拟净收益率。',
-  '执行成本':'本轮已经计入的交易执行成本，包括基础成本和流动性冲击代理。',
+  '模型执行成本':'本轮由基础成本和流动性冲击代理估算的执行成本，不是券商实际收费。',
   '累计模型执行成本':'截至当前由成交容量与冲击模型累计估算的执行成本，不是券商实际收费。',
   '未成交目标':'受容量或参与率约束尚未完成的目标名义仓位。',
   '结果日':'该行真实后验结果对应的完整交易日。',
@@ -829,7 +829,7 @@ const TABLE_HEADER_TIPS={
   '当前实际名次':'根据已经发生的真实累计收益计算出的当前实际排序。',
   '确定依据':'冻结时选择、排序或配置该策略所使用的证据和规则。',
   '产品':'当前恢复波段决策对应的 ETF 或可交易产品。',
-  '意见':'本轮冻结的研究意见，例如增配、减配、持有或观察，不会自动发送券商订单。',
+  '研究意见':'本轮冻结的研究配置意见，例如增配、减配、持有或观察，不会自动发送券商订单。',
   '本轮调整':'目标权重相对上一轮目标权重的变化幅度。',
   '当前回撤':'当前价格相对近期高点的回落幅度，用于描述恢复空间和压力。',
   '状态方向':'当前状态更偏向修复、承压、转强、转弱或震荡的方向判断。',
@@ -868,12 +868,12 @@ const TABLE_HEADER_TIPS={
   'One-dayADVshare':'Planned trade size as a share of approximate average daily volume, used to limit market impact.',
   'Minimumexecutiondays':'Minimum trading days required to complete the target position under the ADV participation cap.',
   'Estimatedround-tripcost':'Estimated total buy-plus-sell execution cost under the current liquidity and impact model.',
-  'Fillratio':'Share of the target position completed so far.',
-  'Currentequity':'Current account value after realized market moves and modeled execution costs.',
-  'NetP&L':'Current equity minus starting capital.',
-  'Netreturn':'Net return relative to starting capital after modeled execution costs.',
-  'Executioncost':'Modeled trading cost already incurred, including base cost and liquidity-impact proxy.',
-  'Cumulativeexecutioncost':'Cumulative modeled execution cost to date.',
+  'Simulatedfillratio':'Share of the target position completed under the frozen simulated-fill rules using subsequently observed real volume; not a broker fill ratio.',
+  'Simulatedcurrentequity':'Simulated account value based on subsequent real market moves plus modeled fills and execution costs; not broker-account equity.',
+  'SimulatednetP&L':'Simulated current equity minus starting capital.',
+  'Simulatednetreturn':'Simulated net return relative to starting capital after modeled fills and execution costs.',
+  'Modeledexecutioncost':'Execution cost estimated from the base-cost and liquidity-impact model; not an actual broker fee.',
+  'Cumulativemodeledexecutioncost':'Cumulative execution cost estimated by the capacity and market-impact model; not actual broker charges.',
   'Remainingtarget':'Target notional position not yet completed because of capacity or participation constraints.',
   'Resultdate':'Complete trading day represented by this realized outcome row.',
   'Return-Maxcumulative':'Cumulative net return of the frozen Return-Max portfolio since the decision date.',
@@ -887,7 +887,7 @@ const TABLE_HEADER_TIPS={
   'Currentrealizedrank':'Current ranking computed from realized cumulative returns observed so far.',
   'Rationale':'Evidence and rule used to select, rank or allocate the strategy at freeze time.',
   'Product':'ETF or executable product covered by the current recovery-wave decision.',
-  'Action':'Frozen research opinion such as add, reduce, hold or observe; no broker order is generated.',
+  'Researchopinion':'Frozen research allocation opinion such as add, reduce, hold or observe; no broker order is generated.',
   'Currentdrawdown':'Current decline from a recent high, used as a proxy for pressure and recovery room.',
   'Statedirection':'Current directional state such as recovering, weakening, strengthening, stressed or mixed.',
   'Expectedreversal':'Estimated reversal or recovery horizon from the frozen state.',
@@ -1061,7 +1061,7 @@ function fmtPrice(x,currency){
 function strategyLabelHtml(name,strategyId){
  const n=name||strategyId||'-',sid=strategyId||'';
  return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
-  '<span class="market-tip-icon" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'" aria-label="'+(lang==='zh'?'查看最新价格':'View latest price')+'">i</span>';
+  '<span class="market-tip-icon" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'" aria-label="'+(lang==='zh'?'查看最新可用价格':'View latest available price')+'">i</span>';
 }
 function strategyMarketTip(strategyId,name){
  const m=el('market').value;
@@ -1081,8 +1081,8 @@ function strategyMarketTip(strategyId,name){
    const chg=signedPct(a.last_trading_day_change);
    lines.push(
     lang==='zh'
-     ? assetName+' '+a.symbol+' · 持仓 '+fmtPct(a.weight)+' · 最新 '+px+' · 最近交易日 '+chg
-     : assetName+' '+a.symbol+' · weight '+fmtPct(a.weight)+' · latest '+px+' · last trading day '+chg
+     ? assetName+' '+a.symbol+' · 持仓 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
+     : assetName+' '+a.symbol+' · weight '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
    );
   });
  }
@@ -1251,7 +1251,7 @@ function renderUSReturnMax(report){
   '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
  const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
  el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('') ||
-  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无真实执行结果':'No realized execution result for the prior decision yet')+'</td></tr>';
+  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior decision yet')+'</td></tr>';
  const path=(review&&review.daily_path)||[];
  el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
   '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
@@ -1342,7 +1342,7 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
     '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
     '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
- }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结交易意见':'No frozen trade opinion')+'</td></tr>';
+ }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
  const capacity=d.capital_capacity||{};
  const capModel=capacity.model||{};
  const capRows=capacity.sleeves||[];
@@ -1373,7 +1373,7 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td>'+
     '<td class="num">'+fmtMoney(x.total_execution_cost_cny)+'</td>'+
     '<td class="num">'+fmtMoney(x.remaining_target_notional_cny)+'</td></tr>';
- }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用真实执行结果':'No eligible realized execution result for the prior sleeves yet')+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior sleeves yet')+'</td></tr>';
  if(review){
    const prior=review.trade_opinions||[];
    el('recoveryPreviousMeta').textContent=(lang==='zh'?'上一轮 '+(review.decision_id||'-')+'：':'Prior '+(review.decision_id||'-')+': ')+
