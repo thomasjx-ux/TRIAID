@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -9,6 +10,7 @@ import urllib.request
 
 
 BASE=(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:18080").rstrip("/")
+ADMIN_TOKEN=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
 RESULTS=[]
 
 
@@ -16,6 +18,8 @@ def call(method,path,body=None,expected=(200,),timeout=45):
     url=BASE+path
     data=None
     headers={"accept":"application/json"}
+    if ADMIN_TOKEN:
+        headers["x-triaid-admin-token"]=ADMIN_TOKEN
     if body is not None:
         data=json.dumps(body).encode("utf-8")
         headers["content-type"]="application/json"
