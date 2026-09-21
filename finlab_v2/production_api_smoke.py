@@ -109,7 +109,7 @@ assert "TRIAID FIN" in home and "TRIAID 增益" in home
 status=call("GET","/api/status")
 assert status["architecture_version"].startswith("fin-evolution-lab@")
 assert status["strategy_registry_count"]==33
-assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.1.0"
+assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.1.1"
 assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
@@ -135,7 +135,7 @@ assert isinstance(recovery_history,list)
 if recovery_history:
     recovery_latest=call("GET","/api/recovery-wave/latest?market_id=CN")
     assert recovery_latest["decision_id"]==recovery_history[-1]["decision_id"]
-    assert recovery_latest["core_version"]=="recovery-wave-core@0.1.0"
+    assert recovery_latest["core_version"]=="recovery-wave-core@0.1.1"
     assert recovery_latest["data_scope"]["constituent_micro_available"] is False
     assert recovery_latest["execution_discipline"]["same_bar_execution_allowed"] is False
     assert recovery_latest["second_order"]["capital_discipline"]=="TOTAL_RISK_BUDGET_SCALED_BY_STRONGEST_PROSPECTIVE_RECOVERY_EVIDENCE"
@@ -158,7 +158,7 @@ for market in ("US","CN"):
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
         assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.1.0"
         assert daily["recovery_wave"]["integrity"]["passed"] is True
-        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.0"
+        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.1"
         assert daily["recovery_wave"]["latest_decision"]["trade_opinions"]
     curves=call("GET",f"/api/curves?market_id={market}")
     assert isinstance(curves,list)
