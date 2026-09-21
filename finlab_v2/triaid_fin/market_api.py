@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException, Query
+import os
+import secrets
+
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
 from .market_lab import MARKETS
 from .trading_calendar import calendar_status, trading_day_info
@@ -8,6 +11,13 @@ from .trading_calendar import calendar_status, trading_day_info
 
 VALID_MARKETS={"US","CN"}
 VALID_MODES={"DAILY","INTRADAY","PREOPEN","REALTIME"}
+
+def _require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
+    expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
+    if not expected:
+        raise HTTPException(status_code=503,detail="admin mutation disabled: TRIAID_ADMIN_TOKEN not configured")
+    if not x_triaid_admin_token or not secrets.compare_digest(x_triaid_admin_token,expected):
+        raise HTTPException(status_code=403,detail="admin authorization required")
 
 
 def _market(value:str)->str:
@@ -89,7 +99,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         return calendar_sync.status()
 
     @router.post("/trading-calendar-sync")
-    def trading_calendar_sync_now_api(force:bool=Query(default=True))->dict:
+    def trading_calendar_sync_now_api(force:bool=Query(default=True),_admin:None=Depends(_require_admin_token))->dict:
         if calendar_sync is None:
             raise HTTPException(status_code=503,detail="calendar sync not configured")
         try:
@@ -108,6 +118,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         level:int=Query(...,ge=0),
         lock:bool=Query(default=False),
         reason:str=Query(default="manual"),
+        _admin:None=Depends(_require_admin_token),
     )->dict:
         key=_market(market_id);freq=_mode(mode)
         return automation.frequency_policy.set_level(key,freq,level,lock=lock,reason=reason)
@@ -124,7 +135,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         return automation.frequency_policy.set_interval(key,freq,seconds,lock=lock,reason=reason)
 
     @router.post("/frequency-policy/{market_id}/{mode}/unlock")
-    def frequency_policy_unlock_api(market_id:str,mode:str)->dict:
+    def frequency_policy_unlock_api(market_id:str,mode:str,_admin:None=Depends(_require_admin_token))->dict:
         key=_market(market_id);freq=_mode(mode)
         return automation.frequency_policy.unlock(key,freq)
 
@@ -133,6 +144,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         market_id:str,
         mode:str,
         payload:dict=Body(...),
+        _admin:None=Depends(_require_admin_token),
     )->dict:
         key=_market(market_id);freq=_mode(mode)
         try:
@@ -219,7 +231,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
             raise HTTPException(status_code=503,detail=f"{type(exc).__name__}:{exc}") from exc
 
     @router.post("/refresh/{market_id}/{mode}")
-    def market_data_refresh_api(market_id:str,mode:str)->dict:
+    def market_data_refresh_api(market_id:str,mode:str,_admin:None=Depends(_require_admin_token))->dict:
         key=_market(market_id);freq=_mode(mode)
         try:
             result=engine.refresh_market_data(key,freq)
