@@ -64,7 +64,7 @@ class EvolutionLabEngine:
 
     def _save_run(self,run:RunRecord)->None:
         if self._evidence_eligible_run(run):
-            self._save_run(run)
+            self.store.save_run(run)
 
     def _recover_stale_runs(self)->None:
         for run in list(self._runs.values()):
