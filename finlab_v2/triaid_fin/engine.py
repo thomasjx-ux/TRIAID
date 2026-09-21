@@ -13,7 +13,7 @@ from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
-from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
+from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -647,6 +647,17 @@ class EvolutionLabEngine:
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
                 self._save_run(run)
+
+    def market_data_auction_shadow_probe(self,market_id:str)->dict:
+        market=market_id.upper()
+        symbols=MARKETS[market].risk_assets if market in MARKETS else ()
+        return market_data_auction_shadow_probe(market,symbols)
+
+    def alpha_evidence_status(self)->dict:
+        return self.alpha_evidence.status()
+
+    def alpha_evidence_rows(self,market_id:str|None=None,limit:int=200)->list[dict]:
+        return self.alpha_evidence.rows(market_id,limit)
 
     def recovery_wave_status(self,market_id:str|None=None)->dict:
         return self.recovery_wave_ledger.status(market_id)
