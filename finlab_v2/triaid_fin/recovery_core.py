@@ -6,6 +6,7 @@ from typing import Any
 
 from .capital_capacity import CapitalCapacityLayer
 from .evolution import CoreParameters
+from .adaptive_alpha import cn_soft_recovery_shadow
 
 
 def _returns(xs: list[float]) -> list[float]:
@@ -89,7 +90,7 @@ class RecoveryWaveCore:
     microstructure evidence.
     """
 
-    version="recovery-wave-core@0.3.0"
+    version="recovery-wave-core@0.4.0"
     interface_version="recovery-wave-contract@1"
     horizons=(3,5,10,20)
     analog_count=20
@@ -322,6 +323,7 @@ class RecoveryWaveCore:
             depth_values[symbol]=depth
             speed_values[symbol]=speed
 
+        soft_recovery_shadow=cn_soft_recovery_shadow(first_order,regime)
         depth_rank=self._rank(depth_values,True)
         certainty_rank=self._rank(certainty_values,True)
         gain_rank=self._rank(gain_values,True)
@@ -421,6 +423,7 @@ class RecoveryWaveCore:
             "regime":regime,
             "research_only":True,
             "broker_execution_enabled":False,
+            "soft_recovery_shadow":soft_recovery_shadow,
             "data_scope":{
                 "constituent_micro_available":False,
                 "micro_scope":"TRACKED_PRODUCT_PRICE_VOLUME_ONLY",

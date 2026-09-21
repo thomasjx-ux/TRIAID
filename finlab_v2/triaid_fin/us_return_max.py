@@ -10,6 +10,7 @@ from typing import Any
 
 from .contracts import StrategyGroup, StrategyState, TriaidDecision, utc_now
 from .market_lab import policy_positions
+from .adaptive_alpha import us_fast_challenger
 from .store import RunStore
 
 
@@ -27,7 +28,7 @@ class USReturnMaxRoute:
     - four USD sleeves share the same signal and differ only by starting capital.
     """
 
-    version="us-return-max-route@0.3.0"
+    version="us-return-max-route@0.4.0"
     interface_version="us-return-max-contract@1"
     capital_version="us-return-max-capacity@0.1.0"
     sleeves=USD_CAPITAL_SLEEVES
@@ -227,6 +228,7 @@ class USReturnMaxRoute:
             if "P00_BUY_HOLD" in state_map else None
         )
 
+        fast_challenger=us_fast_challenger(admissible,str(winner.strategy_id))
         target_assets=dict(winner_row["target_asset_weights"])
         target_risk_weight=sum(target_assets.values())
         adv_by_symbol={
@@ -320,6 +322,7 @@ class USReturnMaxRoute:
             "max_return_tie_set":tie_set,
             "tie_break_order":["meta_switch_cost","risk","uncertainty","strategy_id"],
             "selection_holding_horizon_days":holding_days,
+            "fast_challenger":fast_challenger,
             "previous_route_decision_id":(previous_decision or {}).get("decision_id"),
             "candidate_selection_scores":[
                 {
@@ -338,7 +341,7 @@ class USReturnMaxRoute:
             "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
-            "selection_metric_semantics":"Selection uses the weighted 21/63/126/252-day annualized historical strategy state-return estimate minus an annualized 21-day proxy for the immediate meta-allocation switch cost from the prior frozen route. It is not a calibrated future-return forecast.",
+            "selection_metric_semantics":"Primary production selection uses the weighted 21/63/126/252-day annualized historical strategy state-return estimate minus an annualized 21-day proxy for immediate meta-allocation switch cost. A separate 1/3/5-day challenger is recorded shadow-only and does not alter weights until prospectively validated. Neither field is a calibrated future-return forecast.",
             "projected_field_semantics":"Fields named projected_annualized_expected_net_return preserve the existing API contract but contain weighted state-return estimates under the frozen decision, not guaranteed or calibrated future returns.",
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
