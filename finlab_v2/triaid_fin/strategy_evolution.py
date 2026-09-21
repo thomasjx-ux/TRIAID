@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from statistics import mean
 from typing import Iterable
 
@@ -74,7 +75,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
 class StrategyEvolutionModule:
     """Independent self-evolution loop for Strategy Population rules."""
 
-    version="strategy-evolution@0.3.0"
+    version="strategy-evolution@0.4.0"
     min_verified_runs=20
 
     def __init__(self,store:RunStore) -> None:
@@ -89,6 +90,7 @@ class StrategyEvolutionModule:
                     "active_version":seed.version,
                     "profiles":{seed.version:asdict(seed)},
                     "history":[],
+                    "validations":{},
                 }
             else:
                 self._migrate_market(raw["markets"][market_id],market_id)
@@ -111,6 +113,7 @@ class StrategyEvolutionModule:
             m["active_version"]=seed.version
             m.setdefault("profiles",{})[seed.version]=asdict(seed)
         m.setdefault("history",[])
+        m.setdefault("validations",{})
 
     def _market(self,market_id:str)->dict:
         key=market_id.upper()
@@ -120,6 +123,7 @@ class StrategyEvolutionModule:
                 "active_version":seed.version,
                 "profiles":{seed.version:asdict(seed)},
                 "history":[],
+                "validations":{},
             }
             self._save()
         self._migrate_market(self.state["markets"][key],key)
@@ -265,6 +269,7 @@ class StrategyEvolutionModule:
             r for r in runs
             if r.market.market_id.upper()==market_id
             and r.evaluation and r.evaluation.status=="EVALUATED"
+            and (r.market.metadata or {}).get("daily_bar_complete") is not False
         ]
         diag=self.diagnose(market_id,rows)
         if len(rows)<self.min_verified_runs:
@@ -311,12 +316,17 @@ class StrategyEvolutionModule:
             "Reserved holdout observations were not used for candidate selection. Candidate window weights are replayed by rebuilding the state-return estimate from each run's frozen recent-return history."
         )
         m["profiles"][candidate.version]=asdict(candidate)
+        holdout=rows[dev_count:]
+        created_at=datetime.now(timezone.utc).isoformat()
         m["history"].append({
             "event":"CANDIDATE_CREATED",
             "version":candidate.version,
             "parent":active.version,
+            "created_at":created_at,
             "development_runs":len(dev),
-            "reserved_holdout_runs":len(rows)-len(dev),
+            "reserved_holdout_runs":len(holdout),
+            "development_run_ids":[r.run_id for r in dev],
+            "reserved_holdout_run_ids":[r.run_id for r in holdout],
             "active_development_mean":active_mean,
             "candidate_development_mean":best[0],
             "diagnosis":diag,
@@ -331,19 +341,115 @@ class StrategyEvolutionModule:
             "diagnosis":diag,
         }
 
+    def candidate_manifest(self,market_id:str,version:str)->dict|None:
+        m=self._market(market_id)
+        for row in reversed(m.get("history",[])):
+            if row.get("event")=="CANDIDATE_CREATED" and row.get("version")==version:
+                return dict(row)
+        return None
+
+    def validate_candidate(self,market_id:str,version:str,runs:Iterable[RunRecord])->dict:
+        market_id=market_id.upper()
+        m=self._market(market_id)
+        if version not in m["profiles"]:
+            raise KeyError(version)
+        candidate=StrategyRuleProfile(**m["profiles"][version])
+        manifest=self.candidate_manifest(market_id,version)
+        if manifest is None or not candidate.parent_version or candidate.parent_version not in m["profiles"]:
+            receipt={
+                "receipt_id":f"STRATVAL-{market_id}-{version}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}",
+                "passed":False,
+                "replay_pass":False,
+                "holdout_pass":False,
+                "shadow_pass":False,
+                "audit_pass":False,
+                "reason":"CANDIDATE_EVIDENCE_MANIFEST_MISSING",
+            }
+            m["validations"][version]=receipt
+            self._save()
+            return receipt
+        parent=StrategyRuleProfile(**m["profiles"][candidate.parent_version])
+        eligible=[
+            r for r in runs
+            if r.market.market_id.upper()==market_id
+            and r.evaluation and r.evaluation.status=="EVALUATED"
+            and (r.market.metadata or {}).get("daily_bar_complete") is not False
+        ]
+        run_map={r.run_id:r for r in eligible}
+        dev=[run_map[x] for x in manifest.get("development_run_ids",[]) if x in run_map]
+        holdout=[run_map[x] for x in manifest.get("reserved_holdout_run_ids",[]) if x in run_map]
+        known_ids=set(manifest.get("development_run_ids",[]))|set(manifest.get("reserved_holdout_run_ids",[]))
+        created_at=str(manifest.get("created_at") or "")
+        shadow=[r for r in eligible if created_at and r.created_at>created_at and r.run_id not in known_ids]
+
+        def compare(rows:list[RunRecord])->dict:
+            cand=self._simulate_profile(rows,candidate)
+            base=self._simulate_profile(rows,parent)
+            valid=len(cand)==len(rows) and len(base)==len(rows)
+            return {
+                "count":len(cand),
+                "candidate_mean":mean(cand) if cand else None,
+                "parent_mean":mean(base) if base else None,
+                "valid":valid,
+            }
+
+        dev_result=compare(dev)
+        holdout_result=compare(holdout)
+        shadow_result=compare(shadow)
+        replay_pass=bool(dev_result["valid"] and dev_result["count"]>=1 and dev_result["candidate_mean"]>=dev_result["parent_mean"]-1e-12)
+        holdout_pass=bool(holdout_result["valid"] and holdout_result["count"]>=1 and holdout_result["candidate_mean"]>=holdout_result["parent_mean"]-1e-12)
+        shadow_pass=bool(shadow_result["valid"] and shadow_result["count"]>=5 and shadow_result["candidate_mean"]>=shadow_result["parent_mean"]-1e-12)
+        audit_pass=bool(
+            abs(sum(candidate.window_weights)-1.0)<=1e-9
+            and candidate.max_group_size>=1
+            and 0.0<candidate.max_weight<=1.0
+            and candidate.entry_confirm_days>=1
+            and candidate.exit_confirm_days>=1
+            and candidate.cooldown_days>=0
+            and candidate.redundancy_penalty>=0
+            and candidate.uncertainty_penalty>=0
+            and candidate.family_cap>=1
+        )
+        receipt={
+            "receipt_id":f"STRATVAL-{market_id}-{version}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}",
+            "passed":all((replay_pass,holdout_pass,shadow_pass,audit_pass)),
+            "replay_pass":replay_pass,
+            "holdout_pass":holdout_pass,
+            "shadow_pass":shadow_pass,
+            "audit_pass":audit_pass,
+            "development":dev_result,
+            "holdout":holdout_result,
+            "shadow":shadow_result,
+            "shadow_min_runs":5,
+            "validation_discipline":"INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
+        }
+        m["validations"][version]=receipt
+        m["history"].append({
+            "event":"VALIDATION_RECORDED",
+            "version":version,
+            "receipt_id":receipt["receipt_id"],
+            "recorded_at":datetime.now(timezone.utc).isoformat(),
+            "passed":receipt["passed"],
+        })
+        self._save()
+        return receipt
+
     def promote(self,market_id:str,version:str,validation:dict)->dict:
         market_id=market_id.upper()
         m=self._market(market_id)
         if version not in m["profiles"]:
             raise KeyError(version)
+        receipt=m.get("validations",{}).get(version) or {}
+        receipt_id=str(validation.get("receipt_id") or "")
         checks={
-            "replay_pass":validation.get("replay_pass") is True,
-            "holdout_pass":validation.get("holdout_pass") is True,
-            "shadow_pass":validation.get("shadow_pass") is True,
-            "audit_pass":validation.get("audit_pass") is True,
+            "internal_receipt_match":bool(receipt_id and receipt_id==str(receipt.get("receipt_id") or "")),
+            "replay_pass":receipt.get("replay_pass") is True,
+            "holdout_pass":receipt.get("holdout_pass") is True,
+            "shadow_pass":receipt.get("shadow_pass") is True,
+            "audit_pass":receipt.get("audit_pass") is True,
         }
-        if not all(checks.values()):
-            return {"promoted":False,"checks":checks}
+        if not all(checks.values()) or receipt.get("passed") is not True:
+            return {"promoted":False,"reason":"INTERNAL_VALIDATION_REQUIRED","checks":checks}
         previous=m["active_version"]
         m["profiles"][previous]["status"]="superseded"
         m["profiles"][version]["status"]="active"
@@ -352,7 +458,7 @@ class StrategyEvolutionModule:
             "event":"PROMOTED",
             "version":version,
             "previous":previous,
-            "validation":validation,
+            "validation_receipt_id":receipt_id,
         })
         self._save()
         return {
@@ -361,4 +467,5 @@ class StrategyEvolutionModule:
             "active_version":version,
             "previous":previous,
             "checks":checks,
+            "validation_receipt_id":receipt_id,
         }
