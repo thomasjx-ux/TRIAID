@@ -19,7 +19,7 @@ The goal is not to force the current Core to beat the strategy population immedi
 - Audit: structural and result integrity checks
 - Review: daily detailed report and continuous curves
 - Evolution: diagnosis, Candidate generation, validation gate and promotion ledger
-- Run Store: persistent when /data is mounted, local fallback otherwise
+- Run Store: Supabase-backed persistent production storage, with a file backend for local/offline testing
 
 ## Markets
 
@@ -51,9 +51,19 @@ API:
 - GET /api/market-data/snapshot/{market_id}/{mode}
 - POST /api/market-data/refresh/{market_id}/{mode}
 
-## Live execution
+## Immediate preview versus official evidence
 
-A Run Now request creates a run identifier immediately. Market retrieval and calculation continue in the background. If the provider timestamp has not changed, the run is marked NO_NEW_DATA. On a new trading day, the previous day's pending decision is evaluated with the newly observed next-period return before a new decision is produced.
+The dashboard Run Now controls create MANUAL_PREVIEW runs. Market retrieval and TRIAID calculation continue in the background, but the preview is intentionally non-evidence:
+
+- it is kept in process memory only and is not written to the persistent run ledger;
+- it does not advance Population State or SHADOW counters;
+- it does not resolve prior outcomes;
+- it does not register or advance prospective experiments;
+- it does not write Recovery Wave or US Return-Max ledgers;
+- it cannot accept a posterior outcome or enter Core/strategy evolution;
+- the UI labels the result PREVIEW_READY and explicitly marks it as outside the evidence chain.
+
+Official evidence is produced by the automatic research scheduler and explicit official engine path. At settled post-close, the official path may resolve the prior complete daily outcome, advance lifecycle state once, freeze the new daily research decision, and update the corresponding immutable evidence ledgers.
 
 ## Strategy population rules
 
@@ -86,7 +96,9 @@ The active Core version and every promotion event are recorded.
 
 ## Storage
 
-If Railway mounts a persistent Volume at /data, V2 automatically stores runs and evolution state under /data/triaid_fin_v2. Without /data it falls back to local runtime storage, which is suitable for testing but not durable across redeployments.
+Production uses the Supabase storage backend and persists official runs, observations, lifecycle state and evolution ledgers across Railway container replacement. The file backend remains available for deterministic CI and local/offline testing; it is durable only when its root is on a verified persistent mount.
+
+Manual previews are deliberately excluded from both production and file persistence so operator clicks cannot contaminate the official research evidence history.
 
 
 ## Observation and transition research

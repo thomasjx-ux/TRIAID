@@ -109,19 +109,31 @@ def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
     market_id = market_id.upper()
     if market_id not in {"US", "CN"}:
         raise HTTPException(status_code=400, detail="market_id must be US or CN")
-    run = engine.create_pending_live_run(market_id)
-    background_tasks.add_task(engine.execute_live, run.run_id, market_id)
-    return {"run_id": run.run_id, "status": run.status, "market_id": market_id}
+    run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
+    background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
+    return {
+        "run_id": run.run_id,
+        "status": run.status,
+        "market_id": market_id,
+        "run_scope":"MANUAL_PREVIEW",
+        "evidence_eligible":False,
+    }
 
 
 @app.post("/api/live/run-all", status_code=202)
 def live_run_all(background_tasks: BackgroundTasks) -> dict:
     runs = []
     for market_id in ("US", "CN"):
-        run = engine.create_pending_live_run(market_id)
-        background_tasks.add_task(engine.execute_live, run.run_id, market_id)
-        runs.append({"run_id": run.run_id, "status": run.status, "market_id": market_id})
-    return {"runs": runs}
+        run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
+        background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
+        runs.append({
+            "run_id": run.run_id,
+            "status": run.status,
+            "market_id": market_id,
+            "run_scope":"MANUAL_PREVIEW",
+            "evidence_eligible":False,
+        })
+    return {"runs": runs,"run_scope":"MANUAL_PREVIEW","evidence_eligible":False}
 
 
 @app.post("/api/run", status_code=202)
@@ -145,6 +157,9 @@ def list_runs(market_id: str | None = None, limit: int = Query(default=100, ge=1
             "status": r.status,
             "core_version": r.triaid_decision.core_version if r.triaid_decision else None,
             "experiment_mode": r.market.metadata.get("experiment_mode"),
+            "run_scope":r.market.metadata.get("run_scope","OFFICIAL_EVIDENCE"),
+            "evidence_eligible":r.market.metadata.get("evidence_eligible") is not False,
+            "persistent_record":engine._evidence_eligible_run(r),
             "diagnostic_summary": r.diagnostic_summary,
             "evaluation": r.evaluation.model_dump() if r.evaluation else None,
         }
@@ -259,9 +274,26 @@ def recovery_wave_history(
 def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
     market_id: str | None = Query(default=None),
+    run_id: str | None = None,
 ) -> list[dict]:
-    cards = engine.strategy_population.strategy_cards(lang, market_id)
-    latest_run = engine.latest_decision_run(market_id) if market_id else None
+    latest_run=None
+    if run_id:
+        try:
+            latest_run=engine.get_run(run_id)
+        except (KeyError,FileNotFoundError) as exc:
+            raise HTTPException(status_code=404,detail="run_id not found") from exc
+        if market_id and latest_run.market.market_id.upper()!=market_id.upper():
+            raise HTTPException(status_code=400,detail="run_id market does not match market_id")
+        if latest_run.strategy_group is None or latest_run.triaid_decision is None:
+            raise HTTPException(status_code=409,detail="run decision is not ready")
+    elif market_id:
+        latest_run=engine.latest_decision_run(market_id)
+    effective_market=(
+        latest_run.market.market_id
+        if latest_run
+        else market_id
+    )
+    cards = engine.strategy_population.strategy_cards(lang, effective_market)
     state_map = {s.strategy_id: s for s in latest_run.strategy_states} if latest_run else {}
     group = latest_run.strategy_group if latest_run else None
     decision = latest_run.triaid_decision if latest_run else None
@@ -276,6 +308,15 @@ def strategies(
             {
                 "market_id": latest_run.market.market_id if latest_run else market_id,
                 "as_of": latest_run.market.as_of if latest_run else None,
+                "run_id":latest_run.run_id if latest_run else None,
+                "run_scope":(
+                    (latest_run.market.metadata or {}).get("run_scope","OFFICIAL_EVIDENCE")
+                    if latest_run else None
+                ),
+                "evidence_eligible":(
+                    (latest_run.market.metadata or {}).get("evidence_eligible") is not False
+                    if latest_run else None
+                ),
                 "lifecycle": state.lifecycle if state else None,
                 "expected_net_return": state.expected_net_return if state else None,
                 "risk": state.risk if state else None,
@@ -734,6 +775,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 let lang='zh';
 let strategyMarketContext={};
 let strategyNameIndex={US:{},CN:{}};
+let previewRunIds={US:null,CN:null};
 const el=id=>document.getElementById(id);
 const T={
  zh:{
@@ -754,8 +796,9 @@ const T={
   before:'基线权重',after:'TRIAID 权重',delta:'权重变化',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已后验评价运行',negative:'负相对收益差比例',next:'下一步',
   noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续后验评价形成候选改进',
-  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即执行',runAll:'执行两个市场',
-  running:'已创建运行，后台正在读取真实市场数据。',pending:'当前决策已生成，等待下一交易日结果。',
+  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即运行（预览）',runAll:'预览两个市场',
+  running:'已创建即时预览，后台正在读取真实市场数据；该运行不进入正式证据链。',pending:'当前决策已生成，等待下一交易日结果。',
+  preview:'即时预览，仅展示当前策略状态和TRIAID权重，不写入正式证据、后验、进化或前瞻实验。',
   positive:'TRIAID 本期后验收益高于基线',negativeResult:'TRIAID 本期后验收益低于基线，需要回看权重调整归因',flat:'TRIAID 本期后验收益与基线基本一致'
  },
  en:{
@@ -776,8 +819,9 @@ const T={
   before:'Baseline weight',after:'TRIAID weight',delta:'Weight change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Posterior-evaluated runs',negative:'Negative relative-return-gap rate',next:'Next step',
   noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuous posterior evaluations',
-  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Now',runAll:'Run Both Markets',
-  running:'Run created. Real market data is being processed in the background.',pending:'Current decision is ready and awaiting the next market outcome.',
+  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Preview',runAll:'Preview Both Markets',
+  running:'Manual preview created. Real market data is being processed; this run does not enter the official evidence chain.',pending:'Current decision is ready and awaiting the next market outcome.',
+  preview:'Manual preview only. It displays current strategy state and TRIAID weights without entering official evidence, posterior, evolution or prospective experiments.',
   positive:'TRIAID posterior return was above baseline in the latest evaluated run',negativeResult:'TRIAID posterior return was below baseline; weight-adjustment attribution should be reviewed',flat:'TRIAID posterior return was approximately in line with baseline'
  }
 };
@@ -798,7 +842,8 @@ const TIP={
   frozen:'FROZEN：策略已冻结，暂停进入正式策略群。',
   candidate:'CANDIDATE：候选阶段，尚未满足进入正式策略群的证据要求。',
   research:'RESEARCH：研究阶段，只用于开发和验证。',
-  retired:'RETIRED：已退出当前策略体系，除非出现新的证据，否则不再参与选群。'
+  retired:'RETIRED：已退出当前策略体系，除非出现新的证据，否则不再参与选群。',
+  preview_ready:'PREVIEW_READY：人工即时预览已经完成。结果只用于当前页面查看，不进入正式证据链、后验评价、生命周期累计或Core进化。'
  },
  en:{
   strategy:'Strategy name and ID. The main group table shows only strategies that actually receive allocation weight.',
@@ -816,7 +861,8 @@ const TIP={
   frozen:'FROZEN: paused and excluded from the live strategy group.',
   candidate:'CANDIDATE: not yet supported by enough evidence for live admission.',
   research:'RESEARCH: development and validation only.',
-  retired:'RETIRED: removed from the current strategy system unless new evidence justifies reconsideration.'
+  retired:'RETIRED: removed from the current strategy system unless new evidence justifies reconsideration.',
+  preview_ready:'PREVIEW_READY: the manual preview is complete. It is display-only and does not enter official evidence, posterior evaluation, lifecycle accumulation or Core evolution.'
  }
 };
 
@@ -1218,19 +1264,23 @@ async function refreshLiveWindows(){
 function onMarketChange(){refreshAll();refreshLiveWindows()}
 async function runNow(){
  const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});
- el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
+ el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id,m);
 }
 async function runAll(){
  const x=await json('/api/live/run-all',{method:'POST'});
  el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
- x.runs.forEach(r=>pollRun(r.run_id));
+ x.runs.forEach(r=>pollRun(r.run_id,r.market_id));
 }
-async function pollRun(id){
- for(let i=0;i<30;i++){
+async function pollRun(id,market){
+ for(let i=0;i<60;i++){
   await new Promise(r=>setTimeout(r,1000));
   try{
    const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
-   if(!['CREATED','FETCHING_DATA'].includes(x.status)){refreshAll();return}
+   if(!['CREATED','FETCHING_DATA'].includes(x.status)){
+    if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
+    await refreshAll();
+    return;
+   }
   }catch(e){}
  }
 }
@@ -1427,10 +1477,13 @@ function renderRecoveryWave(report){
 }
 async function refreshAll(){
  const m=el('market').value;
+ const previewId=previewRunIds[m];
  try{
-  const [s,d,cards,curves,evo,runs]=await Promise.all([
-   json('/api/status'),json('/api/daily?market_id='+m),json('/api/strategies?market_id='+m+'&lang='+lang),
-   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100')
+  const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+   json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
+   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
   const isCNStress=m==='CN';
   const evaluated=[...runs].reverse().find(x=>
@@ -1455,14 +1508,23 @@ async function refreshAll(){
   }
   strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
   const selected=cards.filter(x=>x.selected);
-  const latest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
+  const officialLatest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
+  const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
   renderComparison(evaluated);
-  el('date').textContent=d.date||'-';el('core').textContent=s.active_core.version;el('selectedCount').textContent=selected.length;
+  el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
+  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
+  el('selectedCount').textContent=selected.length;
   const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
-  el('regime').textContent=latest?.regime||'-';el('runState').textContent=latest?.status||'-';
+  el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
+  el('runState').textContent=previewRun
+    ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
+    : (latest?.status||'-');
   el('selectedNames').innerHTML=selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-';
-  if(evaluated){
+  if(previewRun){
+   el('dailyAnalysis').textContent=T[lang].preview;
+   el('dailyAnalysis').className='';
+  }else if(evaluated){
    const g=Number(evaluated.evaluation.excess_return||0);
    el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
    el('dailyAnalysis').className=cls(g);
@@ -1507,7 +1569,9 @@ async function refreshAll(){
   el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
   const history=evo.history||[];const last=history.length?history[history.length-1]:null;
   el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
-  el('runStatus').textContent=latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready';
+  el('runStatus').textContent=previewRun
+    ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
+    : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
  }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
 }
 async function propose(){

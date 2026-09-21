@@ -104,6 +104,8 @@ A Railway /data volume is only required when intentionally operating the file ba
 
 Every infrastructure change must keep passing:
 - selftest.py
+- backend_audit_regression.py
+- manual_preview_isolation_smoke.py
 - bootstrap_live.py for US and CN
 - ui_smoke.py
 - market-data capability boundaries
@@ -162,7 +164,10 @@ Lifecycle:
 
 Hard invariants:
 
-- Data Refresh != Observation != Transition != Research Decision != Broker Trade.
+- Data Refresh != Observation != Transition != Manual Preview != Official Research Decision != Broker Trade.
+- Dashboard-triggered Run Now uses MANUAL_PREVIEW and is never evidence-eligible.
+- MANUAL_PREVIEW is in-memory only: no persistent run record, lifecycle advancement, posterior resolution, prospective registration, Recovery Wave/US Return-Max ledger write, or evolution evidence.
+- Only the official evidence path may advance daily lifecycle/evidence state after a complete settled daily bar.
 - broker_execution_enabled is always false in V2.
 - Population State daily advancement is idempotent by DAILY:<date>.
 - provider boundaries cannot create Transition records.

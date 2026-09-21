@@ -36,6 +36,7 @@ jobs:
         run: |
           python selftest.py
           python backend_audit_regression.py
+          python manual_preview_isolation_smoke.py
           python strategy_contract_smoke.py
           python provider_adjustment_smoke.py
           python provider_freshness_smoke.py

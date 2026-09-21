@@ -87,6 +87,11 @@ assert "四档人民币资金规模容量实验" in html
 assert "renderRecoveryWave" in html
 assert "TRIAID 二阶恢复波段研究" in html
 assert "当前冻结研究配置意见" in html
+assert "立即运行（预览）" in html
+assert "不进入正式证据链" in html
+assert "PREVIEW_READY" in html
+assert "previewRunIds" in html
+assert "&run_id=" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
 assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')

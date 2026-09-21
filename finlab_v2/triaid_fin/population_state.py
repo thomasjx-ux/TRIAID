@@ -180,6 +180,51 @@ class PopulationStateTracker:
         self.store.save_json("population_state.json",self.state)
         return out
 
+    def preview(
+        self,
+        market_id:str,
+        raw_states:list[StrategyState],
+    ) -> list[StrategyState]:
+        market_key=market_id.upper()
+        existing=deepcopy(self.state.get("markets",{}).get(market_key) or {})
+        out=[]
+        for state in raw_states:
+            row=existing.get(state.strategy_id) or {}
+            lifecycle=str(row.get("lifecycle") or state.lifecycle or "candidate")
+            observations=int(row.get("observations",0))
+            shadow_obs=int(row.get("shadow_observations",0))
+            shadow_cum=float(row.get("shadow_cumulative_return",0.0))
+            s=state.model_copy(deep=True)
+            s.lifecycle=lifecycle
+            s.evidence_days=max(s.evidence_days,observations)
+            s.independent_decisions=max(s.independent_decisions,observations)
+            cfg=self.population.config_for(market_id)
+            s.horizon_multiples=max(
+                s.horizon_multiples,
+                observations/max(1,cfg.review_windows[0]),
+            )
+            s.oos_marginal_value=shadow_cum if shadow_obs>0 else None
+            positive=(
+                state.eligible
+                and not state.hard_failure
+                and state.expected_net_return>0
+                and state.risk_ok
+                and state.capacity_ok
+                and state.liquidity_ok
+            )
+            s.shadow_evidence_pass=(
+                lifecycle in {"active","reduced"}
+                or (
+                    shadow_obs>=self.min_shadow_days
+                    and shadow_cum>0
+                    and positive
+                )
+            )
+            s.metrics["shadow_live_days"]=float(shadow_obs)
+            s.metrics["shadow_cumulative_return"]=shadow_cum
+            out.append(s)
+        return out
+
     def status(self,market_id:str|None=None) -> dict:
         if market_id:
             return deepcopy(self._market(market_id))
