@@ -240,6 +240,16 @@ try:
     assert dedup_final["close_completion_basis"]=="EXISTING_COMPLETE_FINAL_SNAPSHOT"
     assert dedup_scheduler._market_state("CN")["close_done"] is True
 
+    # A repeated post-close refresh after close completion must be explicitly
+    # idempotent rather than appearing as another evaluated close decision.
+    repeated=dedup_scheduler.after_refresh(
+        "CN","DAILY",postclose_snapshot,
+        {"recorded":False,"reason":"DUPLICATE_SNAPSHOT_CONTENT"},
+    )
+    assert repeated["action"]=="CLOSE_ALREADY_DONE"
+    assert repeated["event"] is None
+    assert dedup_engine.live_calls==1
+
     print("TRIAID_CLOSE_TRANSITION_REGRESSION_PASS")
     print({
         "observation_version":engine.observations.version,

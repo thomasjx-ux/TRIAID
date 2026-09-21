@@ -435,7 +435,7 @@ class DecisionScheduler:
                 event=self._close(market,snapshot,observed)
                 return {
                     "enabled":True,
-                    "action":"CLOSE_EVALUATED",
+                    "action":"CLOSE_EVALUATED" if event is not None else "CLOSE_ALREADY_DONE",
                     "event":event,
                 }
 
