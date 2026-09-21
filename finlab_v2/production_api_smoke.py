@@ -70,6 +70,10 @@ expected_paths={
     "/api/live/run/{market_id}","/api/live/run-all","/api/run",
     "/api/runs","/api/runs/{run_id}","/api/latest/{market_id}",
     "/api/runs/{run_id}/outcome","/api/daily","/api/curves",
+    "/api/experiments/cn/prospective/status",
+    "/api/experiments/cn/prospective",
+    "/api/experiments/cn/prospective/latest",
+    "/api/experiments/cn/prospective/{experiment_id}",
     "/api/strategies","/api/strategy-population/rules/{market_id}",
     "/api/population-state/{market_id}","/api/evolution",
     "/api/evolution/propose","/api/evolution/promote/{version}",
@@ -108,6 +112,17 @@ assert status["strategy_registry_count"]==33
 storage=call("GET","/api/storage/status")
 assert storage["backend"]["backend"]=="supabase"
 assert storage["durability"]=="PERSISTENT"
+
+prospective_status=call("GET","/api/experiments/cn/prospective/status")
+assert prospective_status["version"]=="cn-prospective-controls@0.1.0"
+prospective_rows=call("GET","/api/experiments/cn/prospective?limit=5")
+assert isinstance(prospective_rows,list)
+if prospective_rows:
+    prospective_latest=call("GET","/api/experiments/cn/prospective/latest")
+    assert prospective_latest["experiment_id"]==prospective_rows[-1]["experiment_id"]
+    assert prospective_latest["design"]["no_future_information"] is True
+    prospective_detail=call("GET",f"/api/experiments/cn/prospective/{prospective_latest['experiment_id']}")
+    assert prospective_detail["experiment_id"]==prospective_latest["experiment_id"]
 
 runs_before=call("GET","/api/runs?limit=20")
 assert isinstance(runs_before,list)
