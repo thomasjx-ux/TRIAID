@@ -113,7 +113,7 @@ assert status["strategy_registry_count"]==33
 assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.2.0"
 assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.2.0"
 assert status["module_manifest"]["capital_capacity"]=="capital-capacity-layer@0.1.0"
-assert status["module_manifest"]["us_return_max"]=="us-return-max-route@0.1.0"
+assert status["module_manifest"]["us_return_max"]=="us-return-max-route@0.2.0"
 assert status["module_manifest"]["us_return_max_ledger"]=="us-return-max-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
@@ -139,9 +139,13 @@ assert isinstance(us_return_history,list)
 if us_return_history:
     us_return_latest=call("GET","/api/us-return-max/latest")
     assert us_return_latest["decision_id"]==us_return_history[-1]["decision_id"]
-    assert us_return_latest["route_version"]=="us-return-max-route@0.1.0"
-    assert us_return_latest["objective"].startswith("MAXIMIZE_CURRENT_ROBUST_EXPECTED_NET_RETURN")
-    assert us_return_latest["selection_source"]=="EXISTING_STRATEGY_POPULATION_RETURN_FIRST_RESELECT"
+    assert us_return_latest["route_version"]=="us-return-max-route@0.2.0"
+    assert us_return_latest["objective"].startswith("STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN")
+    assert us_return_latest["strategy_selection_mode"]=="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+    assert len(us_return_latest["target_strategy_weights"])==1
+    assert abs(sum(us_return_latest["target_strategy_weights"].values())-1.0)<1e-12
+    assert us_return_latest["selected_strategy_id"] in us_return_latest["max_return_tie_set"]
+    assert us_return_latest["selection_source"]=="ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN"
     assert us_return_latest["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     assert len(us_return_latest["capital_capacity"]["sleeves"])==4
     assert all(x["starting_cash_only"] is True for x in us_return_latest["capital_capacity"]["sleeves"])
@@ -178,7 +182,7 @@ for market in ("US","CN"):
     assert isinstance(daily,dict)
     if market=="US":
         assert daily["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
-        assert daily["us_return_max"]["route_version"]=="us-return-max-route@0.1.0"
+        assert daily["us_return_max"]["route_version"]=="us-return-max-route@0.2.0"
         assert daily["us_return_max"]["integrity"]["passed"] is True
         assert daily["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     if market=="CN":
