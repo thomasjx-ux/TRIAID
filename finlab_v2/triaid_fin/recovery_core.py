@@ -88,7 +88,7 @@ class RecoveryWaveCore:
     microstructure evidence.
     """
 
-    version="recovery-wave-core@0.1.0"
+    version="recovery-wave-core@0.1.1"
     interface_version="recovery-wave-contract@1"
     horizons=(3,5,10,20)
     analog_count=20
