@@ -389,7 +389,7 @@ try:
     scheduler=DecisionScheduler(engine)
     assessment=scheduler.assess_transition("US","INTRADAY",third_obs["transition"])
     assert assessment["trigger"] is True
-    assert assessment["reason"]=="WARMUP_HIGH_SENSITIVITY"
+    assert assessment["reason"]=="WARMUP_CALIBRATION"
     auto=scheduler.after_refresh(
         "US",
         "INTRADAY",
