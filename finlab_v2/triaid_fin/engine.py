@@ -8,6 +8,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from .audit import AuditModule
+from .alpha_evidence import AlphaEvidenceLedger
 from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
@@ -42,6 +43,7 @@ class EvolutionLabEngine:
         self.core=TriaidCoreModule(self.evolution.active())
         self.evaluation=EvaluationModule()
         self.audit=AuditModule()
+        self.alpha_evidence=AlphaEvidenceLedger(self.store)
         self.review=ReviewModule()
         self.prospective_experiment=ProspectiveExperimentProtocol(self.store)
         self.recovery_wave_ledger=RecoveryWaveLedger(self.store)
@@ -130,6 +132,7 @@ class EvolutionLabEngine:
             "triaid_core":self.core.version if hasattr(self,"core") else self.evolution.active().version,
             "evaluation":self.evaluation.version if hasattr(self,"evaluation") else "evaluation@0.2.0",
             "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
+            "alpha_evidence":self.alpha_evidence.version if hasattr(self,"alpha_evidence") else "alpha-evidence-ledger@unknown",
             "review":self.review.version if hasattr(self,"review") else "review@0.2.0",
             "prospective_experiment":self.prospective_experiment.version if hasattr(self,"prospective_experiment") else "cn-prospective-controls@unknown",
             "recovery_wave_core":self.recovery_wave_core.version if hasattr(self,"recovery_wave_core") else "recovery-wave-core@unknown",
@@ -404,6 +407,11 @@ class EvolutionLabEngine:
                         snapshot.snapshot_id,
                         prepared.get("product_turnover_notional_from_previous_period") or {},
                     )
+                    if recovery_outcome.get("recorded"):
+                        self.alpha_evidence.record_cn(
+                            self.recovery_wave_ledger.decisions(market_id,5000),
+                            recovery_outcome.get("outcome") or {},
+                        )
                 if evidence_eligible:
                     existing_recovery=self.recovery_wave_ledger.by_snapshot(
                         market_id,
@@ -449,6 +457,11 @@ class EvolutionLabEngine:
                         prepared.get("product_turnover_notional_from_previous_period") or {},
                         snapshot.snapshot_id,
                     )
+                    if us_return_outcome.get("recorded"):
+                        self.alpha_evidence.record_us(
+                            self.us_return_max_ledger.decisions(5000),
+                            us_return_outcome.get("outcome") or {},
+                        )
                 snapshot.metadata["experiment_mode"]="US_RETURN_MAX_CAPACITY"
                 snapshot.metadata["experiment_design"]="Use the existing return-first reselect strategy population as the primary US route, expand the frozen strategy mix to executable ETF exposures, and validate realized return versus SPY buy-and-hold and the generic TRIAID Core under four USD capital sleeves."
                 snapshot.metadata["market_route"]="US_RETURN_MAXIMIZATION"
