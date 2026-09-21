@@ -102,20 +102,20 @@ d=daily("US")
 assert d["date"]
 assert "us_return_max" in d
 assert d["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
-assert d["us_return_max"]["route_version"]=="us-return-max-route@0.2.0"
+assert d["us_return_max"]["route_version"]=="us-return-max-route@0.3.0"
 assert d["us_return_max"]["integrity"]["passed"] is True
 assert d["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
 
 dcn=daily("CN")
 assert dcn["date"]
 assert "prospective_experiment" in dcn
-assert dcn["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"
+assert dcn["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.3.0"
 assert dcn["prospective_experiment"]["protocol_version"].startswith("cn-prospective-controls@")
 assert dcn["prospective_experiment"]["strategy_determination"]
 
 assert "recovery_wave" in dcn
 assert dcn["recovery_wave"]["integrity"]["passed"] is True
-assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.2.0"
+assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.3.0"
 assert dcn["recovery_wave"]["latest_decision"]["data_scope"]["constituent_micro_available"] is False
 assert dcn["recovery_wave"]["latest_decision"]["execution_discipline"]["same_bar_execution_allowed"] is False
 assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
