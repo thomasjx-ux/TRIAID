@@ -160,6 +160,7 @@ try:
         "session_phase":"POSTCLOSE",
         "latest":{"510300.SS":{"close":4.050,"volume":1600.0}},
     }
+    close_scheduler._postclose_settled=lambda market_id: False
     wait_event=close_scheduler._close(
         "CN",
         postclose_snapshot,
@@ -170,6 +171,23 @@ try:
     assert close_scheduler._market_state("CN")["close_done"] is False
     assert engine.live_calls==0
 
+    close_scheduler._postclose_settled=lambda market_id: True
+    recovered_event=close_scheduler._close(
+        "CN",
+        postclose_snapshot,
+        {"recorded":False,"reason":"DUPLICATE_SNAPSHOT_CONTENT"},
+    )
+    assert recovered_event is not None
+    assert recovered_event["event_type"]=="CLOSE_FINAL"
+    assert recovered_event["recovered_from_duplicate_content"] is True
+    assert close_scheduler._market_state("CN")["close_done"] is True
+    assert engine.live_calls==1
+
+    close_state=close_scheduler._market_state("CN")
+    close_state["close_done"]=False
+    close_state["close_event_id"]=None
+    close_state["last_close_signature"]=None
+    close_scheduler._save()
     final_event=close_scheduler._close(
         "CN",
         {
@@ -181,7 +199,7 @@ try:
     assert final_event is not None
     assert final_event["event_type"]=="CLOSE_FINAL"
     assert close_scheduler._market_state("CN")["close_done"] is True
-    assert engine.live_calls==1
+    assert engine.live_calls==2
 
     print("TRIAID_CLOSE_TRANSITION_REGRESSION_PASS")
     print({
