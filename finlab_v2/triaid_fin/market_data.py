@@ -14,6 +14,7 @@ from .alpaca_data import AlpacaMarketDataProvider
 from .eastmoney_data import EastmoneyMarketDataProvider
 from .sina_us_data import SinaUSMarketDataProvider
 from .tencent_cn_data import TencentCNMarketDataProvider
+from .tushare_auction import TushareETFAuctionProvider
 from .provider_registry import ProviderRegistry
 from .trading_calendar import official_session_phase
 
@@ -168,6 +169,7 @@ class MarketDataHub:
         self.eastmoney=EastmoneyMarketDataProvider()
         self.sina_us=SinaUSMarketDataProvider()
         self.tencent_cn=TencentCNMarketDataProvider()
+        self.tushare_auction=TushareETFAuctionProvider()
         self.registry=ProviderRegistry()
         self.registry.register(
             "research_bars",
@@ -184,6 +186,7 @@ class MarketDataHub:
         )
         self.registry.register("sina_us_backup",self.sina_us)
         self.registry.register("tencent_cn_backup",self.tencent_cn)
+        self.registry.register("tushare_cn_auction",self.tushare_auction,routes=("CN:PREOPEN",))
         # Eastmoney adapter remains available for research, but its public hosts
         # are not in the automatic failover chain because Railway smoke observed
         # remote disconnects from the current egress.
@@ -216,7 +219,7 @@ class MarketDataHub:
                 (x["version"] for x in chain if x["configured"]),
                 None,
             )
-        routing.setdefault("CN:PREOPEN_AUCTION",None)
+        routing["CN:PREOPEN_AUCTION"]=self.tushare_auction.version if self.tushare_auction.configured else None
         routing.setdefault("CN:QUOTE_L1",None)
         return {
             "registry":registry,
@@ -297,8 +300,10 @@ class MarketDataHub:
                     "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
                     "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_applicable"},
                     "PREOPEN_AUCTION":{
-                        "available":False,"provider":None,"grade":"unavailable",
-                        "note":"Dedicated A-share call-auction feed required.",
+                        "available":self.tushare_auction.configured,
+                        "provider":self.tushare_auction.version if self.tushare_auction.configured else None,
+                        "grade":"research_auction_final" if self.tushare_auction.configured else "credentials_required",
+                        "note":"Tushare etf_auction final opening-auction snapshot after 09:25; requires TUSHARE_TOKEN and etf_auction entitlement.",
                     },
                     "SECTOR_BARS":{
                         "available":False,"provider":None,"grade":"interface_reserved",
@@ -354,8 +359,8 @@ class MarketDataHub:
         if mode not in MODE_CONFIGS:
             raise MarketDataError(f"unsupported_mode:{mode}")
         cfg=MODE_CONFIGS[mode]
-        if market=="CN" and mode=="PREOPEN":
-            raise MarketDataError("unsupported_market_mode:CN:PREOPEN")
+        if market=="CN" and mode=="PREOPEN" and not self.tushare_auction.configured:
+            raise MarketDataError("unsupported_market_mode:CN:PREOPEN:Tushare ETF auction credentials/entitlement not configured")
         providers=self.registry.providers_for(f"{market}:{mode}")
         if not providers:
             raise MarketDataError(f"provider_route_missing:{market}:{mode}")
@@ -450,7 +455,10 @@ class MarketDataHub:
         for s in series:
             common &= set(s.ts)
         ts=[t for t in by[benchmark].ts if t in common]
-        aligned_min=max(2,min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points))
+        aligned_min=(
+            1 if market=="CN" and mode=="PREOPEN"
+            else max(2,min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points))
+        )
         if len(ts)<aligned_min:
             raise MarketDataError(
                 f"insufficient_aligned_points:{provider.version}:{market}:{mode}:{len(ts)}<{aligned_min}"
@@ -489,8 +497,14 @@ class MarketDataHub:
                 note=""
                 quality=cfg.quality
                 if market=="CN" and name=="PREOPEN":
-                    supported=False
-                    note="Yahoo Chart does not provide a reliable A-share call-auction feed; keep this mode disabled until a dedicated provider is connected."
+                    supported=self.tushare_auction.configured
+                    quality="research_auction_final" if supported else "auction_credentials_required"
+                    note=(
+                        "Tushare etf_auction supplies the official opening-auction final snapshot after 09:25. "
+                        "Dynamic 09:15-09:25 auction path remains shadow-only/not connected."
+                        if supported else
+                        "Tushare ETF auction provider is wired but TUSHARE_TOKEN/etf_auction entitlement is not configured."
+                    )
                 if name=="REALTIME":
                     note=(note+" " if note else "")+"Indicative chart data only; no bid/ask, order book, exchange entitlement or broker execution guarantee."
                 modes[name]={
