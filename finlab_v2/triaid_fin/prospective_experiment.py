@@ -225,10 +225,14 @@ class ProspectiveExperimentProtocol:
                     "TRIAID_STATIC_ALLOCATION": "freeze the contemporaneous TRIAID post-decision weights; isolates allocation/cash effect from later timing",
                 },
                 "ranking_controls": {
-                    "CURRENT_EXPECTED_RETURN": "rank only by current expected net return",
+                    "CURRENT_EXPECTED_RETURN": "legacy control name: rank only by the current multi-window annualized historical state-return estimate stored in StrategyState.expected_net_return",
                     "MOMENTUM_20": "rank by trailing 20-observation compounded strategy return; horizon inherited from the existing P13 20-day momentum rule",
                     "LOW_RISK": "rank lower-risk strategies first; aligned with the existing inverse-volatility/risk-control family",
-                    "TRIAID_STATE_TRANSITION": "coefficient-free Borda aggregation of current expected return, 20-observation momentum, state direction when available, risk and uncertainty",
+                    "TRIAID_STATE_TRANSITION": "coefficient-free equal-weight Borda aggregation of the multi-window annualized historical state-return estimate, 20-observation momentum, state direction when available, risk and uncertainty",
+                },
+                "metric_semantics": {
+                    "StrategyState.expected_net_return": "legacy field name for a weighted 21/63/126/252-day annualized historical strategy state-return estimate; it is not a calibrated future-return forecast",
+                    "annualization": "mean daily realized strategy net return within each window multiplied by 252, then combined with the configured fixed window weights",
                 },
             },
             "pool": pool,
@@ -479,7 +483,7 @@ class ProspectiveExperimentProtocol:
                 "status": "RESEARCH_ONLY_NOT_PRODUCTION",
                 "level": "STRATEGY_LEVEL",
                 "hypothesis": "Deeply impaired strategies with improving state/transition structure may offer more upside than pure cash defense if recovery ordering can be predicted prospectively.",
-                "current_test": "Use the frozen adverse strategy pool to test whether TRIAID ranks subsequent recovery better than current-return, 20-day momentum, and low-risk controls.",
+                "current_test": "Use the frozen adverse strategy pool to test whether the frozen TRIAID composite rank orders subsequent recovery better than the historical state-return, 20-day momentum, and low-risk controls.",
                 "product_level_extension": "A separate ETF/index-fund candidate pool is required before making product-level deep-drawdown rebound claims.",
             },
         }
