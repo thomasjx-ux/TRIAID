@@ -1236,7 +1236,7 @@ function renderUSReturnMax(report){
  el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
  el('usReturnMaxNote').textContent=lang==='zh'
   ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
-  : 'The US primary route does not reuse the CN recovery thesis. It strictly selects the ACTIVE strategy with the highest current expected net return; exact return ties are broken by lower execution cost, risk, uncertainty, then deterministic strategy ID, before expansion into executable SPY/QQQ/IWM/TLT/GLD exposures. All four USD sleeves share the same frozen decision; only capital size changes capacity and impact.';
+  : 'The US primary route does not reuse the CN recovery thesis. It selects the ACTIVE strategy with the highest current multi-window annualized state-return estimate. That signal is built from realized 21/63/126/252-day strategy net returns under fixed weights and is not an underlying-price forecast. Exact score ties are broken by lower execution cost, risk, uncertainty, then deterministic strategy ID, before expansion into target SPY/QQQ/IWM/TLT/GLD exposures. Four USD capital tiers share the same frozen decision; only capital size changes simulated capacity and impact cost, and no broker orders are sent.';
  const rw=d.target_strategy_weights||{};
  const gw=d.generic_core_control_weights||{};
  const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
@@ -1434,7 +1434,7 @@ async function refreshAll(){
   }else if(isCNStress&&latest?.diagnostic_summary?.experiment_mode==='CN_WORST_POOL_RESCUE'){
    const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
    el('dailyAnalysis').textContent=Number.isFinite(p)
-    ? (lang==='zh'?'当前信息下预计减损 '+signedPct(p)+'，实际挽回以后验为准':'Projected loss reduction '+signedPct(p)+' on current information; realized rescue awaits outcome')
+    ? (lang==='zh'?'按当前多周期年化状态收益估计，TRIAID 相对基线差值 '+signedPct(p)+'；这不是未来减损预测，实际挽回以后验为准':'Current multi-window annualized state-return estimate gives a TRIAID-vs-baseline gap of '+signedPct(p)+'; this is not a future loss-reduction forecast and realized rescue awaits posterior outcomes')
     : T[lang].pending;
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
