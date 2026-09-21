@@ -389,6 +389,11 @@ class RecoveryWaveCore:
                 "defensive_products":[a for a in panel.spec.defensive_assets if a in panel.close],
                 "limitation":"No constituent-level index breadth/order-flow feed is currently connected; product-level price/volume state must not be described as constituent microstructure.",
             },
+            "execution_discipline":{
+                "same_bar_execution_allowed":False,
+                "execution_rule":"DECISION_AT_T_APPLIES_FROM_NEXT_COMPLETE_TRADABLE_BAR",
+                "position_path":"WAIT -> INITIATE -> ADD/HOLD -> REDUCE -> EXIT, recomputed prospectively at each new frozen state",
+            },
             "method":{
                 "layer_1":"PRODUCT_MICRO_STATE",
                 "layer_2":"CROSS_PRODUCT_RECOVERY_OPPORTUNITY",
