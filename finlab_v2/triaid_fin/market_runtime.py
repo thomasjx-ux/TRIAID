@@ -11,16 +11,45 @@ from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.4.1"
+    version="market-data-automation@0.5.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
         self.decision_scheduler=decision_scheduler
         self.enabled=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
+        self.state_name="market_automation_state.json"
+        persisted=engine.store.load_json(
+            self.state_name,
+            {"last_refresh_epoch":{},"errors":{},"last_phase":{}},
+        )
         self.last_refresh:dict[str,float]={}
-        self.errors:dict[str,str]={}
-        self.last_phase:dict[str,str]={}
+        self.last_refresh_epoch:dict[str,float]={}
+        for key,value in (persisted.get("last_refresh_epoch") or {}).items():
+            try:
+                self.last_refresh_epoch[str(key)]=float(value)
+            except (TypeError,ValueError):
+                continue
+        self.errors={
+            str(key):str(value)
+            for key,value in (persisted.get("errors") or {}).items()
+        }
+        self.last_phase={
+            str(key):str(value)
+            for key,value in (persisted.get("last_phase") or {}).items()
+        }
         self.frequency_policy=FrequencyPolicy(engine.store)
+
+    def _persist_state(self)->None:
+        self.engine.store.save_json(
+            self.state_name,
+            {
+                "version":self.version,
+                "updated_at":datetime.now(timezone.utc).isoformat(),
+                "last_refresh_epoch":dict(self.last_refresh_epoch),
+                "errors":dict(self.errors),
+                "last_phase":dict(self.last_phase),
+            },
+        )
 
     def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
@@ -53,58 +82,123 @@ class MarketDataAutomation:
         market=market_id.upper()
         return self.refresh_plan_for_phase(market,session_phase(market))
 
+    async def tick_once(self,market_ids:tuple[str,...]|None=None)->dict:
+        now_monotonic=time.monotonic()
+        now_epoch=time.time()
+        markets=tuple((m or "").upper() for m in (market_ids or ("US","CN")))
+        report={
+            "version":self.version,
+            "trigger":"EXTERNAL_OR_LOOP_TICK",
+            "at":datetime.now(timezone.utc).isoformat(),
+            "markets":{},
+            "refreshed":[],
+            "skipped":[],
+            "errors":[],
+        }
+        state_changed=False
+        for market_id in markets:
+            if market_id not in {"US","CN"}:
+                raise ValueError(f"unsupported market_id: {market_id}")
+            phase=session_phase(market_id)
+            previous_phase=self.last_phase.get(market_id)
+            if previous_phase!=phase:
+                if previous_phase is not None:
+                    for key in [k for k in self.last_refresh_epoch if k.startswith(f"{market_id}:")]:
+                        self.last_refresh_epoch[key]=0.0
+                self.last_phase[market_id]=phase
+                state_changed=True
+                print("TRIAID_MARKET_PHASE",market_id,phase)
+            capabilities=self.engine.market_data_capabilities(market_id)[market_id]
+            market_report={"phase":phase,"plan":self.refresh_plan_for_phase(market_id,phase),"events":[]}
+            report["markets"][market_id]=market_report
+            for mode,interval_seconds in market_report["plan"].items():
+                if not capabilities.get(mode,{}).get("supported",False):
+                    event={"market_id":market_id,"mode":mode,"action":"SKIP","reason":"UNSUPPORTED"}
+                    market_report["events"].append(event)
+                    report["skipped"].append(event)
+                    continue
+                key=f"{market_id}:{mode}"
+                elapsed=now_epoch-self.last_refresh_epoch.get(key,0.0)
+                if elapsed<interval_seconds:
+                    event={
+                        "market_id":market_id,
+                        "mode":mode,
+                        "action":"SKIP",
+                        "reason":"INTERVAL_NOT_DUE",
+                        "elapsed_seconds":max(0.0,elapsed),
+                        "interval_seconds":interval_seconds,
+                    }
+                    market_report["events"].append(event)
+                    report["skipped"].append(event)
+                    continue
+                try:
+                    result=await asyncio.to_thread(self.engine.refresh_market_data,market_id,mode)
+                    snapshot=await asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False)
+                    observed=await asyncio.to_thread(self.engine.record_market_observation,snapshot)
+                    decision_result=None
+                    if self.decision_scheduler is not None:
+                        decision_result=await asyncio.to_thread(
+                            self.decision_scheduler.after_refresh,
+                            market_id,
+                            mode,
+                            snapshot,
+                            observed,
+                        )
+                    if observed.get("reason")=="STALE_SOURCE_TIMESTAMP":
+                        self.last_refresh[key]=0.0
+                        self.last_refresh_epoch[key]=0.0
+                    else:
+                        self.last_refresh[key]=now_monotonic
+                        self.last_refresh_epoch[key]=now_epoch
+                    self.errors.pop(key,None)
+                    state_changed=True
+                    event={
+                        "market_id":market_id,
+                        "mode":mode,
+                        "action":"REFRESH",
+                        "source_latest_ts":result.get("source_latest_ts"),
+                        "points":result.get("points"),
+                        "observation_recorded":observed.get("recorded"),
+                        "observation_reason":observed.get("reason"),
+                        "decision_action":(
+                            decision_result.get("action")
+                            if isinstance(decision_result,dict)
+                            else None
+                        ),
+                    }
+                    market_report["events"].append(event)
+                    report["refreshed"].append(event)
+                    print(
+                        "TRIAID_MARKET_DATA_AUTO_REFRESH",
+                        market_id,mode,
+                        result.get("source_latest_ts"),
+                        result.get("points"),
+                        observed.get("recorded"),
+                        observed.get("reason"),
+                    )
+                    if decision_result is not None:
+                        print(
+                            "TRIAID_DECISION_AUTOMATION",
+                            market_id,mode,
+                            decision_result.get("action"),
+                        )
+                except Exception as exc:
+                    message=f"{type(exc).__name__}:{exc}"
+                    self.errors[key]=message
+                    self.last_refresh[key]=now_monotonic
+                    self.last_refresh_epoch[key]=now_epoch
+                    state_changed=True
+                    event={"market_id":market_id,"mode":mode,"action":"ERROR","error":message}
+                    market_report["events"].append(event)
+                    report["errors"].append(event)
+        if state_changed:
+            self._persist_state()
+        report["ok"]=not bool(report["errors"])
+        return report
+
     async def run(self)->None:
         while True:
-            now=time.monotonic()
-            for market_id in ("US","CN"):
-                phase=session_phase(market_id)
-                if self.last_phase.get(market_id)!=phase:
-                    for key in [k for k in self.last_refresh if k.startswith(f"{market_id}:")]:
-                        self.last_refresh[key]=0.0
-                    self.last_phase[market_id]=phase
-                    print("TRIAID_MARKET_PHASE",market_id,phase)
-                capabilities=self.engine.market_data_capabilities(market_id)[market_id]
-                for mode,interval_seconds in self.refresh_plan(market_id).items():
-                    if not capabilities.get(mode,{}).get("supported",False):
-                        continue
-                    key=f"{market_id}:{mode}"
-                    if now-self.last_refresh.get(key,0.0)<interval_seconds:
-                        continue
-                    try:
-                        result=await asyncio.to_thread(self.engine.refresh_market_data,market_id,mode)
-                        snapshot=await asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False)
-                        observed=await asyncio.to_thread(self.engine.record_market_observation,snapshot)
-                        decision_result=None
-                        if self.decision_scheduler is not None:
-                            decision_result=await asyncio.to_thread(
-                                self.decision_scheduler.after_refresh,
-                                market_id,
-                                mode,
-                                snapshot,
-                                observed,
-                            )
-                        if observed.get("reason")=="STALE_SOURCE_TIMESTAMP":
-                            self.last_refresh[key]=0.0
-                        else:
-                            self.last_refresh[key]=now
-                        self.errors.pop(key,None)
-                        print(
-                            "TRIAID_MARKET_DATA_AUTO_REFRESH",
-                            market_id,mode,
-                            result.get("source_latest_ts"),
-                            result.get("points"),
-                            observed.get("recorded"),
-                            observed.get("reason"),
-                        )
-                        if decision_result is not None:
-                            print(
-                                "TRIAID_DECISION_AUTOMATION",
-                                market_id,mode,
-                                decision_result.get("action"),
-                            )
-                    except Exception as exc:
-                        self.errors[key]=f"{type(exc).__name__}:{exc}"
-                        self.last_refresh[key]=now
+            await self.tick_once()
             await asyncio.sleep(30)
 
     @staticmethod
@@ -258,7 +352,10 @@ class MarketDataAutomation:
         }
 
     def record_manual_refresh(self,market_id:str,mode:str)->None:
-        self.last_refresh[f"{market_id.upper()}:{mode.upper()}"]=time.monotonic()
+        key=f"{market_id.upper()}:{mode.upper()}"
+        self.last_refresh[key]=time.monotonic()
+        self.last_refresh_epoch[key]=time.time()
+        self._persist_state()
 
     def status(self)->dict:
         return {
@@ -270,6 +367,9 @@ class MarketDataAutomation:
             "last_phase":dict(self.last_phase),
             "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN")},
             "last_refresh_monotonic":dict(self.last_refresh),
+            "last_refresh_epoch":dict(self.last_refresh_epoch),
+            "persistent_scheduler_state":self.state_name,
+            "external_tick_ready":True,
             "automation_errors":dict(self.errors),
             "frequency_policy":self.frequency_policy.status(),
             "decision_scheduler":(
