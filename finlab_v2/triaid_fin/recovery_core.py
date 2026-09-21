@@ -4,6 +4,7 @@ import math
 from statistics import mean, median, pstdev
 from typing import Any
 
+from .capital_capacity import CapitalCapacityLayer
 from .evolution import CoreParameters
 
 
@@ -88,7 +89,7 @@ class RecoveryWaveCore:
     microstructure evidence.
     """
 
-    version="recovery-wave-core@0.1.1"
+    version="recovery-wave-core@0.2.0"
     interface_version="recovery-wave-contract@1"
     horizons=(3,5,10,20)
     analog_count=20
@@ -97,6 +98,7 @@ class RecoveryWaveCore:
 
     def __init__(self, params: CoreParameters) -> None:
         self.params=params
+        self.capital_capacity=CapitalCapacityLayer()
 
     @staticmethod
     def _features(close: list[float], volume: list[float], i: int) -> dict[str,float]:
@@ -375,6 +377,8 @@ class RecoveryWaveCore:
                 ),
             })
 
+        capital_capacity=self.capital_capacity.build(panel,opinions,input_phase)
+
         return {
             "core_version":self.version,
             "interface_version":self.interface_version,
@@ -429,5 +433,6 @@ class RecoveryWaveCore:
                 "risk_off_detected":risk_off,
             },
             "trade_opinions":opinions,
+            "capital_capacity":capital_capacity,
             "cash_residual_weight":max(0.0,round(1.0-sum(float(x["target_weight"]) for x in opinions),8)),
         }
