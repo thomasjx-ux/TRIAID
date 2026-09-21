@@ -145,24 +145,12 @@ if us_return_history:
     us_return_latest=call("GET","/api/us-return-max/latest")
     assert us_return_latest["decision_id"]==us_return_history[-1]["decision_id"]
     assert us_return_latest["route_version"]=="us-return-max-route@0.3.0"
-    objective=str(us_return_latest.get("objective") or "")
-    selector=str(us_return_latest.get("strategy_selection_mode") or "")
-    source=str(us_return_latest.get("selection_source") or "")
-    current_contract=(
-        objective.startswith("STRICT_MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE")
-        and selector=="STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
-        and source=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_STRICT_MAX_STATE_RETURN_ESTIMATE"
-    )
-    legacy_frozen_contract=(
-        objective.startswith("STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN")
-        and selector=="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
-        and source=="ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN"
-        and "legacy field name" in str(us_return_latest.get("selection_metric_semantics") or "")
-        and "not a calibrated future-return forecast" in str(us_return_latest.get("selection_metric_semantics") or "")
-    )
-    # Frozen historical ledger rows are immutable by design. Accept the prior
-    # contract only when the row itself carries the audited semantic disclaimer.
-    assert current_contract or legacy_frozen_contract
+    # Persisted decision rows are cryptographically frozen and may predate the
+    # current enum names. Production smoke validates their integrity and semantic
+    # guard, while deterministic route smoke validates the current selector enums.
+    metric_semantics=str(us_return_latest.get("selection_metric_semantics") or "")
+    assert "annualized historical strategy state-return estimate" in metric_semantics
+    assert "not a calibrated future-return forecast" in metric_semantics
     assert len(us_return_latest["target_strategy_weights"])==1
     assert abs(sum(us_return_latest["target_strategy_weights"].values())-1.0)<1e-12
     assert us_return_latest["selected_strategy_id"] in us_return_latest["max_return_tie_set"]
