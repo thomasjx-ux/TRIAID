@@ -224,7 +224,8 @@ try:
     dedup_state=dedup_scheduler._market_state("CN")
     dedup_state["close_done"]=False
     dedup_state["close_event_id"]=None
-    dedup_state["last_close_signature"]=None
+    dedup_state["last_close_signature"]=dedup_engine.observations.snapshot_signature(postclose_snapshot)
+    dedup_state["close_wait_signature"]=dedup_state["last_close_signature"]
     dedup_scheduler._save()
     dedup_scheduler._postclose_settled=lambda market_id: True
     dedup_final=dedup_scheduler._close(
