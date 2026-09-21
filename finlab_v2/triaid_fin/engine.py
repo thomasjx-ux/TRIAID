@@ -127,6 +127,13 @@ class EvolutionLabEngine:
             self.store.save_run(run)
         return run
 
+    @staticmethod
+    def _complete_daily_evidence_run(run:RunRecord)->bool:
+        # Legacy/manual runs without this flag remain eligible. Live runs explicitly
+        # marked False are provisional intraday research and must not advance daily
+        # lifecycle, prospective experiments, or posterior evaluation.
+        return (run.market.metadata or {}).get("daily_bar_complete") is not False
+
     def _previous_group_for(self,market_id:str,exclude_run_id:str|None=None):
         rows=[
             r for r in self.all_runs()
@@ -134,6 +141,7 @@ class EvolutionLabEngine:
             and r.market.market_id.upper()==market_id.upper()
             and r.strategy_group is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+            and self._complete_daily_evidence_run(r)
         ]
         return rows[-1].strategy_group if rows else None
 
@@ -147,6 +155,7 @@ class EvolutionLabEngine:
                 and r.market.market_id.upper()==request.market.market_id.upper()
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_states
+                and self._complete_daily_evidence_run(r)
                 and (
                     not current_mode
                     or str(r.market.metadata.get("experiment_mode") or "")==current_mode
@@ -178,6 +187,7 @@ class EvolutionLabEngine:
                 request.market.market_id.upper()=="CN"
                 and str(request.market.metadata.get("experiment_mode") or "").upper()=="CN_WORST_POOL_RESCUE"
                 and bool(group.diagnostics.get("experiment_available",True))
+                and request.market.metadata.get("daily_bar_complete") is not False
             ):
                 profile=self.strategy_evolution.active("CN")
                 prospective=self.prospective_experiment.register(
@@ -203,7 +213,7 @@ class EvolutionLabEngine:
                 run.evaluation=self.evaluation.pending()
                 run.diagnostic_summary={
                     "experiment_mode":request.market.metadata.get("experiment_mode"),
-                    "projection_basis":"CURRENT_EXPECTED_NET_RETURN_NOT_REALIZED",
+                    "projection_basis":"MULTI_WINDOW_ANNUALIZED_HISTORICAL_STATE_RETURN_ESTIMATE_NOT_CALIBRATED_FORECAST",
                     "projected_baseline_expected_return":projected_baseline,
                     "projected_triaid_expected_return":projected_after,
                     "projected_excess_expected_return":projected_after-projected_baseline,
@@ -247,6 +257,7 @@ class EvolutionLabEngine:
             if r.market.market_id.upper()==market_id.upper()
             and r.status=="DECISION_READY_AWAITING_OUTCOME"
             and r.market.as_of==previous_as_of
+            and self._complete_daily_evidence_run(r)
         ]
         for run in candidates:
             self.submit_outcome(
@@ -271,6 +282,8 @@ class EvolutionLabEngine:
             local_tz=ZoneInfo("America/New_York" if market_id=="US" else "Asia/Shanghai")
             local_today=datetime.now(local_tz).date().isoformat()
             daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or str(snapshot.as_of)<local_today
+            snapshot.metadata["daily_bar_complete"]=bool(daily_bar_complete)
+            snapshot.metadata["evidence_state"]="COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY"
             recovery_outcome=None
             recovery_decision=None
             us_return_outcome=None
@@ -335,7 +348,7 @@ class EvolutionLabEngine:
             if existing_decisions:
                 existing=existing_decisions[-1]
                 prospective_bootstrap=None
-                if market_id=="CN":
+                if market_id=="CN" and self._complete_daily_evidence_run(existing):
                     prior_rows=[
                         r for r in self.all_runs()
                         if r.run_id!=existing.run_id
@@ -406,21 +419,24 @@ class EvolutionLabEngine:
                     self.store.save_run(run)
                 return
 
-            resolved=self._resolve_previous_period(
-                market_id,
-                prepared["previous_as_of"],
-                prepared["realized_returns_from_previous_period"],
-            )
+            resolved=[]
             prospective_observation=None
-            if market_id=="CN":
-                prospective_observation=self.prospective_experiment.observe_period(
+            if daily_bar_complete:
+                resolved=self._resolve_previous_period(
+                    market_id,
                     prepared["previous_as_of"],
                     prepared["realized_returns_from_previous_period"],
                 )
+                if market_id=="CN":
+                    prospective_observation=self.prospective_experiment.observe_period(
+                        prepared["latest_as_of"],
+                        prepared["realized_returns_from_previous_period"],
+                    )
             states=self.population_state.apply(
                 market_id,
                 prepared["strategy_states"],
                 observation_key=f"DAILY:{snapshot.as_of}",
+                advance_observation=daily_bar_complete,
             )
             request=RunRequest(
                 market=snapshot,
@@ -468,6 +484,8 @@ class EvolutionLabEngine:
                     "us_return_max_decision_hash":us_route_decision.get("decision_hash") if us_route_decision else None,
                     "us_return_max_decision_status":us_route_decision.get("decision_status") if us_route_decision else None,
                     "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
+                    "daily_bar_complete":daily_bar_complete,
+                    "evidence_state":"COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY",
                 }
                 self.store.save_run(run)
         except Exception as exc:
@@ -521,6 +539,7 @@ class EvolutionLabEngine:
             and r.strategy_group is not None
             and r.triaid_decision is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+            and self._complete_daily_evidence_run(r)
         ]
         return rows[-1] if rows else None
 
