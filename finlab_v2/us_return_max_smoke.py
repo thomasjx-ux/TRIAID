@@ -109,6 +109,13 @@ generic=TriaidDecision(
 )
 
 route=USReturnMaxRoute()
+tie_winner,tie_set=route._strict_max_strategy([
+    StrategyState(strategy_id="P09_SHOCK_GUARD",lifecycle="active",expected_net_return=0.40,risk=0.20,uncertainty=0.02,oos_marginal_value=0.40),
+    StrategyState(strategy_id="P00_BUY_HOLD",lifecycle="active",expected_net_return=0.40,risk=0.20,uncertainty=0.02,oos_marginal_value=0.40),
+])
+assert tie_set==["P00_BUY_HOLD","P09_SHOCK_GUARD"]
+assert tie_winner.strategy_id=="P00_BUY_HOLD"
+
 decision=route.decide(panel,group,generic,states,"OPEN")
 assert decision["route_version"]=="us-return-max-route@0.2.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
