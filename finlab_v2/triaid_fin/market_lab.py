@@ -506,8 +506,8 @@ def build_strategy_states(
                 metrics=metrics,
                 recent_returns=[float(x) for x in rs[-252:]],
                 selection_reason=BilingualText(
-                    zh=f"根据21/63/126/252日真实净收益轨迹，当前年化预期净回报估计为 {expected:.2%}。",
-                    en=f"Based on 21/63/126/252-day realized net-return history, current annualized expected net return is estimated at {expected:.2%}.",
+                    zh=f"根据21/63/126/252日策略已实现净收益轨迹，将各窗口日均收益×252年化并按固定窗口权重汇总，当前多周期年化状态收益估计为 {expected:.2%}。该值不是标的未来涨跌幅预测。",
+                    en=f"From realized 21/63/126/252-day strategy net returns, each window is annualized as mean daily return × 252 and combined with fixed window weights. The current multi-window annualized state-return estimate is {expected:.2%}. It is not a forecast of the underlying asset's future price move.",
                 ),
             )
         )
