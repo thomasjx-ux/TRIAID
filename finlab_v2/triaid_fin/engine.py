@@ -839,17 +839,30 @@ class EvolutionLabEngine:
             }
             return self.evolution.record_validation(version,receipt)
         parent=self.evolution.get(candidate.parent_version)
+        if not manifest.get("development_run_ids_by_market") or not manifest.get("reserved_holdout_run_ids_by_market"):
+            receipt={
+                "receipt_id":f"COREVAL-{version}-{uuid4().hex[:12]}",
+                "passed":False,
+                "replay_pass":False,
+                "holdout_pass":False,
+                "shadow_pass":False,
+                "audit_pass":False,
+                "reason":"LEGACY_UNSTRATIFIED_CANDIDATE_EVIDENCE",
+            }
+            return self.evolution.record_validation(version,receipt)
+
         run_map={r.run_id:r for r in self.all_runs()}
         dev=[run_map[x] for x in manifest.get("development_run_ids",[]) if x in run_map]
         holdout=[run_map[x] for x in manifest.get("reserved_holdout_run_ids",[]) if x in run_map]
         created_at=str(manifest.get("created_at") or "")
+        known_ids=set(manifest.get("development_run_ids",[]))|set(manifest.get("reserved_holdout_run_ids",[]))
         shadow=[
             r for r in self.all_runs()
             if created_at and r.created_at>created_at
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
-            and r.run_id not in set(manifest.get("development_run_ids",[]))
-            and r.run_id not in set(manifest.get("reserved_holdout_run_ids",[]))
+            and str(r.market.market_id).upper() in {"US","CN"}
+            and r.run_id not in known_ids
         ]
 
         def replay(rows:list[RunRecord])->dict:
@@ -884,21 +897,31 @@ class EvolutionLabEngine:
                 "valid":valid and len(cand_vals)==len(rows),
             }
 
+        def replay_by_market(rows:list[RunRecord])->dict:
+            return {
+                market:replay([r for r in rows if str(r.market.market_id).upper()==market])
+                for market in ("US","CN")
+            }
+
         dev_result=replay(dev)
         holdout_result=replay(holdout)
         shadow_result=replay(shadow)
-        replay_pass=bool(
-            dev_result["valid"] and dev_result["count"]>=1
-            and dev_result["candidate_mean"]>=dev_result["parent_mean"]-1e-12
-        )
-        holdout_pass=bool(
-            holdout_result["valid"] and holdout_result["count"]>=1
-            and holdout_result["candidate_mean"]>=holdout_result["parent_mean"]-1e-12
-        )
-        shadow_pass=bool(
-            shadow_result["valid"] and shadow_result["count"]>=5
-            and shadow_result["candidate_mean"]>=shadow_result["parent_mean"]-1e-12
-        )
+        dev_by_market=replay_by_market(dev)
+        holdout_by_market=replay_by_market(holdout)
+        shadow_by_market=replay_by_market(shadow)
+
+        def nondegrading(result:dict,min_count:int)->bool:
+            return bool(
+                result["valid"] and result["count"]>=min_count
+                and result["candidate_mean"] is not None
+                and result["parent_mean"] is not None
+                and result["candidate_mean"]>=result["parent_mean"]-1e-12
+            )
+
+        replay_pass=all(nondegrading(dev_by_market[m],1) for m in ("US","CN"))
+        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in ("US","CN"))
+        shadow_min_per_market=5
+        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN"))
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
             and candidate.risk_penalty>=0
@@ -916,9 +939,12 @@ class EvolutionLabEngine:
             "development":dev_result,
             "holdout":holdout_result,
             "shadow":shadow_result,
-            "shadow_min_runs":5,
+            "development_by_market":dev_by_market,
+            "holdout_by_market":holdout_by_market,
+            "shadow_by_market":shadow_by_market,
+            "shadow_min_runs_per_market":shadow_min_per_market,
             "candidate_parent":candidate.parent_version,
-            "validation_discipline":"INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
+            "validation_discipline":"INTERNAL_MARKET_STRATIFIED_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW; NO_CROSS_MARKET_MASKING",
         }
         return self.evolution.record_validation(version,receipt)
 
