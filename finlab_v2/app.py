@@ -109,19 +109,31 @@ def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
     market_id = market_id.upper()
     if market_id not in {"US", "CN"}:
         raise HTTPException(status_code=400, detail="market_id must be US or CN")
-    run = engine.create_pending_live_run(market_id)
-    background_tasks.add_task(engine.execute_live, run.run_id, market_id)
-    return {"run_id": run.run_id, "status": run.status, "market_id": market_id}
+    run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
+    background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
+    return {
+        "run_id": run.run_id,
+        "status": run.status,
+        "market_id": market_id,
+        "run_scope":"MANUAL_PREVIEW",
+        "evidence_eligible":False,
+    }
 
 
 @app.post("/api/live/run-all", status_code=202)
 def live_run_all(background_tasks: BackgroundTasks) -> dict:
     runs = []
     for market_id in ("US", "CN"):
-        run = engine.create_pending_live_run(market_id)
-        background_tasks.add_task(engine.execute_live, run.run_id, market_id)
-        runs.append({"run_id": run.run_id, "status": run.status, "market_id": market_id})
-    return {"runs": runs}
+        run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
+        background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
+        runs.append({
+            "run_id": run.run_id,
+            "status": run.status,
+            "market_id": market_id,
+            "run_scope":"MANUAL_PREVIEW",
+            "evidence_eligible":False,
+        })
+    return {"runs": runs,"run_scope":"MANUAL_PREVIEW","evidence_eligible":False}
 
 
 @app.post("/api/run", status_code=202)
