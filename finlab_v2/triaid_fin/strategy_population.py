@@ -111,9 +111,9 @@ class StrategyPopulationModule:
     def rules(self, market_id: str) -> dict:
         cfg = self.config_for(market_id)
         result = asdict(cfg)
-        result["selection_objective"] = "maximize robust expected group net return subject to lifecycle, liquidity, capacity, concentration and redundancy constraints"
+        result["selection_objective"] = "maximize robust multi-window annualized state-return score subject to lifecycle, liquidity, capacity, concentration and redundancy constraints"
         result["group_optimizer"] = "return-first group construction with versioned marginal-value, redundancy and switching constraints; unvalidated diversity penalties remain disabled"
-        result["switch_rule"] = "replace the current group only when robust expected improvement exceeds annualized switching cost, uncertainty guard and switching hurdle"
+        result["switch_rule"] = "replace the current group only when improvement in the robust state-return score exceeds annualized switching cost, uncertainty guard and switching hurdle"
         result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive experimental weight; SHADOW receives no exposure"
         result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
         result["empty_group_allowed"] = True
@@ -124,7 +124,7 @@ class StrategyPopulationModule:
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="strictly maximize current expected net return across ACTIVE strategies; break exact return ties by lower estimated cost, risk, uncertainty and deterministic strategy ID, then validate theoretical and executable return separately under four USD capital sleeves"
+            result["research_experiment_objective"]="strictly maximize the current multi-window annualized state-return estimate across ACTIVE strategies; break exact score ties by lower estimated cost, risk, uncertainty and deterministic strategy ID, then validate posterior theoretical and simulated-execution return separately under four USD capital sleeves"
             result["primary_route_selector"]="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
             result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
         return result
@@ -383,8 +383,8 @@ class StrategyPopulationModule:
             definition=self.definition(state.strategy_id)
             robust=self._robust_return(state,cfg)
             reasons[state.strategy_id]=BilingualText(
-                zh=f"逆向压力实验第 {rank} 位：{definition.name.zh if definition else state.strategy_id} 在当前可见数据下的稳健预期净回报为 {robust:.2%}，位于可交易策略的最差端。本次入选不是推荐，而是故意构造不利起点，用于检验 TRIAID 能挽回多少损失。",
-                en=f"Adversarial stress rank {rank}: {definition.name.en if definition else state.strategy_id} has robust expected net return {robust:.2%}, placing it among the weakest currently tradable strategies. Selection is intentionally adverse, not a recommendation, so TRIAID loss-reduction can be measured.",
+                zh=f"逆向压力实验第 {rank} 位：{definition.name.zh if definition else state.strategy_id} 在当前可见数据下的稳健状态收益分数为 {robust:.2%}，位于可交易策略的最差端。本次入选不是推荐，而是故意构造不利起点，用于检验 TRIAID 能挽回多少损失。",
+                en=f"Adversarial stress rank {rank}: {definition.name.en if definition else state.strategy_id} has robust state-return score {robust:.2%}, placing it among the weakest currently tradable strategies. Selection is intentionally adverse, not a recommendation, so TRIAID loss-reduction can be measured.",
             )
         if cash is not None:
             reasons["P28_CASH"]=BilingualText(
@@ -532,8 +532,8 @@ class StrategyPopulationModule:
                     zh_reason="并通过风险、流动性、容量与收益约束后进入当前收益优先策略群。"
                     en_reason="and enters the return-first group after risk, liquidity, capacity and return constraints."
                 reasons[sid]=BilingualText(
-                    zh=f"{definition.name.zh if definition else sid} 的稳健预期净回报为 {self._robust_return(s,cfg):.2%}，{zh_reason}",
-                    en=f"{definition.name.en if definition else sid} has robust expected net return {self._robust_return(s,cfg):.2%} {en_reason}",
+                    zh=f"{definition.name.zh if definition else sid} 的稳健状态收益分数为 {self._robust_return(s,cfg):.2%}，{zh_reason}",
+                    en=f"{definition.name.en if definition else sid} has robust state-return score {self._robust_return(s,cfg):.2%} {en_reason}",
                 )
 
         return StrategyGroup(
