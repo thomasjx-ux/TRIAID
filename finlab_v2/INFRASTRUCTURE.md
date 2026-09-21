@@ -66,36 +66,39 @@ until a separately validated intervention policy exists.
 ### storage_backend.py
 Owns physical storage backend selection.
 
-RunStore, Observation, Population State and Evolution should depend on the storage contract, not on a specific persistence technology.
+RunStore, Observation, Population State and Evolution depend on the storage contract, not on a specific persistence technology.
 
-Current backend:
-- file
+Supported backends:
+- supabase: current production backend; persistent across Railway container replacement
+- file: local/offline fallback; persistent only when its root is on a durable mounted volume
 
-Durability:
-- PERSISTENT when mounted under /data
+Production durability:
+- TRIAID_STORAGE_BACKEND=supabase
+- persistence is verified by the external Supabase backend health/probe contract
+- Railway local volumes are not required for the current production service
+
+File-backend durability:
+- PERSISTENT when rooted under a verified durable mount such as /data
 - EPHEMERAL otherwise
 
-Future database/object-storage backends should implement the same external behavior without changing Engine callers.
+New storage implementations must preserve the same external behavior without changing Engine callers.
 
 ## Deployment
 
-Current production service remains the validated image-based Railway runtime.
+Current production service remains the validated image-based Railway runtime. The start command downloads one explicit Git commit and logs TRIAID_SOURCE_COMMIT before starting the application. The deployed source revision is also exposed through /health and /api/status via the deployment identity contract.
 
 A GitHub-native sidecar deployment was tested but Railway bound the service to the repository default branch (main) instead of the requested research branch, so it was not promoted. Do not change repository default branch merely to satisfy deployment convenience.
 
+Production Python dependencies are exact-version pinned in requirements.txt. Dependency upgrades are treated as audited code changes: update the pins, run the full CI regression suite, then redeploy the explicit validated commit.
+
 ## External infrastructure dependency
 
-Railway persistent Volume must be created and mounted at:
+Current production persistence is external Supabase storage, not a Railway volume. Required production configuration includes:
+- TRIAID_STORAGE_BACKEND=supabase
+- TRIAID_SUPABASE_PERSISTENCE_URL
+- TRIAID_SUPABASE_TOKEN
 
-/data
-
-The application automatically switches to:
-
-/data/triaid_fin_v2
-
-when the mount exists.
-
-Without the mount, runs, SHADOW evidence, observations, transitions and evolution ledgers are ephemeral across container replacement.
+A Railway /data volume is only required when intentionally operating the file backend with durable local storage.
 
 ## Required regression gates
 
