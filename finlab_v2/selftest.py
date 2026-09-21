@@ -215,6 +215,11 @@ try:
     assert fourth_obs["transition"] is None
     assert fourth_obs["observation"]["provider_boundary"] is True
     assert fourth_obs["observation"]["previous_provider"]=="selftest"
+    stale_obs={**obs2,"source_latest_ts":1234568000,"latest":{"SPY":{"close":99.0,"volume":900.0}}}
+    rejected_stale=engine.record_market_observation(stale_obs)
+    assert rejected_stale["recorded"] is False
+    assert rejected_stale["reason"]=="STALE_SOURCE_TIMESTAMP"
+    assert rejected_stale["max_source_latest_ts"]==1234568490
     assert engine.market_observation_status()["count"]==3
     assert engine.market_observation_status()["transition_count"]==1
     assert len(engine.market_observations("US","INTRADAY",10))==3
