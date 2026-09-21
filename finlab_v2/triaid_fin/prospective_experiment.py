@@ -228,7 +228,7 @@ class ProspectiveExperimentProtocol:
                     "CURRENT_EXPECTED_RETURN": "rank only by current expected net return",
                     "MOMENTUM_20": "rank by trailing 20-observation compounded strategy return; horizon inherited from the existing P13 20-day momentum rule",
                     "LOW_RISK": "rank lower-risk strategies first; aligned with the existing inverse-volatility/risk-control family",
-                    "TRIAID_STATE_TRANSITION": "coefficient-free Borda aggregation of current state, state direction when available, risk and uncertainty",
+                    "TRIAID_STATE_TRANSITION": "coefficient-free Borda aggregation of current expected return, 20-observation momentum, state direction when available, risk and uncertainty",
                 },
             },
             "pool": pool,
@@ -305,7 +305,7 @@ class ProspectiveExperimentProtocol:
     def observe_period(self, as_of: str, realized_returns: Dict[str, float]) -> dict:
         updated = []
         for experiment in self.state["experiments"]:
-            if experiment.get("status") not in {"OPEN", "COMPLETE"}:
+            if experiment.get("status") != "OPEN":
                 continue
             if as_of < str(experiment.get("market_as_of") or ""):
                 continue
@@ -315,12 +315,19 @@ class ProspectiveExperimentProtocol:
             pool = list(experiment.get("pool", []))
             missing = [sid for sid in pool if sid not in realized_returns]
             if missing:
-                experiment.setdefault("incomplete_observations", []).append({
-                    "as_of": as_of,
-                    "missing_strategy_ids": missing,
-                    "recorded_at": utc_now(),
-                })
-                updated.append(experiment["experiment_id"])
+                incomplete=experiment.setdefault("incomplete_observations", [])
+                already=any(
+                    row.get("as_of")==as_of
+                    and row.get("missing_strategy_ids")==missing
+                    for row in incomplete
+                )
+                if not already:
+                    incomplete.append({
+                        "as_of": as_of,
+                        "missing_strategy_ids": missing,
+                        "recorded_at": utc_now(),
+                    })
+                    updated.append(experiment["experiment_id"])
                 continue
 
             experiment.setdefault("outcomes", []).append({
