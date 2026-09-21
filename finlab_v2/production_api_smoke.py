@@ -84,6 +84,7 @@ expected_paths={
     "/api/market-data/status","/api/market-data/capabilities",
     "/api/market-data/providers","/api/market-data/products",
     "/api/market-data/live-indicators/{market_id}","/api/market-data/activity/{market_id}",
+    "/api/market-data/strategy-context/{market_id}",
     "/api/market-data/trading-calendar",
     "/api/market-data/trading-calendar/{market_id}",
     "/api/market-data/trading-calendar-sync",
@@ -298,6 +299,20 @@ for market in ("US","CN"):
     assert refreshed["market_id"]==market
     snap=call("GET",f"/api/market-data/snapshot/{market}/DAILY",timeout=30)
     assert snap["market_id"]==market and snap["points"]>=300
+    context=call("GET",f"/api/market-data/strategy-context/{market}",timeout=30)
+    assert context["market_id"]==market
+    assert context["currency"]==("USD" if market=="US" else "CNY")
+    assert context["last_trading_day"]
+    assert context["instruments"]
+    assert len(context["strategies"])==(29 if market=="US" else 33)
+    assert context["strategies"]["P28_CASH"]["assets"]==[]
+    assert abs(float(context["strategies"]["P28_CASH"]["cash_weight"])-1.0)<1e-12
+    for sid,row in context["strategies"].items():
+        assert 0.0<=float(row["cash_weight"])<=1.0+1e-9
+        for asset in row["assets"]:
+            assert float(asset["latest_price"])>0.0
+            assert "last_trading_day_change" in asset
+            assert 0.0<float(asset["weight"])<=1.0+1e-9
 
 # On-demand instruments, including intraday modes.
 instrument_cases=[
