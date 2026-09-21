@@ -930,8 +930,8 @@ function renderUSReturnMax(report){
  el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
  el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
  el('usReturnMaxNote').textContent=lang==='zh'
-  ? '美股主路线不使用A股反转恢复逻辑，而是冻结当前收益优先策略群，再展开成 SPY/QQQ/IWM/TLT/GLD 的可执行头寸。四个美元账户共享同一决策，只让资金规模改变成交容量和冲击成本。理论策略收益、通用 Core 对照、SPY 对照与实际资金袖套收益分开记录。'
-  : 'The US primary route does not reuse the CN recovery thesis. It freezes the current return-first strategy group and expands it into executable SPY/QQQ/IWM/TLT/GLD exposures. All four USD sleeves share the same decision; only capital size changes capacity and impact. Theoretical strategy returns, generic-Core control, SPY control, and executable sleeve returns are reported separately.';
+  ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前预期净收益最高者；收益并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的可执行头寸。四个美元账户共享同一冻结决策，只让资金规模改变成交容量和冲击成本。'
+  : 'The US primary route does not reuse the CN recovery thesis. It strictly selects the ACTIVE strategy with the highest current expected net return; exact return ties are broken by lower execution cost, risk, uncertainty, then deterministic strategy ID, before expansion into executable SPY/QQQ/IWM/TLT/GLD exposures. All four USD sleeves share the same frozen decision; only capital size changes capacity and impact.';
  const rw=d.target_strategy_weights||{};
  const gw=d.generic_core_control_weights||{};
  const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
@@ -1109,7 +1109,9 @@ async function refreshAll(){
    el('baseReturnSub').textContent=T[lang].baseSub;
    el('gainLabel').textContent=T[lang].gain;
    el('gainSub').textContent=T[lang].gainSub;
-   el('strategyTitle').textContent=T[lang].strategies;
+   el('strategyTitle').textContent=m==='US'
+    ? (lang==='zh'?'通用 Core 对照策略群（非 Return-Max 主路线）':'Generic Core Control Group (not the Return-Max primary route)')
+    : T[lang].strategies;
   }
   const selected=cards.filter(x=>x.selected);
   const latest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
