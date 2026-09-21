@@ -19,8 +19,17 @@ assert "data-tip=" in html
 assert "SHADOW：只记录真实未来表现进行前瞻验证" in html
 assert 'id="candidatePoolTitle"' in html
 assert 'id="candidateRows"' in html
+assert 'id="marketPulse"' in html
+assert 'id="activityPulse"' in html
+assert 'id="indexRows"' in html
+assert 'id="commandLog"' in html
+assert "refreshLiveWindows" in html
+assert "/api/market-data/live-indicators/" in html
+assert "/api/market-data/activity/" in html
+assert "CN_WORST_POOL_RESCUE" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
+assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')
 assert html.index('id="strategyTitle"') < html.index('id="dailyTitle"')
 assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
@@ -50,5 +59,5 @@ print({
     "date":d["date"],
     "strategy_cards":len(cards),
     "selected":sum(1 for x in cards if x["selected"]),
-    "ui_mode":"comparison-then-strategy-first",
+    "ui_mode":"comparison-live-indicators-then-strategy",
 })
