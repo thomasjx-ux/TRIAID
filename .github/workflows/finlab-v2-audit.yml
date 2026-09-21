@@ -3,6 +3,7 @@ name: TRIAID FIN v2 Full Audit CI
 on:
   push:
     branches:
+      - main
       - backend-full-audit-20260921
     paths:
       - "finlab_v2/**"
@@ -47,3 +48,4 @@ jobs:
           python strategy_evolution_validation_smoke.py
           python ui_smoke.py
           python production_smoke_contract_static.py
+          python deployment_reproducibility_smoke.py
