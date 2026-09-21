@@ -18,9 +18,6 @@ jobs:
     env:
       TRIAID_STORAGE_BACKEND: file
       TRIAID_DATA_DIR: /tmp/triaid-fin-v2-ci
-      TRIAID_DATA_AUTOMATION: "0"
-      TRIAID_CALENDAR_SYNC: "0"
-      TRIAID_DECISION_AUTOMATION: "0"
       TRIAID_ADMIN_TOKEN: ci-admin-token
     steps:
       - uses: actions/checkout@v4
