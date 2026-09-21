@@ -133,7 +133,8 @@ for market in ("US","CN"):
     daily=call("GET",f"/api/daily?market_id={market}")
     assert isinstance(daily,dict)
     if market=="CN":
-        assert daily["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"\n        assert str(daily["prospective_experiment"]["protocol_version"]).startswith("cn-prospective-controls@")
+        assert daily["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"
+        assert str(daily["prospective_experiment"]["protocol_version"]).startswith("cn-prospective-controls@")
         assert daily["prospective_experiment"]["strategy_determination"]
         assert "daily_fluctuation" in daily["prospective_experiment"]
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
