@@ -50,6 +50,7 @@ class EvolutionLabEngine:
         self.us_return_max_ledger=USReturnMaxLedger(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
+        self._live_lock=RLock()
         self._recover_stale_runs()
 
     def _recover_stale_runs(self)->None:
@@ -280,6 +281,13 @@ class EvolutionLabEngine:
         return resolved
 
     def execute_live(self,run_id:str,market_id:str)->None:
+        # Live runs mutate shared lifecycle/evidence ledgers. Serialize them so
+        # API-triggered runs and scheduler/automation runs cannot interleave
+        # read-modify-write state in a single replica.
+        with self._live_lock:
+            return self._execute_live_locked(run_id,market_id)
+
+    def _execute_live_locked(self,run_id:str,market_id:str)->None:
         market_id=market_id.upper()
         try:
             profile=self.strategy_evolution.active(market_id)
