@@ -66,6 +66,12 @@ class MarketObservationStore:
                 "source_latest_ts":source_latest_ts,
             }
         if self.index.get(key)==signature:
+            if (
+                current_ts is not None
+                and (persisted_watermark is None or current_ts>persisted_watermark)
+            ):
+                self.watermarks[key]=current_ts
+                self.store.save_json(self.watermark_name,self.watermarks)
             return {
                 "recorded":False,
                 "reason":"DUPLICATE_SOURCE_TIMESTAMP",
