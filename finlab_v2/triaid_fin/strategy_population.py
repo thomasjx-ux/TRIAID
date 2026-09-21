@@ -125,7 +125,7 @@ class StrategyPopulationModule:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
             result["research_experiment_objective"]="strictly maximize the current multi-window annualized state-return estimate across ACTIVE strategies; break exact score ties by lower estimated cost, risk, uncertainty and deterministic strategy ID, then validate posterior theoretical and simulated-execution return separately under four USD capital sleeves"
-            result["primary_route_selector"]="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+            result["primary_route_selector"]="STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
             result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
         return result
 
@@ -266,7 +266,7 @@ class StrategyPopulationModule:
             and s.liquidity_ok and s.capacity_ok and s.risk_ok and s.concentration_ok
             and self._robust_return(s,cfg)>0
         ]
-        feasible=sorted(feasible,key=lambda s:self._robust_return(s,cfg),reverse=True)
+        feasible=sorted(feasible,key=lambda s:(-self._robust_return(s,cfg),s.strategy_id))
 
         selected:List[StrategyState]=[]
         marginal_scores:Dict[str,float]={}
@@ -402,14 +402,14 @@ class StrategyPopulationModule:
             "stress_pool_size":len(selected),
             "baseline_cash_weight":0.0,
             "baseline_projected_robust_return":baseline_projected,
-            "ranking_metric":"robust_expected_net_return_ascending",
+            "ranking_metric":"robust_multi_window_state_return_score_ascending",
             "weighting_rule":"equal_weight_no_future_outcome",
             "ranked_worst":[
                 {
                     "rank":i+1,
                     "strategy_id":s.strategy_id,
-                    "robust_expected_net_return":self._robust_return(s,cfg),
-                    "expected_net_return":float(s.expected_net_return),
+                    "robust_state_return_score":self._robust_return(s,cfg),
+                    "multi_window_annualized_state_return_estimate":float(s.expected_net_return),
                     "risk":float(s.risk),
                     "uncertainty":float(s.uncertainty),
                 }
@@ -469,6 +469,7 @@ class StrategyPopulationModule:
                     or not state_map[sid].risk_ok
                     or not state_map[sid].capacity_ok
                     or not state_map[sid].liquidity_ok
+                    or not state_map[sid].concentration_ok
                 )
             ]
             if not invalid:
