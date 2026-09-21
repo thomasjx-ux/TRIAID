@@ -11,7 +11,7 @@ from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
-from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
+from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -693,6 +693,9 @@ class EvolutionLabEngine:
 
     def market_data_instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
         return market_data_instrument_series(market_id,symbol,mode)
+
+    def strategy_market_context(self,market_id:str)->dict:
+        return strategy_market_context(market_id)
 
     def record_market_observation(self,snapshot:dict)->dict:
         return self.observations.record(snapshot)
