@@ -605,12 +605,12 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
           <th id="rwthAction">研究意见</th>
           <th id="rwthTarget">目标权重</th>
           <th id="rwthChange">本轮调整</th>
-          <th id="rwthDrawdown">当前回撤</th>
+          <th id="rwthDrawdown">252日回撤</th>
           <th id="rwthDirection">状态方向</th>
-          <th id="rwthHorizon">预计反转</th>
-          <th id="rwthSpeed">预计恢复速度/日</th>
-          <th id="rwthHitEdge">恢复率优势</th>
-          <th id="rwthExpected">历史相似状态收益估计</th>
+          <th id="rwthHorizon">首个正向历史窗口</th>
+          <th id="rwthSpeed">历史收益优势速度/日</th>
+          <th id="rwthHitEdge">恢复率优势×样本支持</th>
+          <th id="rwthExpected">历史相似状态平均前向收益</th>
           <th id="rwthSamples">样本</th>
         </tr></thead>
         <tbody id="recoveryOpinionRows"></tbody>
@@ -717,7 +717,7 @@ const T={
   prospective:'A股前瞻对照实验',prospectiveDays:'已观察交易日',prospectiveHold:'最差池累计收益',prospectiveTriaid:'TRIAID冻结配置累计收益',prospectiveGap:'TRIAID相对最差池',
   prospectiveStrategy:'策略确定与恢复排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID预测名次',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
   recoveryWave:'TRIAID 二阶恢复波段决策',recoveryCash:'现金剩余',recoveryPrevDays:'上一轮已观察',recoveryPrevReturn:'上一轮实际收益',recoveryPrevGap:'相对等权对照',
-  recoveryOpinion:'当前冻结研究配置意见',recoveryReview:'上一轮决策真实回顾',product:'产品',action:'研究意见',target:'目标权重',change:'本轮调整',drawdown:'当前回撤',direction:'状态方向',horizon:'预计反转',speed:'预计恢复速度/日',hitEdge:'恢复率优势',expected:'历史相似状态收益估计',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
+  recoveryOpinion:'当前冻结研究配置意见',recoveryReview:'上一轮决策真实回顾',product:'产品',action:'研究意见',target:'目标权重',change:'本轮调整',drawdown:'252日回撤',direction:'状态方向',horizon:'首个正向历史窗口',speed:'历史收益优势速度/日',hitEdge:'恢复率优势×样本支持',expected:'历史相似状态平均前向收益',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
   capitalSleeve:'四档人民币资金规模容量实验',capitalRealized:'上一轮四档资金袖套模拟执行回顾',capital:'起始资金',invested:'目标投入',participation:'单日ADV占比',days:'最少成交天数',cost:'预计往返成本',pnl:'模型估计波段净利润',netReturn:'模型估计净收益率',fill:'模拟成交比例',equity:'模拟当前净值',realizedPnl:'模拟净损益',realizedReturn:'模拟净收益率',executionCost:'累计模型执行成本',remaining:'未成交目标',
   strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'多周期年化收益估计',risk:'风险',
   before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
@@ -739,7 +739,7 @@ const T={
   prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
   prospectiveStrategy:'Strategy Determination and Recovery Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID predicted rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
   recoveryWave:'TRIAID Second-Order Recovery Wave Decision',recoveryCash:'Cash residual',recoveryPrevDays:'Prior decision observed days',recoveryPrevReturn:'Prior realized return',recoveryPrevGap:'Vs equal-weight control',
-  recoveryOpinion:'Current Frozen Research Allocation Opinion',recoveryReview:'Prior Decision Realized Review',product:'Product',action:'Research opinion',target:'Target weight',change:'This decision change',drawdown:'Current drawdown',direction:'State direction',horizon:'Expected reversal',speed:'Expected recovery/day',hitEdge:'Recovery-rate edge',expected:'Historical-analogue return estimate',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
+  recoveryOpinion:'Current Frozen Research Allocation Opinion',recoveryReview:'Prior Decision Realized Review',product:'Product',action:'Research opinion',target:'Target weight',change:'This decision change',drawdown:'252-day drawdown',direction:'State direction',horizon:'First positive historical window',speed:'Historical return-edge/day',hitEdge:'Recovery-rate edge × support',expected:'Historical-analogue mean forward return',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
   capitalSleeve:'Four-Tier CNY Capital Capacity Experiment',capitalRealized:'Prior Four-Sleeve Simulated Execution Review',capital:'Starting capital',invested:'Target invested',participation:'One-day ADV share',days:'Minimum execution days',cost:'Estimated round-trip cost',pnl:'Model-estimated wave net P&L',netReturn:'Model-estimated net return',fill:'Simulated fill ratio',equity:'Simulated current equity',realizedPnl:'Simulated net P&L',realizedReturn:'Simulated net return',executionCost:'Cumulative modeled execution cost',remaining:'Unfilled target',
   strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Multi-window annualized state estimate',risk:'Risk',
   before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
@@ -831,12 +831,12 @@ const TABLE_HEADER_TIPS={
   '产品':'当前恢复波段决策对应的 ETF 或可交易产品。',
   '研究意见':'本轮冻结的研究配置意见，例如增配、减配、持有或观察，不会自动发送券商订单。',
   '本轮调整':'目标权重相对上一轮目标权重的变化幅度。',
-  '当前回撤':'当前价格相对近期高点的回落幅度，用于描述恢复空间和压力。',
-  '状态方向':'当前状态更偏向修复、承压、转强、转弱或震荡的方向判断。',
-  '预计反转':'根据冻结时状态估计的潜在反转或恢复时间窗口。',
-  '预计恢复速度/日':'若进入恢复阶段，模型估计的平均每日恢复速度。',
-  '恢复率优势':'历史相似状态中，该产品相对对照的恢复成功率或恢复效率优势。',
-  '历史相似状态收益估计':'基于历史相似状态统计得到的收益参考。它不是保证收益，实际结果以后续完整交易日后验为准。',
+  '252日回撤':'当前价格相对近252个交易日最高价的回落幅度。',
+  '状态方向':'由5/20/63日动量的短中期加速度符号组合得到，映射为IMPROVING_FAST、IMPROVING、DETERIORATING或MIXED。',
+  '首个正向历史窗口':'在3/5/10/20日候选窗口中，历史相似状态首次同时满足正恢复率优势、正平均收益优势和正中位前向收益的最早窗口。它不是对未来反转日期的确定预测。',
+  '历史收益优势速度/日':'所选历史窗口的平均收益优势除以窗口交易日数，用于排序，不等同于未来每日价格上涨速度。',
+  '恢复率优势×样本支持':'历史相似状态正收益率相对无条件正收益率的优势，再乘以样本支持因子min(1,相似样本数/20)。',
+  '历史相似状态平均前向收益':'所选历史窗口内相似状态样本的平均前向收益。它是历史条件统计，不是保证收益，实际结果以后续完整交易日后验为准。',
   '样本':'形成当前历史相似状态统计所使用的有效样本数量。',
   '模型估计波段净利润':'按当前目标仓位、历史相似状态收益估计和模型化执行成本计算的波段净损益估计，未包含实际券商成交。',
   '模型估计净收益率':'基于历史相似状态收益估计并扣除模型化执行成本得到，不是实际成交后的账户收益率。',
@@ -888,12 +888,12 @@ const TABLE_HEADER_TIPS={
   'Rationale':'Evidence and rule used to select, rank or allocate the strategy at freeze time.',
   'Product':'ETF or executable product covered by the current recovery-wave decision.',
   'Researchopinion':'Frozen research allocation opinion such as add, reduce, hold or observe; no broker order is generated.',
-  'Currentdrawdown':'Current decline from a recent high, used as a proxy for pressure and recovery room.',
-  'Statedirection':'Current directional state such as recovering, weakening, strengthening, stressed or mixed.',
-  'Expectedreversal':'Estimated reversal or recovery horizon from the frozen state.',
-  'Expectedrecoveryspeed/day':'Estimated average daily recovery speed if a recovery phase develops.',
-  'Recoveryedge':'Historical recovery-rate or recovery-efficiency advantage relative to the control.',
-  'Historical-analoguereturnestimate':'Return reference derived from historical analogue states. It is not guaranteed; realized performance is evaluated only on subsequent complete trading days.',
+  '252-daydrawdown':'Current decline from the highest price over the latest 252 trading days.',
+  'Statedirection':'A label derived from the sign pattern of short-vs-medium and medium-vs-long momentum acceleration using 5/20/63-day momentum.',
+  'Firstpositivehistoricalwindow':'Earliest among the 3/5/10/20-day windows where historical analogues simultaneously have positive hit-rate edge, positive mean-return edge and positive median forward return. It is not a certain future reversal date.',
+  'Historicalreturn-edge/day':'Mean-return edge in the selected historical-analogue window divided by its trading-day horizon. It is a ranking statistic, not a forecast of daily price appreciation.',
+  'Recovery-rateedge×support':'Historical positive-rate edge versus the unconditional rate, multiplied by support min(1, analogue sample count / 20).',
+  'Historical-analoguemeanforwardreturn':'Mean forward return across the selected historical-analogue samples for that horizon. It is a historical conditional statistic, not a guaranteed future return.',
   'Samples':'Number of valid historical analogue samples supporting the current statistic.',
   'Model-estimatedswingnetP&L':'Model-estimated swing net P&L using target sizing, historical-analogue return estimates and modeled execution costs; no broker execution is implied.',
   'Model-estimatednetreturn':'Model-estimated swing net return after modeled execution costs; it is not realized broker-account performance.',
