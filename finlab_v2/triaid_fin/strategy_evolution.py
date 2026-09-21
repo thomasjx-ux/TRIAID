@@ -184,7 +184,17 @@ class StrategyEvolutionModule:
                 base_cost_bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0),
             )
             realized=run.evaluation.strategy_realized_returns
-            gross=sum(group.weights.get(k,0.0)*float(realized.get(k,0.0)) for k in group.weights)
+            required={
+                k for k,w in group.weights.items()
+                if k!="P28_CASH" and float(w)>1e-12
+            }
+            if any(k not in realized for k in required):
+                previous_group=None
+                continue
+            gross=sum(
+                group.weights.get(k,0.0)*(0.0 if k=="P28_CASH" else float(realized[k]))
+                for k in group.weights
+            )
             if previous_group is None:
                 turnover=sum(abs(v) for k,v in group.weights.items() if k!="P28_CASH")
             else:
@@ -200,6 +210,7 @@ class StrategyEvolutionModule:
             r for r in runs
             if r.market.market_id.upper()==market_id.upper()
             and r.evaluation and r.evaluation.status=="EVALUATED"
+            and (r.market.metadata or {}).get("daily_bar_complete") is not False
         ]
         if not rows:
             return {
@@ -286,14 +297,20 @@ class StrategyEvolutionModule:
         dev=rows[:dev_count]
         active=self.active(market_id)
         active_scores=self._simulate_profile(dev,active)
-        if not active_scores:
-            return {"created":False,"reason":"NO_SIMULATABLE_DEVELOPMENT_RUNS","diagnosis":diag}
+        if len(active_scores)!=len(dev):
+            return {
+                "created":False,
+                "reason":"INCOMPLETE_DEVELOPMENT_OUTCOMES_FOR_REPLAY",
+                "simulated":len(active_scores),
+                "required":len(dev),
+                "diagnosis":diag,
+            }
         active_mean=mean(active_scores)
 
         best=None
         for candidate in self._candidate_profiles(active):
             vals=self._simulate_profile(dev,candidate)
-            if not vals:
+            if len(vals)!=len(dev):
                 continue
             score=mean(vals)
             if best is None or score>best[0]:
