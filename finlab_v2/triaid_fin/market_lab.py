@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -463,10 +465,24 @@ def prepare_live_market(
     previous_ts=panel.ts[-2]
     as_of=datetime.fromtimestamp(latest_ts,tz=timezone.utc).date().isoformat()
     previous_as_of=datetime.fromtimestamp(previous_ts,tz=timezone.utc).date().isoformat()
+    phase=session_phase(panel.spec.market_id)
+    final_payload={
+        asset:{
+            "close":float(panel.close[asset][-1]),
+            "volume":float(panel.volume.get(asset,[0.0])[-1]),
+        }
+        for asset in sorted(panel.assets)
+    }
+    daily_content_fingerprint=hashlib.sha256(
+        json.dumps(final_payload,sort_keys=True,separators=(",",":")).encode("utf-8")
+    ).hexdigest()
+    snapshot_id=f"{panel.spec.market_id}:{latest_ts}"
+    if phase in {"POSTCLOSE","CLOSED"}:
+        snapshot_id=f"{snapshot_id}:FINAL:{daily_content_fingerprint[:12]}"
     snapshot=MarketSnapshot(
         market_id=panel.spec.market_id,
         as_of=as_of,
-        snapshot_id=f"{panel.spec.market_id}:{latest_ts}",
+        snapshot_id=snapshot_id,
         regime=infer_regime(panel),
         metadata={
             "benchmark":panel.spec.benchmark,
@@ -480,6 +496,8 @@ def prepare_live_market(
             "base_cost_bps":panel.spec.base_cost_bps,
             "impact_coefficient_bps":panel.spec.impact_coefficient_bps,
             "max_participation_adv":panel.spec.max_participation_adv,
+            "daily_content_fingerprint":daily_content_fingerprint,
+            "daily_bar_complete":phase in {"POSTCLOSE","CLOSED"},
         },
     )
     realized={pid:history[pid][-1] for pid in history}
@@ -494,7 +512,7 @@ def prepare_live_market(
         if panel.close.get(asset) and panel.volume.get(asset)
         and float(panel.close[asset][-1])>0 and float(panel.volume[asset][-1])>0
     }
-    snapshot.metadata["session_phase"]=session_phase(panel.spec.market_id)
+    snapshot.metadata["session_phase"]=phase
     snapshot.metadata["recovery_wave_input_scope"]="TRACKED_PRODUCT_PRICE_VOLUME_ONLY"
     return {
         "snapshot":snapshot,
