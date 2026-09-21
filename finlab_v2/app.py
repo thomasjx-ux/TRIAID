@@ -429,11 +429,11 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     </div>
   </div>
 
-  <h2 id="liveTitle">实时运行指示</h2>
+  <h2 id="liveTitle">市场数据与后台运行指示</h2>
   <div class="livegrid">
     <div class="livepanel">
       <div class="livehead">
-        <div class="livehead-left"><span id="marketPulse" class="pulse"></span><span id="indexWindowTitle">实时市场标的窗口</span></div>
+        <div class="livehead-left"><span id="marketPulse" class="pulse"></span><span id="indexWindowTitle">最新市场标的窗口</span></div>
         <span class="small muted" id="indexPhase">-</span>
       </div>
       <div class="live-meta" id="indexMeta">等待实时市场数据</div>
@@ -441,7 +441,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     </div>
     <div class="livepanel">
       <div class="livehead">
-        <div class="livehead-left"><span id="activityPulse" class="pulse"></span><span id="activityWindowTitle">后台指令流水</span></div>
+        <div class="livehead-left"><span id="activityPulse" class="pulse"></span><span id="activityWindowTitle">后台运行事件</span></div>
         <span class="small muted" id="activityPhase">-</span>
       </div>
       <div class="live-meta" id="scheduleMeta">等待调度状态</div>
@@ -708,7 +708,7 @@ const T={
  zh:{
   title:'TRIAID FIN 进化实验台 V2',subtitle:'真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化',
   result:'TRIAID 结果比较',baseReturn:'基线组合后验收益',triaidReturn:'TRIAID 配置后验收益',gain:'TRIAID 相对收益差',
-  live:'实时运行指示',indexWindow:'实时市场标的窗口',activityWindow:'后台指令流水',
+  live:'市场数据与后台运行指示',indexWindow:'最新市场标的窗口',activityWindow:'后台运行事件',
   baseSub:'冻结基线',triaidSub:'冻结 TRIAID 配置',gainSub:'TRIAID 配置后验收益 − 基线后验收益',
   overview:'当前状态',date:'最新数据日',core:'通用 Core',selected:'当前入选策略数',cum:'累计单期超额和',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
@@ -730,11 +730,11 @@ const T={
  en:{
   title:'TRIAID FIN Evolution Lab V2',subtitle:'Real market → Dynamic strategy population → TRIAID Core → Outcome validation → Continuous evolution',
   result:'TRIAID Result Comparison',baseReturn:'Baseline portfolio posterior return',triaidReturn:'TRIAID allocation posterior return',gain:'TRIAID relative return gap',
-  live:'Live Runtime Indicators',indexWindow:'Live Market Instrument Window',activityWindow:'Backend Command Stream',
+  live:'Market Data and Backend Runtime',indexWindow:'Latest Market Instrument Window',activityWindow:'Backend Runtime Events',
   baseSub:'Frozen baseline',triaidSub:'Frozen TRIAID allocation',gainSub:'TRIAID allocation posterior return − baseline posterior return',
   overview:'Current State',date:'Latest market date',core:'Generic Core',selected:'Selected strategy count',cum:'Sum of period excess returns',
   curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
-  daily:'Latest Data Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Latest realized conclusion',
+  daily:'Latest Data Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Latest posterior conclusion',
   usReturnMax:'US Return-Max Route',usrmExpected:'Return-Max multi-window annualized state estimate',usrmGeneric:'Generic Core multi-window annualized state estimate',usrmSpy:'SPY multi-window annualized state estimate',usrmRisk:'Target risk exposure',usrmStrategy:'Current Frozen Strategy Weights',usrmAsset:'Underlying ETF Target Exposure',usrmCapital:'Four-Tier USD Capital Capacity Experiment',usrmRealized:'Prior Real-Market Outcome and Simulated Execution Review',usrmControl:'Prior Frozen-Allocation Theoretical-Holdings Posterior Path',
   prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
   prospectiveStrategy:'Strategy Determination and Frozen Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID frozen composite rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
@@ -911,7 +911,7 @@ const TABLE_HEADER_TIPS={
 const UI_TIPS={
  zh:{
   resultTitle:'只展示已经完成后验评价的同周期对照结果。基线与TRIAID必须来自同一冻结决策与同一结果期。',
-  liveTitle:'展示最新可用市场数据与后台调度活动。是否实时以数据源、会话阶段和延迟字段为准。',
+  liveTitle:'展示最新可用市场数据与后台调度活动。数据可能来自实时源或最近完整日线，是否实时以数据源、会话阶段和延迟字段为准。',
   strategyTitle:'主表展示当前获得配置权重的策略。策略名称旁的信息标识可查看底层标的最新可用价和最近完整交易日涨跌幅。',
   dailyTitle:'展示页面所选市场最新数据日对应的状态，以及最近一轮已有后验的比较结果。它不等同于自然日今天，也不把尚未发生的结果当成已实现收益。',
   overviewTitle:'当前运行状态摘要。所有日期、Core和策略数量均来自当前持久化运行记录。',
@@ -946,8 +946,8 @@ const UI_TIPS={
   usReturnMaxTitle:'美股研究主路线。当前选择规则严格按多周期年化状态收益估计排序，并做容量与执行成本模拟；不自动发送券商订单。',
   prospectiveTitle:'A股冻结前瞻对照。成员、排序和权重在登记时冻结，后续真实结果不能用于倒改。',
   recoveryWaveTitle:'A股恢复波段Shadow研究路线。研究配置和参数冻结，只用后续完整交易日做后验评价，不生成券商订单。',
-  indexWindowTitle:'显示当前数据源能提供的最新市场标的价格。盘外或实时源不可用时可能退回最近完整日线，因此应同时查看数据源和延迟。',
-  activityWindowTitle:'后台市场数据刷新、调度和运行事件的记录，不等同于成交指令。',
+  indexWindowTitle:'显示当前数据源能提供的最新市场标的价格。盘外或实时源不可用时可能退回最近完整日线，因此这里使用“最新”而不是保证“实时”，并应同时查看数据源和延迟。',
+  activityWindowTitle:'后台市场数据刷新、调度和运行事件的记录。这里是系统事件流水，不是券商交易指令。',
   usrmStrategyTitle:'冻结时的策略层权重。Return-Max与通用Core来自同一数据截面，便于对照。',
   usrmAssetTitle:'策略权重展开到SPY、QQQ、IWM、TLT、GLD等底层ETF后的冻结目标敞口。它不代表已成交或当前券商持仓。',
   usrmCapitalTitle:'用四档美元资金规模在相同冻结决策下评估ADV容量、最少成交天数和模型化冲击成本。',
@@ -962,7 +962,7 @@ const UI_TIPS={
  },
  en:{
   resultTitle:'Shows only completed same-period posterior evaluations. Baseline and TRIAID results must come from the same frozen decision and outcome period.',
-  liveTitle:'Shows the latest available market data and backend scheduling activity. Realtime status depends on provider, session phase and displayed data age.',
+  liveTitle:'Shows the latest available market data and backend scheduling activity. Data may be realtime or the latest complete daily bar; realtime status depends on provider, session phase and displayed data age.',
   strategyTitle:'The main table shows strategies with current allocation weight. Hover the info mark beside a strategy name for latest available underlying prices and last complete trading-day changes.',
   dailyTitle:'Shows state for the selected market’s latest data date and the latest evaluable posterior comparison. It is not necessarily natural-calendar today, and unobserved outcomes are not presented as realized returns.',
   overviewTitle:'Current runtime summary from persisted run records.',
@@ -997,8 +997,8 @@ const UI_TIPS={
   usReturnMaxTitle:'US research primary route. Selection ranks the multi-window annualized state-return estimate and then models capacity and execution cost. No broker orders are sent.',
   prospectiveTitle:'Frozen CN prospective control. Members, ranks and weights are frozen at registration and cannot be rewritten from later outcomes.',
   recoveryWaveTitle:'CN recovery-wave Shadow research route. Research allocations and parameters are frozen and evaluated only on subsequent complete trading days; no broker orders are sent.',
-  indexWindowTitle:'Latest prices available from the current provider. Outside market hours or when realtime data are unavailable, the view may fall back to the latest complete daily bar; check provider and data age.',
-  activityWindowTitle:'Backend refresh, scheduling and runtime events. These are not broker trade instructions.',
+  indexWindowTitle:'Latest prices available from the current provider. Outside market hours or when realtime data are unavailable, the view may fall back to the latest complete daily bar, so this is labeled latest rather than guaranteed realtime.',
+  activityWindowTitle:'Backend refresh, scheduling and runtime events. This is a system event stream, not broker trade instructions.',
   usrmStrategyTitle:'Frozen strategy-level weights for Return-Max and Generic Core from the same data snapshot.',
   usrmAssetTitle:'Frozen target ETF exposure after expanding strategy weights into SPY, QQQ, IWM, TLT and GLD. It is not an executed or current broker position.',
   usrmCapitalTitle:'Four USD capital tiers evaluating ADV capacity, minimum execution days and modeled impact cost under one frozen decision.',
@@ -1131,6 +1131,10 @@ function localClockFromEpoch(ts){
  if(ts===null||ts===undefined)return '-';
  try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
 }
+function localDateTimeFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleString();}catch(e){return '-'}
+}
 function localClockFromIso(x){
  if(!x)return '-';
  try{return new Date(x).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
@@ -1152,7 +1156,7 @@ async function refreshLiveWindows(){
   el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
   el('indexMeta').textContent=idx.available
    ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
-   : (lang==='zh'?'暂无实时数据':'No realtime data');
+   : (lang==='zh'?'暂无可用市场数据':'No market data available');
   el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
    const p=Number(x.change_pct);
    const pText=Number.isFinite(p)?signedPct(p):'-';
@@ -1229,7 +1233,7 @@ function renderUSReturnMax(report){
  const review=report.previous_decision_review||null;
  const integrity=report.integrity||{};
  el('usReturnMaxStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
- el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(d.selection_source||'-');
+ el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'排序信号：多周期年化状态收益估计':'Ranking signal: multi-window annualized state-return estimate');
  el('usrmExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
  el('usrmGeneric').textContent=fmtPct(d.generic_core_projected_annualized_expected_net_return);
  el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
@@ -1269,8 +1273,8 @@ function renderProspective(report){
  el('prospectiveGap').textContent=signedPct(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);el('prospectiveGap').className=cls(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL||0));
  el('prospectiveMeta').textContent=(report.experiment_id||'-')+' · '+(lang==='zh'?'登记日 ':'Registered ')+(report.market_as_of||'-')+' · '+(lang==='zh'?'待完成窗口 ':'Pending horizons ')+((report.pending_horizons||[]).join('/')||'none');
  el('prospectiveNote').textContent=lang==='zh'
-   ? '策略池与预测顺序在登记时冻结，禁止事后换人或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复预测能力的主要证据。'
-   : 'Pool membership and predicted ordering are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-selection skill.';
+   ? '策略池与TRIAID综合排序在登记时冻结，禁止事后换成员或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复排序能力的主要证据。'
+   : 'Pool membership and the TRIAID composite ranking are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-ranking skill.';
  const rows=report.strategy_determination||[];
  el('prospectiveStrategyRows').innerHTML=rows.map(x=>{
    const name=(x.name&&x.name[lang])||x.strategy_id;
@@ -1313,7 +1317,7 @@ function renderRecoveryWave(report){
   '512100.SS':'中证1000ETF · 512100'
  };
  el('recoveryWaveStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
- el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源时间 ':'Source ')+(d.source_latest_ts||'-');
+ el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源数据时间 ':'Source data time ')+localDateTimeFromEpoch(d.source_latest_ts);
  el('recoveryCash').textContent=fmtPct(d.cash_residual_weight);
  el('recoveryPrevDays').textContent=review?String(review.observation_days??0):'-';
  el('recoveryPrevReturn').textContent=review?fmtPct(review.current_portfolio_cumulative_return):'-';
