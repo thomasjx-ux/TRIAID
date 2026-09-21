@@ -14,8 +14,8 @@ CN_SHADOW_IDS=(
 def definitions()->list[StrategyDefinition]:
     rows=[
         ("C29_SIZE_REL20","20日大小盘相对强弱","20-Day Size Relative Strength",
-         "比较沪深300与中小盘/成长指数的20日相对强弱，持有更强且为正动量的一侧。",
-         "Compares 20-day relative strength between large-cap and smaller/growth indices and holds the stronger positive-momentum side.",
+         "比较沪深300与其余风险ETF的20日动量；只有非大盘一侧至少领先1个百分点且自身动量为正时才切换，否则在沪深300动量为正时持有沪深300。",
+         "Compares 20-day momentum of CSI 300 with the other risk ETFs; switches away from large caps only when the leading alternative is positive and ahead by more than 1 percentage point, otherwise holds CSI 300 when its momentum is positive.",
          "风格快速轮动、大小盘分化明显时。","When style leadership rotates and large/small-cap dispersion is meaningful.",
          "风格切换过快时会发生追涨与反复换仓。","Fast style reversals can create chasing and turnover."),
         ("C30_SIZE_REL63","63日大小盘相对强弱","63-Day Size Relative Strength",
@@ -24,8 +24,8 @@ def definitions()->list[StrategyDefinition]:
          "中期风格趋势较持续时。","When medium-term style leadership persists.",
          "风格拐点附近反应较慢。","Can react slowly near style turning points."),
         ("C32_VOL_BREAKOUT20","成交量确认突破","Volume-Confirmed Breakout",
-         "寻找20日正向突破且5日成交量高于20日均值的风险资产。",
-         "Selects risk assets with positive 20-day breakout and expanding short-term volume.",
+         "寻找20日涨幅超过2%且5日平均成交量高于20日平均成交量5%以上的风险资产，并按涨幅×量比选择最强者。",
+         "Selects risk assets with 20-day return above 2% and 5-day average volume more than 5% above the 20-day average, ranking candidates by return multiplied by the volume ratio.",
          "趋势启动伴随成交活跃扩张时。","When trend initiation is confirmed by expanding activity.",
          "事件驱动放量但趋势不持续时可能产生假突破。","Event-driven volume spikes can create false breakouts."),
         ("C36_BREADTH_ACCEL","市场宽度加速","Breadth Acceleration",
