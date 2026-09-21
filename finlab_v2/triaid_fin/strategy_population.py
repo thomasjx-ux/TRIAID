@@ -73,7 +73,7 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.4"
+    version = "strategy-population@0.5.5"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -124,7 +124,9 @@ class StrategyPopulationModule:
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="maximize current robust expected net return with return-first reselection, then validate theoretical strategy return and executable return separately under four USD capital sleeves"
+            result["research_experiment_objective"]="strictly maximize current expected net return across ACTIVE strategies; break exact return ties by lower estimated cost, risk, uncertainty and deterministic strategy ID, then validate theoretical and executable return separately under four USD capital sleeves"
+            result["primary_route_selector"]="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+            result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
         return result
 
     def register(self, definition: StrategyDefinition) -> None:
