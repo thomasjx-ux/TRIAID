@@ -228,7 +228,7 @@ try:
     healing_observations=MarketObservationStore(engine.store)
     duplicate_heal=healing_observations.record(obs3)
     assert duplicate_heal["recorded"] is False
-    assert duplicate_heal["reason"]=="DUPLICATE_SOURCE_TIMESTAMP"
+    assert duplicate_heal["reason"]=="DUPLICATE_SNAPSHOT_CONTENT"
     assert healing_observations.watermarks["US:INTRADAY"]==1234568490
     restarted_observations=MarketObservationStore(engine.store)
     assert restarted_observations.watermarks["US:INTRADAY"]==1234568490
