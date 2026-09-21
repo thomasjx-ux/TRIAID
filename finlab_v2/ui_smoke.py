@@ -1,7 +1,7 @@
 from app import daily, evolution_status, home, status, strategies
 
 html=home()
-assert "TRIAID 增益" in html
+assert "TRIAID 相对收益差" in html
 assert 'id="baseReturn"' in html
 assert 'id="triaidReturn"' in html
 assert 'id="gain"' in html
@@ -29,12 +29,24 @@ assert "历史收益优势速度/日" in html
 assert "恢复率优势×样本支持" in html
 assert "历史相似状态平均前向收益" in html
 assert "累计单期超额和" in html
+assert "最新数据摘要" in html
+assert "TRIAID冻结综合排序" in html
+assert "最大目标仓位/ADV" in html
+assert "模型往返成本代理" in html
+assert "模型波段净损益代理" in html
+assert "通用 Core" in html
+assert "已后验评价运行" in html
+assert "负相对收益差比例" in html
 assert "模拟成交比例" in html
 assert "本轮调整" in html
 assert "Return-Max权重" in html
 assert "预期净回报" not in html
 assert "预计恢复速度/日" not in html
 assert "当前冻结交易意见" not in html
+assert "预计往返成本" not in html
+assert "单日ADV占比" not in html
+assert "TRIAID 挽回损失" not in html
+assert "TRIAID 本次产生正增益" not in html
 assert html.count("<table")>=13
 assert html.count("<th")>=70
 assert "SHADOW：只记录真实未来表现进行前瞻验证" in html
@@ -73,7 +85,7 @@ assert 'id="capitalSleeveRows"' in html
 assert 'id="capitalRealizedRows"' in html
 assert "四档人民币资金规模容量实验" in html
 assert "renderRecoveryWave" in html
-assert "TRIAID 二阶恢复波段决策" in html
+assert "TRIAID 二阶恢复波段研究" in html
 assert "当前冻结研究配置意见" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
