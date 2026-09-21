@@ -93,14 +93,16 @@ for row in decision["trade_opinions"]:
 
 store=MemoryStore()
 ledger=RecoveryWaveLedger(store)
+legacy_variant=deepcopy(decision)
+legacy_variant["core_version"]="recovery-wave-core@0.1.0"
+legacy_same_snapshot=ledger.freeze(legacy_variant,"CN:SNAP:1","2026-09-21")
+
 first=ledger.freeze(decision,"CN:SNAP:1","2026-09-21")
 dup=ledger.freeze(decision,"CN:SNAP:1","2026-09-21")
 assert dup["decision_id"]==first["decision_id"]
 assert dup["decision_hash"]==first["decision_hash"]
-
-legacy_variant=deepcopy(decision)
-legacy_variant["core_version"]="recovery-wave-core@0.1.0"
-legacy_same_snapshot=ledger.freeze(legacy_variant,"CN:SNAP:1","2026-09-21")
+assert first["previous_decision_id"]==legacy_same_snapshot["decision_id"]
+assert first["previous_decision_hash"]==legacy_same_snapshot["decision_hash"]
 assert legacy_same_snapshot["decision_id"]!=first["decision_id"]
 assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==first["decision_id"]
 assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.0")["decision_id"]==legacy_same_snapshot["decision_id"]
@@ -123,7 +125,7 @@ assert second["previous_decision_id"]==first["decision_id"]
 assert second["previous_decision_hash"]==first["decision_hash"]
 integrity=ledger.verify_integrity("CN")
 assert integrity["passed"] is True
-assert integrity["decision_count"]==2
+assert integrity["decision_count"]==3
 assert ledger.by_snapshot("CN","CN:SNAP:1")["decision_hash"]==first["decision_hash"]
 
 duplicate_outcome=ledger.record_outcome("CN","2026-09-22","2026-09-21",{s:0.99 for s in products},"X")
