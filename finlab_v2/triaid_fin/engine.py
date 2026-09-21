@@ -358,7 +358,7 @@ class EvolutionLabEngine:
             recovery_decision=None
             us_return_outcome=None
             if market_id=="CN":
-                if daily_bar_complete:
+                if evidence_eligible and daily_bar_complete:
                     recovery_outcome=self.recovery_wave_ledger.record_outcome(
                         market_id,
                         prepared["latest_as_of"],
@@ -367,38 +367,43 @@ class EvolutionLabEngine:
                         snapshot.snapshot_id,
                         prepared.get("product_turnover_notional_from_previous_period") or {},
                     )
-                existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
-                if existing_recovery is None:
-                    if daily_bar_complete:
-                        prior_frozen=[
-                            row for row in self.recovery_wave_ledger.decisions(market_id,1000)
-                            if str(row.get("decision_status") or "")=="DAILY_FROZEN"
-                            and str(row.get("market_as_of") or "")<str(snapshot.as_of)
-                        ]
-                        previous_recovery=prior_frozen[-1] if prior_frozen else None
-                    else:
-                        previous_recovery=self.recovery_wave_ledger.latest(market_id)
-                    proposed_recovery=self.recovery_wave_core.decide(
-                        prepared["panel"],
-                        snapshot.regime,
-                        previous_recovery,
-                        phase,
-                    )
-                    recovery_decision=self.recovery_wave_ledger.freeze(
-                        proposed_recovery,
+                if evidence_eligible:
+                    existing_recovery=self.recovery_wave_ledger.by_snapshot(
+                        market_id,
                         snapshot.snapshot_id,
-                        snapshot.as_of,
+                        self.recovery_wave_core.version,
                     )
-                else:
-                    recovery_decision=existing_recovery
-                snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id")
-                snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash")
+                    if existing_recovery is None:
+                        if daily_bar_complete:
+                            prior_frozen=[
+                                row for row in self.recovery_wave_ledger.decisions(market_id,1000)
+                                if str(row.get("decision_status") or "")=="DAILY_FROZEN"
+                                and str(row.get("market_as_of") or "")<str(snapshot.as_of)
+                            ]
+                            previous_recovery=prior_frozen[-1] if prior_frozen else None
+                        else:
+                            previous_recovery=self.recovery_wave_ledger.latest(market_id)
+                        proposed_recovery=self.recovery_wave_core.decide(
+                            prepared["panel"],
+                            snapshot.regime,
+                            previous_recovery,
+                            phase,
+                        )
+                        recovery_decision=self.recovery_wave_ledger.freeze(
+                            proposed_recovery,
+                            snapshot.snapshot_id,
+                            snapshot.as_of,
+                        )
+                    else:
+                        recovery_decision=existing_recovery
+                snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id") if recovery_decision else None
+                snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash") if recovery_decision else None
                 snapshot.metadata["recovery_wave_daily_bar_complete"]=daily_bar_complete
                 snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
                 snapshot.metadata["experiment_design"]="Freeze the adverse risky pool using only information available at the decision time, preregister established control rankings, and test future recovery ordering over the existing 3/5/10-day CN decision horizons. Cash defense is reported separately from recovery-selection evidence."
                 snapshot.metadata["market_route"]="CN_RECOVERY_CAPACITY"
             else:
-                if daily_bar_complete:
+                if evidence_eligible and daily_bar_complete:
                     us_return_outcome=self.us_return_max_ledger.record_outcome(
                         prepared["latest_as_of"],
                         prepared["previous_as_of"],
@@ -413,7 +418,7 @@ class EvolutionLabEngine:
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
             current_experiment=snapshot.metadata.get("experiment_mode")
-            existing_decisions=[
+            existing_decisions=[] if not evidence_eligible else [
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==market_id
@@ -433,6 +438,7 @@ class EvolutionLabEngine:
                         and r.market.market_id.upper()=="CN"
                         and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                         and r.strategy_states
+                        and self._complete_daily_evidence_run(r)
                         and str(r.market.metadata.get("experiment_mode") or "")==str(current_experiment or "")
                         and r.created_at<existing.created_at
                     ]
