@@ -63,7 +63,7 @@ d=daily("US")
 assert d["date"]
 assert "us_return_max" in d
 assert d["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
-assert d["us_return_max"]["route_version"]=="us-return-max-route@0.1.0"
+assert d["us_return_max"]["route_version"]=="us-return-max-route@0.2.0"
 assert d["us_return_max"]["integrity"]["passed"] is True
 assert d["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
 
