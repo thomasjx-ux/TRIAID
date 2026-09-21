@@ -156,6 +156,28 @@ class TencentCNMarketDataProvider:
             raise TencentCNDataError(f"insufficient_1m:{symbol}:{len(parsed)}<{min_points}")
         return parsed
 
+    def auction_shadow_probe(self,symbol:str,timeout:int=10)->dict:
+        """Zero-cost shadow probe for whether Tencent exposes a 09:25 point.
+
+        This never enters the production PREOPEN route. It only reports whether
+        the public minute endpoint contains a usable 09:25 observation.
+        """
+        rows=self._one_minute(symbol,1,timeout)
+        local=ZoneInfo("Asia/Shanghai")
+        matches=[]
+        for stamp,price,volume in rows:
+            dt=datetime.fromtimestamp(int(stamp),local)
+            if dt.hour==9 and dt.minute==25:
+                matches.append({"ts":int(stamp),"price":float(price),"volume":float(volume)})
+        return {
+            "provider":self.version,
+            "symbol":symbol,
+            "available":bool(matches),
+            "auction_time":"09:25",
+            "rows":matches[-1:],
+            "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
+        }
+
     def fetch_series(
         self,
         symbol:str,
