@@ -427,7 +427,9 @@ class EvolutionLabEngine:
             base=run.evaluation.baseline_contributions
             tri=run.evaluation.triaid_contributions
             deltas={k:tri.get(k,0.0)-base.get(k,0.0) for k in set(base)|set(tri)}
+            previous_diagnostics=dict(run.diagnostic_summary or {})
             run.diagnostic_summary={
+                **previous_diagnostics,
                 "positive_interventions":sum(1 for x in deltas.values() if x>0),
                 "negative_interventions":sum(1 for x in deltas.values() if x<0),
                 "largest_positive":max(deltas.items(),key=lambda x:x[1]) if deltas else None,
