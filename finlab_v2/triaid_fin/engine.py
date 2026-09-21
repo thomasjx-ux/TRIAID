@@ -51,7 +51,6 @@ class EvolutionLabEngine:
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
-        self._recover_stale_runs()
 
     @staticmethod
     def _evidence_eligible_run(run:RunRecord)->bool:
@@ -80,17 +79,30 @@ class EvolutionLabEngine:
             for row in previews[:-max_per_market]:
                 self._runs.pop(row.run_id,None)
 
-    def _recover_stale_runs(self)->None:
-        for run in list(self._runs.values()):
-            if run.status not in {"CREATED","FETCHING_DATA"}:
-                continue
-            run.status="FAILED"
-            run.diagnostic_summary={
-                **dict(run.diagnostic_summary or {}),
-                "error":"STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART",
-                "recovery":"Previous process ended before this research run completed.",
+    def recover_stale_runs(self)->dict:
+        recovered=[]
+        with self._lock:
+            for run in list(self._runs.values()):
+                if run.status not in {"CREATED","FETCHING_DATA"}:
+                    continue
+                if not self._evidence_eligible_run(run):
+                    continue
+                run.status="FAILED"
+                run.diagnostic_summary={
+                    **dict(run.diagnostic_summary or {}),
+                    "error":"STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART",
+                    "recovery":"Previous process ended before this official research run completed.",
+                }
+                self._save_run(run)
+                recovered.append(run.run_id)
+            receipt={
+                "event":"STALE_RUN_RECOVERY",
+                "at":datetime.now(ZoneInfo("UTC")).isoformat(),
+                "recovered_run_ids":recovered,
+                "recovered_count":len(recovered),
             }
-            self._save_run(run)
+            self.store.append_jsonl("runtime_maintenance_events.jsonl",receipt)
+        return receipt
 
     def _apply_strategy_profiles(self)->None:
         for market_id in ("US","CN"):
