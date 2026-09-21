@@ -7,14 +7,18 @@ from .contracts import RunRecord
 
 
 class ReviewModule:
-    version="review@0.2.0"
+    version="review@0.3.0"
 
     def daily_summary(self,runs:Iterable[RunRecord])->dict:
         rows=[r for r in runs if r.market.snapshot_id!="PENDING"]
         dates=sorted({r.market.as_of for r in rows if r.market.as_of})
         target_date=dates[-1] if dates else datetime.now(timezone.utc).date().isoformat()
         day=[r for r in rows if r.market.as_of==target_date]
-        evaluated=[r for r in day if r.evaluation and r.evaluation.status=="EVALUATED"]
+        evaluated=[
+            r for r in day
+            if r.evaluation and r.evaluation.status=="EVALUATED"
+            and (r.market.metadata or {}).get("daily_bar_complete") is not False
+        ]
         excess=sum(float(r.evaluation.excess_return or 0.0) for r in evaluated)
         latest=day[-1] if day else None
 
@@ -22,11 +26,11 @@ class ReviewModule:
         for r in evaluated:
             x=float(r.evaluation.excess_return or 0.0)
             if x>0:
-                analysis.append(f"{r.market.market_id}: TRIAID positive contribution {x:+.4%}.")
+                analysis.append(f"{r.market.market_id}: TRIAID posterior return exceeded its baseline by {x:+.4%}.")
             elif x<0:
-                analysis.append(f"{r.market.market_id}: TRIAID negative contribution {x:+.4%}; inspect diagnostic attribution.")
+                analysis.append(f"{r.market.market_id}: TRIAID posterior return was below its baseline by {abs(x):.4%}; inspect weight-adjustment attribution.")
             else:
-                analysis.append(f"{r.market.market_id}: no net TRIAID contribution.")
+                analysis.append(f"{r.market.market_id}: TRIAID posterior return matched its baseline for this evaluated period.")
 
         return {
             "date":target_date,
@@ -77,7 +81,11 @@ class ReviewModule:
 
     def curves(self,runs:Iterable[RunRecord])->List[dict]:
         ordered=sorted(
-            [r for r in runs if r.evaluation and r.evaluation.status=="EVALUATED"],
+            [
+                r for r in runs
+                if r.evaluation and r.evaluation.status=="EVALUATED"
+                and (r.market.metadata or {}).get("daily_bar_complete") is not False
+            ],
             key=lambda r:(r.market.as_of,r.created_at),
         )
         baseline_equity=1.0
