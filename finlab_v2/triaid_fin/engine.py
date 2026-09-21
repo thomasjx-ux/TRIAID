@@ -26,7 +26,7 @@ from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.8.3"
+    architecture_version = "fin-evolution-lab@0.9.0"
     market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
