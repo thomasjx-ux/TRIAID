@@ -20,13 +20,14 @@ class USReturnMaxRoute:
     """US return-maximization route with executable capital-capacity sleeves.
 
     The route intentionally differs from the CN recovery-wave route:
-    - strategy selection is the existing return-first StrategyPopulation output;
+    - primary selection is strict maximum current expected net return across active strategies;
+    - ties are broken deterministically by lower estimated cost, risk, uncertainty, then ID;
     - no recovery/drawdown thesis is required;
-    - the frozen strategy mix is expanded to executable ETF exposures;
+    - the frozen winner is expanded to executable ETF exposures;
     - four USD sleeves share the same signal and differ only by starting capital.
     """
 
-    version="us-return-max-route@0.1.0"
+    version="us-return-max-route@0.2.0"
     interface_version="us-return-max-contract@1"
     capital_version="us-return-max-capacity@0.1.0"
     sleeves=USD_CAPITAL_SLEEVES
@@ -72,6 +73,32 @@ class USReturnMaxRoute:
         )
 
     @staticmethod
+    def _strict_max_strategy(states:list[StrategyState])->tuple[StrategyState,list[str]]:
+        eligible=[
+            s for s in states
+            if str(s.lifecycle or "").lower()=="active"
+        ]
+        if not eligible:
+            raise ValueError("US Return-Max requires at least one active strategy.")
+        def expected(s:StrategyState)->float:
+            return 0.0 if s.strategy_id=="P28_CASH" else float(s.expected_net_return)
+        best=max(expected(s) for s in eligible)
+        tied=[
+            s for s in eligible
+            if abs(expected(s)-best)<=1e-12
+        ]
+        winner=min(
+            tied,
+            key=lambda s:(
+                float(s.estimated_cost or 0.0),
+                float(s.risk or 0.0),
+                float(s.uncertainty or 0.0),
+                str(s.strategy_id),
+            ),
+        )
+        return winner,sorted(str(s.strategy_id) for s in tied)
+
+    @staticmethod
     def _asset_targets(panel:Any,i:int,strategy_weights:dict[str,float])->dict[str,float]:
         positions=policy_positions(panel,i)
         assets=panel.assets
@@ -101,9 +128,12 @@ class USReturnMaxRoute:
         completed_i=self._completed_index(panel,input_phase)
         state_map={s.strategy_id:s for s in states}
 
-        route_weights={str(k):float(v) for k,v in group.weights.items()}
+        winner,tie_set=self._strict_max_strategy(states)
+        route_weights={str(winner.strategy_id):1.0}
+        population_weights={str(k):float(v) for k,v in group.weights.items()}
         generic_weights={str(k):float(v) for k,v in generic_decision.weights_after.items()}
         route_expected=self._weighted_expected(route_weights,state_map)
+        population_expected=self._weighted_expected(population_weights,state_map)
         generic_expected=self._weighted_expected(generic_weights,state_map)
         buy_hold_expected=(
             float(state_map["P00_BUY_HOLD"].expected_net_return)
@@ -196,18 +226,24 @@ class USReturnMaxRoute:
             "decision_status":"PROVISIONAL_INTRADAY" if self._is_intraday_phase(input_phase) else "DAILY_FROZEN",
             "research_only":True,
             "broker_execution_enabled":False,
-            "objective":"MAXIMIZE_CURRENT_ROBUST_EXPECTED_NET_RETURN_SUBJECT_TO_EXISTING_TRADABILITY_AND_WEIGHT_CONSTRAINTS",
-            "selection_source":"EXISTING_STRATEGY_POPULATION_RETURN_FIRST_RESELECT",
-            "strategy_selection_mode":group.diagnostics.get("selection_mode"),
+            "objective":"STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN_ACROSS_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
+            "selection_source":"ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN",
+            "strategy_selection_mode":"STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK",
+            "selected_strategy_id":str(winner.strategy_id),
+            "max_return_tie_set":tie_set,
+            "tie_break_order":["estimated_cost","risk","uncertainty","strategy_id"],
             "target_strategy_weights":route_weights,
+            "return_first_population_control_weights":population_weights,
             "generic_core_control_weights":generic_weights,
             "projected_annualized_expected_net_return":route_expected,
+            "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
             "controls":{
                 "SPY_BUY_HOLD":"P00_BUY_HOLD / SPY",
+                "RETURN_FIRST_POPULATION":"Existing multi-strategy return-first population mix frozen at the same decision time",
                 "GENERIC_TRIAID_CORE":"Existing generic TRIAID Core allocation frozen at the same decision time",
             },
             "execution_discipline":{
