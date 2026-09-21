@@ -20,6 +20,21 @@ class PopulationStateTracker:
         self.state=raw if raw else {"markets":{}}
         self.state.setdefault("markets",{})
         self.state.setdefault("last_observation_keys",{})
+        prior_version=str(self.state.get("version") or "")
+        if prior_version!=self.version:
+            # Preserve incumbent lifecycle labels but reset counters that may have
+            # advanced on provisional/incomplete daily bars under the legacy protocol.
+            for market_rows in self.state["markets"].values():
+                for row in market_rows.values():
+                    row["positive_streak"]=0
+                    row["negative_streak"]=0
+                    row["cooldown_remaining"]=0
+                    row["shadow_observations"]=0
+                    row["shadow_cumulative_return"]=0.0
+            self.state["last_observation_keys"]={}
+            self.state["evidence_reset_from_version"]=prior_version or "legacy"
+            self.state["version"]=self.version
+            self.store.save_json("population_state.json",self.state)
 
     def _market(self,market_id:str) -> dict:
         key=market_id.upper()
