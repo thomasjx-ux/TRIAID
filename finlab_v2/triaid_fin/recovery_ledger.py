@@ -121,6 +121,14 @@ class RecoveryWaveLedger:
         key=f"{market}:{as_of}"
         if key in self.outcome_index:
             return {"recorded":False,"reason":"DUPLICATE_OUTCOME_DATE","outcome_id":self.outcome_index[key]}
+        # Recover idempotency if a prior append succeeded but the separate index
+        # write failed before process restart.
+        for existing in reversed(self.outcomes(market,5000)):
+            if str(existing.get("as_of") or "")==str(as_of):
+                outcome_id=str(existing.get("outcome_id") or f"RWO-{market}-{as_of}")
+                self.outcome_index[key]=outcome_id
+                self.store.save_json(self.outcome_index_file,self.outcome_index)
+                return {"recorded":False,"reason":"DUPLICATE_OUTCOME_DATE_RECOVERED_FROM_LEDGER","outcome_id":outcome_id}
         row={
             "outcome_id":f"RWO-{market}-{as_of}",
             "recorded_at":utc_now(),
