@@ -39,7 +39,7 @@ async def lifespan(app:FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.9.0",lifespan=lifespan)
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.10.0",lifespan=lifespan)
 app.include_router(build_market_data_router(engine,market_automation,calendar_sync))
 app.include_router(build_decision_router(decision_scheduler))
 
@@ -543,6 +543,37 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
         <tbody id="recoveryOpinionRows"></tbody>
       </table>
     </div>
+    <h3 id="capitalSleeveTitle">四资金规模容量实验</h3>
+    <div class="prospective-meta" id="capitalSleeveMeta">-</div>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr>
+          <th id="csthCapital">起始资金</th>
+          <th id="csthInvested">目标投入</th>
+          <th id="csthParticipation">单日ADV占比</th>
+          <th id="csthDays">最少成交天数</th>
+          <th id="csthCost">预计往返成本</th>
+          <th id="csthPnl">预期波段净利润</th>
+          <th id="csthReturn">预期净收益率</th>
+        </tr></thead>
+        <tbody id="capitalSleeveRows"></tbody>
+      </table>
+    </div>
+    <h3 id="capitalRealizedTitle">上一轮四资金袖套真实执行回顾</h3>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr>
+          <th id="crthCapital">起始资金</th>
+          <th id="crthFill">已成交比例</th>
+          <th id="crthEquity">当前净值</th>
+          <th id="crthPnl">净利润</th>
+          <th id="crthReturn">净收益率</th>
+          <th id="crthCost">累计执行成本</th>
+          <th id="crthRemaining">未成交目标</th>
+        </tr></thead>
+        <tbody id="capitalRealizedRows"></tbody>
+      </table>
+    </div>
     <h3 id="recoveryReviewTitle">上一轮决策真实回顾</h3>
     <div class="prospective-meta" id="recoveryPreviousMeta">-</div>
     <div class="tablewrap" style="max-height:360px">
@@ -611,6 +642,7 @@ const T={
   prospectiveStrategy:'策略确定与恢复排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID预测名次',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
   recoveryWave:'TRIAID 二阶恢复波段决策',recoveryCash:'现金剩余',recoveryPrevDays:'上一轮已观察',recoveryPrevReturn:'上一轮实际收益',recoveryPrevGap:'相对等权对照',
   recoveryOpinion:'当前冻结交易意见',recoveryReview:'上一轮决策真实回顾',product:'产品',action:'意见',target:'目标权重',change:'本轮调整',drawdown:'当前回撤',direction:'状态方向',horizon:'预计反转',speed:'预计恢复速度/日',hitEdge:'恢复率优势',expected:'历史相似状态预期',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
+  capitalSleeve:'四资金规模容量实验',capitalRealized:'上一轮四资金袖套真实执行回顾',capital:'起始资金',invested:'目标投入',participation:'单日ADV占比',days:'最少成交天数',cost:'预计往返成本',pnl:'预期波段净利润',netReturn:'预期净收益率',fill:'已成交比例',equity:'当前净值',realizedPnl:'净利润',realizedReturn:'净收益率',executionCost:'累计执行成本',remaining:'未成交目标',
   strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
   before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已验证决策',negative:'负贡献比例',next:'下一步',
@@ -631,6 +663,7 @@ const T={
   prospectiveStrategy:'Strategy Determination and Recovery Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID predicted rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
   recoveryWave:'TRIAID Second-Order Recovery Wave Decision',recoveryCash:'Cash residual',recoveryPrevDays:'Prior decision observed days',recoveryPrevReturn:'Prior realized return',recoveryPrevGap:'Vs equal-weight control',
   recoveryOpinion:'Current Frozen Trade Opinion',recoveryReview:'Prior Decision Realized Review',product:'Product',action:'Opinion',target:'Target weight',change:'This decision change',drawdown:'Current drawdown',direction:'State direction',horizon:'Expected reversal',speed:'Expected recovery/day',hitEdge:'Recovery-rate edge',expected:'Historical-analog expectation',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
+  capitalSleeve:'Four-Capital Capacity Experiment',capitalRealized:'Prior Four-Sleeve Realized Execution Review',capital:'Starting capital',invested:'Target invested',participation:'One-day ADV share',days:'Minimum execution days',cost:'Estimated round-trip cost',pnl:'Expected wave net P&L',netReturn:'Expected net return',fill:'Fill ratio',equity:'Current equity',realizedPnl:'Net P&L',realizedReturn:'Net return',executionCost:'Cumulative execution cost',remaining:'Unfilled target',
   strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
   before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Verified decisions',negative:'Negative-contribution rate',next:'Next step',
@@ -679,6 +712,7 @@ const TIP={
  }
 };
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
+function fmtMoney(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return '¥'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return (v>0?'+':'')+v.toFixed(2)+'%'}
 function cls(x){return x>1e-12?'good':x<-1e-12?'bad':''}
 function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -695,6 +729,7 @@ function applyText(){
  pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',
  recoveryWaveTitle:'recoveryWave',recoveryCashLabel:'recoveryCash',recoveryPrevDaysLabel:'recoveryPrevDays',recoveryPrevReturnLabel:'recoveryPrevReturn',recoveryPrevGapLabel:'recoveryPrevGap',
  recoveryOpinionTitle:'recoveryOpinion',recoveryReviewTitle:'recoveryReview',rwthProduct:'product',rwthAction:'action',rwthTarget:'target',rwthChange:'change',rwthDrawdown:'drawdown',rwthDirection:'direction',rwthHorizon:'horizon',rwthSpeed:'speed',rwthHitEdge:'hitEdge',rwthExpected:'expected',rwthSamples:'samples',
+ capitalSleeveTitle:'capitalSleeve',capitalRealizedTitle:'capitalRealized',csthCapital:'capital',csthInvested:'invested',csthParticipation:'participation',csthDays:'days',csthCost:'cost',csthPnl:'pnl',csthReturn:'netReturn',crthCapital:'capital',crthFill:'fill',crthEquity:'equity',crthPnl:'realizedPnl',crthReturn:'realizedReturn',crthCost:'executionCost',crthRemaining:'remaining',
  rvrDate:'resultDate',rvrPortfolio:'portfolioDay',rvrEqual:'equalDay',rvrCum:'portfolioCum',rvrGap:'gapCum',strategyTitle:'strategies',
  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
  evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
@@ -870,8 +905,8 @@ function renderRecoveryWave(report){
  el('recoveryPrevGap').className=review?cls(Number(review.current_excess_vs_equal_weight||0)):'';
  const scope=d.data_scope||{};
  el('recoveryWaveNote').textContent=lang==='zh'
-  ? '这是 Shadow Core 的冻结研究交易意见，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算结果；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。所有历史相似状态统计均在决策时点之前计算，后续只能追加真实结果，不能改原始建议。'
-  : 'These are frozen Shadow Core research opinions and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The current micro layer uses only real tracked-product price/volume data; constituent-level index internals are not yet connected. Historical analog statistics use only information available before the decision and frozen recommendations cannot be rewritten after outcomes.';
+  ? '这是 Shadow Core 的冻结研究交易意见，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算结果；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。四资金袖套从同一决策、全现金起步，唯一变量是资金规模；未来填单只使用后续真实成交量，成交后从下一完整 bar 才开始计收益。历史建议与参数均冻结，不能事后改写。'
+  : 'These are frozen Shadow Core research opinions and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The four capital sleeves start from cash under the same frozen decision; capital size is the only experimental variable. Future fills use only subsequent observed volume and become return-active on the following complete bar. Frozen advice and parameters cannot be rewritten after outcomes.';
  const opinions=d.trade_opinions||[];
  el('recoveryOpinionRows').innerHTML=opinions.map(x=>{
    const horizon=x.expected_reversal_horizon_days==null?'-':(x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'));
@@ -891,6 +926,37 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
     '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
  }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结交易意见':'No frozen trade opinion')+'</td></tr>';
+ const capacity=d.capital_capacity||{};
+ const capModel=capacity.model||{};
+ const capRows=capacity.sleeves||[];
+ el('capitalSleeveMeta').textContent=capacity.enabled
+   ? ((lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+
+      'ADV20 · '+fmtPct(capModel.max_participation_adv)+' cap · '+
+      (capModel.base_cost_bps??'-')+'bps base · '+
+      (capModel.impact_coefficient_bps??'-')+'bps×√participation · '+
+      (lang==='zh'?'不含券商个性化费率':'broker-specific fees excluded'))
+   : (lang==='zh'?'当前没有启用人民币资金袖套':'CNY capital sleeves not enabled');
+ el('capitalSleeveRows').innerHTML=capRows.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.target_invested_notional_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td>'+
+    '<td class="num">'+esc(x.minimum_execution_days??'-')+'</td>'+
+    '<td class="num">'+fmtMoney(x.estimated_round_trip_cost_proxy_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_pnl_before_timing_delay_cny||0))+'">'+fmtMoney(x.expected_wave_net_pnl_before_timing_delay_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_return_before_timing_delay||0))+'">'+signedPct(x.expected_wave_net_return_before_timing_delay)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'等待当前资金容量决策':'Awaiting capital-capacity decision')+'</td></tr>';
+ const realizedSleeves=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('capitalRealizedRows').innerHTML=realizedSleeves.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.fill_ratio)+'</td>'+
+    '<td class="num">'+fmtMoney(x.current_equity_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_pnl_cny||0))+'">'+fmtMoney(x.current_net_pnl_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td>'+
+    '<td class="num">'+fmtMoney(x.total_execution_cost_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.remaining_target_notional_cny)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用真实执行结果':'No eligible realized execution result for the prior sleeves yet')+'</td></tr>';
  if(review){
    const prior=review.trade_opinions||[];
    el('recoveryPreviousMeta').textContent=(lang==='zh'?'上一轮 '+(review.decision_id||'-')+'：':'Prior '+(review.decision_id||'-')+': ')+
