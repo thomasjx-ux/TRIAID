@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import json
 from statistics import mean, pstdev
 
 from .store import RunStore
 
 
 class MarketObservationStore:
-    version="market-observation@0.3.0"
+    version="market-observation@0.4.0"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
@@ -20,6 +22,20 @@ class MarketObservationStore:
         if not isinstance(self.watermarks,dict):
             self.watermarks={}
 
+    @staticmethod
+    def snapshot_signature(snapshot:dict)->str:
+        payload={
+            "market_id":str(snapshot.get("market_id") or "").upper(),
+            "mode":str(snapshot.get("mode") or "").upper(),
+            "provider":snapshot.get("provider"),
+            "source_latest_ts":snapshot.get("source_latest_ts"),
+            "interval":snapshot.get("interval"),
+            "points":snapshot.get("points"),
+            "latest":snapshot.get("latest") or {},
+        }
+        raw=json.dumps(payload,sort_keys=True,separators=(",",":"),default=str).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
+
     def record(self,snapshot:dict)->dict:
         market=str(snapshot.get("market_id") or "").upper()
         mode=str(snapshot.get("mode") or "").upper()
@@ -29,7 +45,7 @@ class MarketObservationStore:
             return {"recorded":False,"reason":"INVALID_SNAPSHOT"}
 
         key=f"{market}:{mode}"
-        signature=f"{source_latest_ts}:{provider}"
+        signature=self.snapshot_signature(snapshot)
         try:
             current_ts=int(source_latest_ts)
         except Exception:
@@ -52,32 +68,6 @@ class MarketObservationStore:
                 "source_latest_ts":source_latest_ts,
                 "max_source_latest_ts":persisted_watermark,
                 "provider":provider,
-            }
-        if (
-            current_ts is not None
-            and persisted_watermark is not None
-            and current_ts==persisted_watermark
-        ):
-            return {
-                "recorded":False,
-                "reason":"DUPLICATE_SOURCE_TIMESTAMP",
-                "market_id":market,
-                "mode":mode,
-                "source_latest_ts":source_latest_ts,
-            }
-        if self.index.get(key)==signature:
-            if (
-                current_ts is not None
-                and (persisted_watermark is None or current_ts>persisted_watermark)
-            ):
-                self.watermarks[key]=current_ts
-                self.store.save_json(self.watermark_name,self.watermarks)
-            return {
-                "recorded":False,
-                "reason":"DUPLICATE_SOURCE_TIMESTAMP",
-                "market_id":market,
-                "mode":mode,
-                "source_latest_ts":source_latest_ts,
             }
 
         previous=None
@@ -111,10 +101,45 @@ class MarketObservationStore:
                 "provider":provider,
             }
 
+        previous_signature=None
+        if previous is not None:
+            previous_signature=previous.get("content_signature") or self.snapshot_signature(previous)
+        if self.index.get(key)==signature or previous_signature==signature:
+            if self.index.get(key)!=signature:
+                self.index[key]=signature
+                self.store.save_json(self.index_name,self.index)
+            if (
+                current_ts is not None
+                and (persisted_watermark is None or current_ts>persisted_watermark)
+            ):
+                self.watermarks[key]=current_ts
+                self.store.save_json(self.watermark_name,self.watermarks)
+            return {
+                "recorded":False,
+                "reason":"DUPLICATE_SNAPSHOT_CONTENT",
+                "dedupe_basis":"SOURCE_TIMESTAMP_AND_CONTENT",
+                "market_id":market,
+                "mode":mode,
+                "source_latest_ts":source_latest_ts,
+                "content_signature":signature,
+            }
+
         provider_changed=bool(
             previous
             and previous.get("provider")
             and previous.get("provider")!=provider
+        )
+        previous_ts=None
+        if previous is not None:
+            try:
+                previous_ts=int(previous.get("source_latest_ts"))
+            except Exception:
+                previous_ts=None
+        content_revision=bool(
+            previous is not None
+            and current_ts is not None
+            and previous_ts==current_ts
+            and previous_signature!=signature
         )
 
         row={
@@ -130,11 +155,13 @@ class MarketObservationStore:
             "points":snapshot.get("points"),
             "symbols":snapshot.get("symbols") or [],
             "latest":snapshot.get("latest") or {},
+            "content_signature":signature,
+            "content_revision":content_revision,
             "provider_boundary":provider_changed,
             "previous_provider":previous.get("provider") if provider_changed and previous else None,
         }
         self.store.append_jsonl(self.filename,row)
-        transition=self._transition(previous,row) if previous else None
+        transition=self._transition(previous,row) if previous and not content_revision else None
         if transition is not None:
             self.store.append_jsonl(self.transition_filename,transition)
         self.index[key]=signature
@@ -145,7 +172,12 @@ class MarketObservationStore:
                 int(self.watermarks.get(key,current_ts) or current_ts),
             )
             self.store.save_json(self.watermark_name,self.watermarks)
-        return {"recorded":True,"observation":row,"transition":transition}
+        return {
+            "recorded":True,
+            "observation":row,
+            "transition":transition,
+            "content_revision":content_revision,
+        }
 
     def _transition(self,previous:dict,current:dict)->dict|None:
         if previous.get("provider")!=current.get("provider"):
