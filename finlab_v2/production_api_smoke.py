@@ -285,6 +285,14 @@ after_ids={x["run_id"] for x in runs_after}
 for item in created["runs"]:
     assert item["run_id"] in after_ids
 
+prospective_after=call("GET","/api/experiments/cn/prospective/latest")
+assert prospective_after["protocol_version"]=="cn-prospective-controls@0.1.0"
+assert prospective_after["design"]["horizons_trading_days"]==[3,5,10]
+assert prospective_after["design"]["no_future_information"] is True
+assert prospective_after["design"]["no_post_result_retuning"] is True
+assert len(prospective_after["pool"])>=2
+assert "TRIAID_STATE_TRANSITION" in prospective_after["control_rankings"]
+
 # Latency guardrails. External market-data calls get a wider allowance.
 slow=[x for x in RESULTS if x[3]>40]
 assert not slow,f"endpoint calls exceeded 40s: {slow}"
@@ -299,4 +307,6 @@ print({
     "storage":"supabase",
     "persistent":True,
     "live_runs":[x["run_id"] for x in created["runs"]],
+    "prospective_experiment_id":prospective_after["experiment_id"],
+    "prospective_source_run_id":prospective_after["source_run_id"],
 })
