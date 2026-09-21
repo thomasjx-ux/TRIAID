@@ -320,6 +320,10 @@ button.primary{background:#172033;color:#fff;border-color:#172033}
 .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .summary .item{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
 .summary .item b{display:block;margin-top:4px;font-size:15px}
+.prospective-panel{display:none;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:10px}
+.prospective-panel.show{display:block}.prospective-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.prospective-meta{font-size:12px;color:#748091;margin-top:5px}.prospective-kpis{margin-top:10px}
+.prospective-kpis .item b{font-variant-numeric:tabular-nums}.prospective-note{font-size:12px;line-height:1.5;color:#5f6b7a;margin-top:10px}
 canvas{width:100%;height:270px;background:#fff;border:1px solid var(--line);border-radius:12px}
 .legend{display:flex;gap:18px;font-size:12px;margin:8px 0}.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
 .tablewrap{overflow:auto;max-height:690px;border:1px solid var(--line);border-radius:12px;background:#fff}
@@ -444,6 +448,46 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     <div class="item"><span class="label" id="dailyAnalysisLabel">今日结论</span><b id="dailyAnalysis">-</b></div>
   </div>
 
+  <div class="prospective-panel" id="prospectivePanel">
+    <div class="prospective-head">
+      <div>
+        <b id="prospectiveTitle">A股前瞻对照实验</b>
+        <div class="prospective-meta" id="prospectiveMeta">-</div>
+      </div>
+      <span class="tag" id="prospectiveStatus">-</span>
+    </div>
+    <div class="summary prospective-kpis">
+      <div class="item"><span class="label" id="prospectiveDaysLabel">已观察交易日</span><b id="prospectiveDays">0</b></div>
+      <div class="item"><span class="label" id="prospectiveHoldLabel">最差池累计收益</span><b id="prospectiveHold">-</b></div>
+      <div class="item"><span class="label" id="prospectiveTriaidLabel">TRIAID冻结配置累计收益</span><b id="prospectiveTriaid">-</b></div>
+      <div class="item"><span class="label" id="prospectiveGapLabel">TRIAID相对最差池</span><b id="prospectiveGap">-</b></div>
+    </div>
+    <div class="prospective-note" id="prospectiveNote">-</div>
+    <h3 id="prospectiveStrategyTitle">策略确定与恢复排序</h3>
+    <div class="tablewrap" style="max-height:430px">
+      <table>
+        <thead><tr>
+          <th id="pthStrategy">策略</th>
+          <th id="pthPredRank">TRIAID预测名次</th>
+          <th id="pthBaseWeight">基线权重</th>
+          <th id="pthTriaidWeight">TRIAID权重</th>
+          <th id="pthDailyReturn">最近一日</th>
+          <th id="pthCumReturn">累计收益</th>
+          <th id="pthRealRank">当前实际名次</th>
+          <th id="pthReason">确定依据</th>
+        </tr></thead>
+        <tbody id="prospectiveStrategyRows"></tbody>
+      </table>
+    </div>
+    <h3 id="prospectiveDailyTitle">每日波动轨迹</h3>
+    <div class="tablewrap" style="max-height:360px">
+      <table>
+        <thead id="prospectiveDailyHead"></thead>
+        <tbody id="prospectiveDailyRows"></tbody>
+      </table>
+    </div>
+  </div>
+
   <h2 id="overviewTitle">当前状态</h2>
   <div class="grid">
     <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
@@ -492,6 +536,8 @@ const T={
   overview:'当前状态',date:'最新数据日',core:'当前 Core',selected:'当前策略数',cum:'累计 TRIAID 超额',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
   daily:'今日摘要',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'今日结论',
+  prospective:'A股前瞻对照实验',prospectiveDays:'已观察交易日',prospectiveHold:'最差池累计收益',prospectiveTriaid:'TRIAID冻结配置累计收益',prospectiveGap:'TRIAID相对最差池',
+  prospectiveStrategy:'策略确定与恢复排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID预测名次',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
   strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
   before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已验证决策',negative:'负贡献比例',next:'下一步',
@@ -508,6 +554,8 @@ const T={
   overview:'Current State',date:'Latest market date',core:'Active Core',selected:'Selected strategies',cum:'Cumulative TRIAID excess',
   curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
   daily:'Daily Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Daily conclusion',
+  prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
+  prospectiveStrategy:'Strategy Determination and Recovery Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID predicted rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
   strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
   before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Verified decisions',negative:'Negative-contribution rate',next:'Next step',
@@ -566,7 +614,10 @@ function applyText(){
  baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
  selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
  candidatePoolTitle:'candidatePool',
- regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',strategyTitle:'strategies',
+ regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',
+ prospectiveTitle:'prospective',prospectiveDaysLabel:'prospectiveDays',prospectiveHoldLabel:'prospectiveHold',prospectiveTriaidLabel:'prospectiveTriaid',prospectiveGapLabel:'prospectiveGap',
+ prospectiveStrategyTitle:'prospectiveStrategy',prospectiveDailyTitle:'prospectiveDaily',
+ pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',strategyTitle:'strategies',
  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
  evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
  proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
@@ -675,6 +726,49 @@ function renderComparison(evaluated){
  el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
  el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
 }
+function renderProspective(report){
+ const panel=el('prospectivePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const t=T[lang];
+ el('prospectiveStatus').textContent=report.status||'-';
+ el('prospectiveDays').textContent=String(report.observation_days??0)+' / '+((report.horizons_trading_days||[]).join('/')||'-');
+ const p=report.current_portfolio_cumulative_returns||{};
+ el('prospectiveHold').textContent=fmtPct(p.HOLD_EQUAL);el('prospectiveHold').className=cls(Number(p.HOLD_EQUAL||0));
+ el('prospectiveTriaid').textContent=fmtPct(p.TRIAID_STATIC_ALLOCATION);el('prospectiveTriaid').className=cls(Number(p.TRIAID_STATIC_ALLOCATION||0));
+ el('prospectiveGap').textContent=signedPct(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);el('prospectiveGap').className=cls(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL||0));
+ el('prospectiveMeta').textContent=(report.experiment_id||'-')+' · '+(lang==='zh'?'登记日 ':'Registered ')+(report.market_as_of||'-')+' · '+(lang==='zh'?'待完成窗口 ':'Pending horizons ')+((report.pending_horizons||[]).join('/')||'none');
+ el('prospectiveNote').textContent=lang==='zh'
+   ? '策略池与预测顺序在登记时冻结，禁止事后换人或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复预测能力的主要证据。'
+   : 'Pool membership and predicted ordering are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-selection skill.';
+ const rows=report.strategy_determination||[];
+ el('prospectiveStrategyRows').innerHTML=rows.map(x=>{
+   const name=(x.name&&x.name[lang])||x.strategy_id;
+   const reason=(x.selection_reason&&x.selection_reason[lang])||'';
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(name)+'</span><br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td class="num">'+(x.triaid_predicted_rank??'-')+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.latest_daily_return||0))+'">'+fmtPct(x.latest_daily_return)+'</td>'+
+    '<td class="num '+cls(Number(x.realized_cumulative_return||0))+'">'+fmtPct(x.realized_cumulative_return)+'</td>'+
+    '<td class="num">'+(x.realized_rank_so_far??'-')+'</td>'+
+    '<td class="reason">'+esc(reason)+'</td></tr>';
+ }).join('');
+ const pool=rows.map(x=>x.strategy_id);
+ el('prospectiveDailyHead').innerHTML='<tr><th>'+(lang==='zh'?'交易日':'Trading day')+'</th>'+
+   pool.map(sid=>'<th>'+esc(sid)+'</th>').join('')+
+   '<th>'+(lang==='zh'?'最差池':'Worst pool')+'</th><th>TRIAID</th><th>'+(lang==='zh'?'差值':'Gap')+'</th></tr>';
+ const daily=report.daily_fluctuation||[];
+ el('prospectiveDailyRows').innerHTML=daily.map(day=>{
+   const cr=day.portfolio_cumulative_returns||{};
+   return '<tr><td class="nowrap">'+esc(day.as_of||'-')+'</td>'+
+    pool.map(sid=>'<td class="num '+cls(Number((day.strategy_returns||{})[sid]||0))+'">'+signedPct((day.strategy_returns||{})[sid])+'</td>').join('')+
+    '<td class="num '+cls(Number(cr.HOLD_EQUAL||0))+'">'+fmtPct(cr.HOLD_EQUAL)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_ALLOCATION||0))+'">'+fmtPct(cr.TRIAID_STATIC_ALLOCATION)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL||0))+'">'+signedPct(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL)+'</td></tr>';
+ }).join('') || '<tr><td colspan="'+(pool.length+4)+'">'+(lang==='zh'?'等待首个后续真实交易日结果':'Awaiting the first subsequent realized trading-day result')+'</td></tr>';
+}
 async function refreshAll(){
  const m=el('market').value;
  try{
@@ -720,6 +814,7 @@ async function refreshAll(){
     : T[lang].pending;
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  renderProspective(isCNStress?d.prospective_experiment:null);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
