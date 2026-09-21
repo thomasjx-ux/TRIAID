@@ -66,6 +66,20 @@ class EvolutionLabEngine:
         if self._evidence_eligible_run(run):
             self.store.save_run(run)
 
+    def _prune_manual_previews(self,max_per_market:int=5)->None:
+        for market_id in ("US","CN"):
+            previews=sorted(
+                [
+                    r for r in self._runs.values()
+                    if r.market.market_id.upper()==market_id
+                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
+                    and r.status!="FETCHING_DATA"
+                ],
+                key=lambda r:r.created_at,
+            )
+            for row in previews[:-max_per_market]:
+                self._runs.pop(row.run_id,None)
+
     def _recover_stale_runs(self)->None:
         for run in list(self._runs.values()):
             if run.status not in {"CREATED","FETCHING_DATA"}:
@@ -137,8 +151,19 @@ class EvolutionLabEngine:
         run_scope=str(run_scope or "OFFICIAL_EVIDENCE").upper()
         if run_scope not in {"OFFICIAL_EVIDENCE","MANUAL_PREVIEW"}:
             raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
-        run_id=f"{market_id}-live-{uuid4().hex[:12]}"
         evidence_eligible=run_scope=="OFFICIAL_EVIDENCE"
+        with self._lock:
+            if not evidence_eligible:
+                pending=[
+                    r for r in self._runs.values()
+                    if r.market.market_id.upper()==market_id
+                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
+                    and r.status=="FETCHING_DATA"
+                ]
+                if pending:
+                    return sorted(pending,key=lambda r:r.created_at)[-1]
+                self._prune_manual_previews()
+        run_id=f"{market_id}-live-{uuid4().hex[:12]}"
         run=RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
@@ -589,6 +614,8 @@ class EvolutionLabEngine:
                 if not evidence_eligible and run.status!="FAILED":
                     run.status="PREVIEW_READY"
                 self._save_run(run)
+                if not evidence_eligible:
+                    self._prune_manual_previews()
         except Exception as exc:
             with self._lock:
                 run=self._runs[run_id]
@@ -645,8 +672,8 @@ class EvolutionLabEngine:
         return rows[-1] if rows else None
 
     def run_live_research(self,market_id:str)->RunRecord:
-        run=self.create_pending_live_run(market_id)
-        self.execute_live(run.run_id,market_id)
+        run=self.create_pending_live_run(market_id,"OFFICIAL_EVIDENCE")
+        self.execute_live(run.run_id,market_id,"OFFICIAL_EVIDENCE")
         return self.get_run(run.run_id)
 
     def recompute_transition_research(
