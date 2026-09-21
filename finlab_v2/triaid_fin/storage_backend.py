@@ -220,18 +220,33 @@ class FileStorageBackend:
 
 
 class SupabaseStorageBackend:
-    version="supabase-storage-backend@0.1.0"
+    version="supabase-storage-backend@0.2.0"
 
     def __init__(self)->None:
         self.endpoint=os.environ.get("TRIAID_SUPABASE_PERSISTENCE_URL","").strip()
         self.token=os.environ.get("TRIAID_SUPABASE_TOKEN","").strip()
+        namespace=os.environ.get("TRIAID_STORAGE_NAMESPACE","").strip().strip("/")
+        if namespace and any(part in {"",".",".."} for part in namespace.split("/")):
+            raise StorageBackendError("invalid_storage_namespace")
+        self.namespace=namespace
         if not self.endpoint or not self.token:
             raise StorageBackendError("supabase_backend_missing_endpoint_or_token")
-        self.root=Path("/remote/supabase")
+        self.root=Path("/remote/supabase")/(self.namespace or "default")
         self._lock=RLock()
         ping=self._call({"action":"ping"})
         if not ping.get("ok"):
             raise StorageBackendError("supabase_backend_ping_failed")
+
+    def _key(self,name:str)->str:
+        clean=str(name).lstrip("/")
+        return f"{self.namespace}/{clean}" if self.namespace else clean
+
+    def _strip_namespace(self,key:str)->str:
+        value=str(key)
+        if not self.namespace:
+            return value
+        prefix=f"{self.namespace}/"
+        return value[len(prefix):] if value.startswith(prefix) else value
 
     @property
     def persistent(self)->bool:
@@ -273,22 +288,22 @@ class SupabaseStorageBackend:
         return self.root/name
 
     def exists(self,name:str)->bool:
-        return bool(self._call({"action":"exists_object","key":name}).get("exists"))
+        return bool(self._call({"action":"exists_object","key":self._key(name)}).get("exists"))
 
     def atomic_write_text(self,name:str,text:str)->None:
-        self._call({"action":"write_object","key":name,"content":text})
+        self._call({"action":"write_object","key":self._key(name),"content":text})
 
     def append_line(self,name:str,line:str)->None:
-        self._call({"action":"append_stream","key":name,"line":line})
+        self._call({"action":"append_stream","key":self._key(name),"line":line})
 
     def read_text(self,name:str)->str:
-        result=self._call({"action":"read_object","key":name})
+        result=self._call({"action":"read_object","key":self._key(name)})
         if not result.get("found"):
             raise FileNotFoundError(name)
         return str(result.get("content") or "")
 
     def read_lines(self,name:str,limit:int|None=None)->list[str]:
-        payload={"action":"read_stream","key":name}
+        payload={"action":"read_stream","key":self._key(name)}
         if limit is not None:
             payload["limit"]=int(limit)
         result=self._call(payload)
@@ -298,20 +313,23 @@ class SupabaseStorageBackend:
     def list_names(self,prefix:str,suffix:str="")->list[str]:
         result=self._call({
             "action":"list_objects",
-            "prefix":prefix,
+            "prefix":self._key(prefix),
             "suffix":suffix,
         })
-        return [str(x) for x in (result.get("keys") or [])]
+        return [
+            self._strip_namespace(str(x))
+            for x in (result.get("keys") or [])
+        ]
 
     def list_texts(self,prefix:str,suffix:str="")->dict[str,str]:
         result=self._call({
             "action":"read_objects",
-            "prefix":prefix,
+            "prefix":self._key(prefix),
             "suffix":suffix,
         })
         objects=result.get("objects") or []
         return {
-            str(row.get("key")):str(row.get("content") or "")
+            self._strip_namespace(str(row.get("key"))):str(row.get("content") or "")
             for row in objects
             if isinstance(row,dict) and row.get("key")
         }
@@ -320,7 +338,8 @@ class SupabaseStorageBackend:
         return {
             "backend":"supabase",
             "version":self.version,
-            "root":"supabase://triaid-persistence",
+            "root":f"supabase://triaid-persistence/{self.namespace or 'default'}",
+            "namespace":self.namespace or None,
             "durability":"PERSISTENT",
             "persistent":True,
             "endpoint_configured":bool(self.endpoint),
