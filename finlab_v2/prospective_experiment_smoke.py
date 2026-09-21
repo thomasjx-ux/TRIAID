@@ -78,7 +78,8 @@ registered=protocol.register(
     horizons=(3,5,10),
     previous_states=previous,
 )
-assert registered["status"]=="OPEN"\nassert protocol.version=="cn-prospective-controls@0.2.0"
+assert registered["status"]=="OPEN"
+assert protocol.version=="cn-prospective-controls@0.2.0"
 assert registered["design"]["horizons_trading_days"]==[3,5,10]
 assert registered["design"]["no_future_information"] is True
 assert registered["design"]["no_post_result_retuning"] is True
