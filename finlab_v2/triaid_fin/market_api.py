@@ -130,6 +130,7 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         seconds:int=Query(...,ge=1),
         lock:bool=Query(default=False),
         reason:str=Query(default="manual"),
+        _admin:None=Depends(_require_admin_token),
     )->dict:
         key=_market(market_id);freq=_mode(mode)
         return automation.frequency_policy.set_interval(key,freq,seconds,lock=lock,reason=reason)
