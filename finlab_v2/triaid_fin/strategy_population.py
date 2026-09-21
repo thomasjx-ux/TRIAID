@@ -124,8 +124,8 @@ class StrategyPopulationModule:
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="strictly maximize the current multi-window annualized state-return estimate across ACTIVE strategies; break exact score ties by lower estimated cost, risk, uncertainty and deterministic strategy ID, then validate posterior theoretical and simulated-execution return separately under four USD capital sleeves"
-            result["primary_route_selector"]="STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
+            result["research_experiment_objective"]="maximize the current multi-window annualized state-return estimate net of modeled route switching cost across admissible ACTIVE strategies; break exact net-score ties by lower switching cost, risk, uncertainty and deterministic strategy ID, then validate posterior theoretical and simulated-execution return separately under four USD capital sleeves"
+            result["primary_route_selector"]="MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
             result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
         return result
 
