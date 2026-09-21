@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.2.0"
+    version="decision-scheduler@0.2.1"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -25,6 +25,9 @@ class DecisionScheduler:
         }
         self.allocation_action_l1_threshold=max(
             0.0,float(os.getenv("TRIAID_ALLOCATION_ACTION_L1_THRESHOLD","0.05"))
+        )
+        self.close_settle_seconds=max(
+            0,int(os.getenv("TRIAID_CLOSE_SETTLE_SECONDS","300"))
         )
         self.state=self.store.load_json(self.state_name,default={}) or {}
         self.state.setdefault("markets",{})
@@ -294,6 +297,7 @@ class DecisionScheduler:
             ),
             "allocation_change_recommended":allocation_change_recommended,
             "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
+            "close_settle_seconds":self.close_settle_seconds,
             "broker_order_generated":False,
         }
         row=self._event(market,"TRANSITION_RESEARCH_DECISION",{
@@ -310,6 +314,14 @@ class DecisionScheduler:
         self._save()
         return row
 
+    def _postclose_settled(self,market_id:str)->bool:
+        market=market_id.upper()
+        now=datetime.now(self._tz(market))
+        close_hour,close_minute=(15,0) if market=="CN" else (16,0)
+        close_seconds=close_hour*3600+close_minute*60
+        now_seconds=now.hour*3600+now.minute*60+now.second
+        return now_seconds>=close_seconds+self.close_settle_seconds
+
     def _close(self,market_id:str,snapshot:dict,observed:dict)->dict|None:
         market=market_id.upper()
         state=self._market_state(market)
@@ -319,7 +331,8 @@ class DecisionScheduler:
         source_ts=snapshot.get("source_latest_ts")
         signature=self.engine.observations.snapshot_signature(snapshot)
         recorded=bool((observed or {}).get("recorded"))
-        if not recorded:
+        settled=self._postclose_settled(market)
+        if not recorded and not settled:
             if state.get("close_wait_signature")==signature:
                 return None
             row=self._event(market,"CLOSE_WAITING_FOR_NEW_DAILY_DATA",{
@@ -327,11 +340,20 @@ class DecisionScheduler:
                 "source_latest_ts":source_ts,
                 "snapshot_signature":signature,
                 "observation_reason":(observed or {}).get("reason"),
+                "close_settled":False,
+                "settle_seconds":self.close_settle_seconds,
             })
             state["last_close_source_ts"]=source_ts
             state["close_wait_signature"]=signature
             self._save()
             return row
+
+        if (
+            not recorded
+            and settled
+            and state.get("last_close_signature")==signature
+        ):
+            return None
 
         run=self.engine.run_live_research(market)
         event_type=(
@@ -344,6 +366,8 @@ class DecisionScheduler:
             "source_latest_ts":source_ts,
             "snapshot_signature":signature,
             "observation_content_revision":bool((observed or {}).get("content_revision")),
+            "close_settled":settled,
+            "recovered_from_duplicate_content":bool(not recorded and settled),
             "run_id":run.run_id,
             "run_status":run.status,
             "snapshot_id":run.market.snapshot_id,
