@@ -127,8 +127,20 @@ class EvolutionLabEngine:
                 request.max_group_size,
                 previous_group=previous_group,
                 base_cost_bps=float(request.market.metadata.get("base_cost_bps",2.0) or 2.0),
+                experiment_mode=request.market.metadata.get("experiment_mode"),
             )
             decision=self.core.decide(request.market,group,request.strategy_states)
+            state_map={s.strategy_id:s for s in request.strategy_states}
+            projected_baseline=sum(
+                float(w)*(0.0 if sid=="P28_CASH" else float(state_map[sid].expected_net_return))
+                for sid,w in group.weights.items()
+                if sid=="P28_CASH" or sid in state_map
+            )
+            projected_after=sum(
+                float(w)*(0.0 if sid=="P28_CASH" else float(state_map[sid].expected_net_return))
+                for sid,w in decision.weights_after.items()
+                if sid=="P28_CASH" or sid in state_map
+            )
             with self._lock:
                 run=self._runs[run_id]
                 run.market=request.market
@@ -137,6 +149,14 @@ class EvolutionLabEngine:
                 run.strategy_group=group
                 run.triaid_decision=decision
                 run.evaluation=self.evaluation.pending()
+                run.diagnostic_summary={
+                    "experiment_mode":request.market.metadata.get("experiment_mode"),
+                    "projection_basis":"CURRENT_EXPECTED_NET_RETURN_NOT_REALIZED",
+                    "projected_baseline_expected_return":projected_baseline,
+                    "projected_triaid_expected_return":projected_after,
+                    "projected_excess_expected_return":projected_after-projected_baseline,
+                    "realized_outcome_pending":True,
+                }
                 run.audit=self.audit.audit(run)
                 run.status="DECISION_READY_AWAITING_OUTCOME" if run.audit.passed else "FAILED"
                 self.store.save_run(run)
@@ -189,12 +209,17 @@ class EvolutionLabEngine:
             snapshot=prepared["snapshot"]
             snapshot.metadata["strategy_rules_version"]=profile.version
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
+            if market_id=="CN":
+                snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
+                snapshot.metadata["experiment_design"]="Equal-weight the currently worst eligible risky strategies using only current information, start cash at zero, then measure TRIAID loss reduction prospectively."
 
+            current_experiment=snapshot.metadata.get("experiment_mode")
             existing_decisions=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==market_id
                 and r.market.snapshot_id==snapshot.snapshot_id
+                and r.market.metadata.get("experiment_mode")==current_experiment
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_group is not None
                 and r.triaid_decision is not None
