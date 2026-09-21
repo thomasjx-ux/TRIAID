@@ -271,9 +271,26 @@ def recovery_wave_history(
 def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
     market_id: str | None = Query(default=None),
+    run_id: str | None = Query(default=None),
 ) -> list[dict]:
-    cards = engine.strategy_population.strategy_cards(lang, market_id)
-    latest_run = engine.latest_decision_run(market_id) if market_id else None
+    latest_run=None
+    if run_id:
+        try:
+            latest_run=engine.get_run(run_id)
+        except (KeyError,FileNotFoundError) as exc:
+            raise HTTPException(status_code=404,detail="run_id not found") from exc
+        if market_id and latest_run.market.market_id.upper()!=market_id.upper():
+            raise HTTPException(status_code=400,detail="run_id market does not match market_id")
+        if latest_run.strategy_group is None or latest_run.triaid_decision is None:
+            raise HTTPException(status_code=409,detail="run decision is not ready")
+    elif market_id:
+        latest_run=engine.latest_decision_run(market_id)
+    effective_market=(
+        latest_run.market.market_id
+        if latest_run
+        else market_id
+    )
+    cards = engine.strategy_population.strategy_cards(lang, effective_market)
     state_map = {s.strategy_id: s for s in latest_run.strategy_states} if latest_run else {}
     group = latest_run.strategy_group if latest_run else None
     decision = latest_run.triaid_decision if latest_run else None
@@ -288,6 +305,15 @@ def strategies(
             {
                 "market_id": latest_run.market.market_id if latest_run else market_id,
                 "as_of": latest_run.market.as_of if latest_run else None,
+                "run_id":latest_run.run_id if latest_run else None,
+                "run_scope":(
+                    (latest_run.market.metadata or {}).get("run_scope","OFFICIAL_EVIDENCE")
+                    if latest_run else None
+                ),
+                "evidence_eligible":(
+                    (latest_run.market.metadata or {}).get("evidence_eligible") is not False
+                    if latest_run else None
+                ),
                 "lifecycle": state.lifecycle if state else None,
                 "expected_net_return": state.expected_net_return if state else None,
                 "risk": state.risk if state else None,
