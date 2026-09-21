@@ -49,7 +49,8 @@ assert d["date"]
 dcn=daily("CN")
 assert dcn["date"]
 assert "prospective_experiment" in dcn
-assert dcn["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"\nassert dcn["prospective_experiment"]["protocol_version"].startswith("cn-prospective-controls@")
+assert dcn["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"
+assert dcn["prospective_experiment"]["protocol_version"].startswith("cn-prospective-controls@")
 assert dcn["prospective_experiment"]["strategy_determination"]
 
 cards=strategies("zh","US")
