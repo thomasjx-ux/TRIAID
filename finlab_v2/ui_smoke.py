@@ -35,6 +35,8 @@ assert "TRIAID冻结配置累计收益" in html
 assert 'id="recoveryWavePanel"' in html
 assert 'id="recoveryOpinionRows"' in html
 assert 'id="recoveryReviewRows"' in html
+assert 'id="recoveryPreviousMeta"' in html
+assert 'id="rwthSpeed"' in html
 assert "renderRecoveryWave" in html
 assert "TRIAID 二阶恢复波段决策" in html
 assert "当前冻结交易意见" in html
