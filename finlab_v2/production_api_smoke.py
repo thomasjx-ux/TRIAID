@@ -109,8 +109,9 @@ assert "TRIAID FIN" in home and "TRIAID 增益" in home
 status=call("GET","/api/status")
 assert status["architecture_version"].startswith("fin-evolution-lab@")
 assert status["strategy_registry_count"]==33
-assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.1.1"
-assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.1.0"
+assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.2.0"
+assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.2.0"
+assert status["module_manifest"]["capital_capacity"]=="capital-capacity-layer@0.1.0"
 
 storage=call("GET","/api/storage/status")
 assert storage["backend"]["backend"]=="supabase"
@@ -128,19 +129,26 @@ if prospective_rows:
     assert prospective_detail["experiment_id"]==prospective_latest["experiment_id"]
 
 recovery_status=call("GET","/api/recovery-wave/status?market_id=CN")
-assert recovery_status["version"]=="recovery-wave-ledger@0.1.0"
+assert recovery_status["version"]=="recovery-wave-ledger@0.2.0"
 assert recovery_status["integrity"]["passed"] is True
 recovery_history=call("GET","/api/recovery-wave/history?market_id=CN&limit=5")
 assert isinstance(recovery_history,list)
 if recovery_history:
     recovery_latest=call("GET","/api/recovery-wave/latest?market_id=CN")
     assert recovery_latest["decision_id"]==recovery_history[-1]["decision_id"]
-    assert recovery_latest["core_version"]=="recovery-wave-core@0.1.1"
+    assert recovery_latest["core_version"]=="recovery-wave-core@0.2.0"
     assert recovery_latest["data_scope"]["constituent_micro_available"] is False
     assert recovery_latest["execution_discipline"]["same_bar_execution_allowed"] is False
     assert recovery_latest["second_order"]["capital_discipline"]=="TOTAL_RISK_BUDGET_SCALED_BY_STRONGEST_PROSPECTIVE_RECOVERY_EVIDENCE"
     assert recovery_latest["second_order"]["effective_risk_budget"]<=recovery_latest["second_order"]["base_risk_budget"]+1e-12
     assert recovery_latest["trade_opinions"]
+    cap=recovery_latest["capital_capacity"]
+    assert cap["enabled"] is True
+    assert cap["version"]=="capital-capacity-layer@0.1.0"
+    assert cap["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
+    assert len(cap["sleeves"])==4
+    assert all(x["starting_cash_only"] is True for x in cap["sleeves"])
+    assert all(x["liquidity_data_complete"] is True for x in cap["sleeves"])
 
 runs_before=call("GET","/api/runs?limit=20")
 assert isinstance(runs_before,list)
@@ -156,10 +164,11 @@ for market in ("US","CN"):
         assert daily["prospective_experiment"]["strategy_determination"]
         assert "daily_fluctuation" in daily["prospective_experiment"]
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
-        assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.1.0"
+        assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.2.0"
         assert daily["recovery_wave"]["integrity"]["passed"] is True
-        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.1"
+        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.2.0"
         assert daily["recovery_wave"]["latest_decision"]["trade_opinions"]
+        assert daily["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
     curves=call("GET",f"/api/curves?market_id={market}")
     assert isinstance(curves,list)
     cards=call("GET",f"/api/strategies?market_id={market}&lang=zh")
