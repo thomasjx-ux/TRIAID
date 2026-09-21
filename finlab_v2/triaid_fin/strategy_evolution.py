@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from statistics import mean
 from typing import Iterable
@@ -136,6 +137,32 @@ class StrategyEvolutionModule:
             return self._market(market_id)
         return self.state
 
+    @staticmethod
+    def _states_for_profile(run:RunRecord,profile:StrategyRuleProfile):
+        windows=(21,63,126,252)
+        weights=tuple(float(x) for x in profile.window_weights)
+        total=sum(weights)
+        weights=(0.35,0.30,0.20,0.15) if total<=0 else tuple(x/total for x in weights)
+        rebuilt=[]
+        for original in run.strategy_states:
+            state=original.model_copy(deep=True)
+            if state.strategy_id=="P28_CASH":
+                state.expected_net_return=0.0
+                rebuilt.append(state)
+                continue
+            rs=[float(x) for x in state.recent_returns]
+            weighted=[]
+            used=[]
+            for h,w in zip(windows,weights):
+                if len(rs)>=h:
+                    ann=mean(rs[-h:])*252.0
+                    weighted.append(ann*w)
+                    used.append(w)
+                    state.metrics[f"return_{h}d_ann"]=ann
+            state.expected_net_return=sum(weighted)/sum(used) if used else 0.0
+            rebuilt.append(state)
+        return rebuilt
+
     def _simulate_profile(self,runs:list[RunRecord],profile:StrategyRuleProfile)->list[float]:
         population=StrategyPopulationModule()
         population.configure_market(profile)
@@ -144,9 +171,10 @@ class StrategyEvolutionModule:
         for run in sorted(runs,key=lambda r:(r.market.as_of,r.created_at)):
             if not run.evaluation or run.evaluation.status!="EVALUATED":
                 continue
+            replay_states=self._states_for_profile(run,profile)
             group=population.select(
                 profile.market_id,
-                run.strategy_states,
+                replay_states,
                 profile.max_group_size,
                 previous_group=previous_group,
                 base_cost_bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0),
@@ -280,7 +308,7 @@ class StrategyEvolutionModule:
         candidate.version=f"strategy-rules-{market_id.lower()}-candidate-{n:03d}"
         candidate.hypothesis=(
             f"{candidate.hypothesis}; development mean {best[0]:+.6f} vs active {active_mean:+.6f}. "
-            "Reserved holdout observations were not used for candidate selection."
+            "Reserved holdout observations were not used for candidate selection. Candidate window weights are replayed by rebuilding the state-return estimate from each run's frozen recent-return history."
         )
         m["profiles"][candidate.version]=asdict(candidate)
         m["history"].append({
