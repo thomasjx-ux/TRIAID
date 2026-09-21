@@ -27,6 +27,11 @@ assert "refreshLiveWindows" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
 assert "CN_WORST_POOL_RESCUE" in html
+assert 'id="prospectivePanel"' in html
+assert 'id="prospectiveStrategyRows"' in html
+assert 'id="prospectiveDailyRows"' in html
+assert "renderProspective" in html
+assert "TRIAID冻结配置累计收益" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
 assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')
@@ -40,6 +45,12 @@ assert s["strategy_registry_count"]==33
 
 d=daily("US")
 assert d["date"]
+
+dcn=daily("CN")
+assert dcn["date"]
+assert "prospective_experiment" in dcn
+assert dcn["prospective_experiment"]["protocol_version"]=="cn-prospective-controls@0.2.0"
+assert dcn["prospective_experiment"]["strategy_determination"]
 
 cards=strategies("zh","US")
 assert len(cards)==29
