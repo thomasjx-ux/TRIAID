@@ -357,6 +357,12 @@ class USReturnMaxLedger:
         key=f"US:{as_of}"
         if key in self.outcome_index:
             return {"recorded":False,"reason":"DUPLICATE_OUTCOME_DATE","outcome_id":self.outcome_index[key]}
+        for existing in reversed(self.outcomes(5000)):
+            if str(existing.get("as_of") or "")==str(as_of):
+                outcome_id=str(existing.get("outcome_id") or f"USRMO-{as_of}")
+                self.outcome_index[key]=outcome_id
+                self.store.save_json(self.outcome_index_file,self.outcome_index)
+                return {"recorded":False,"reason":"DUPLICATE_OUTCOME_DATE_RECOVERED_FROM_LEDGER","outcome_id":outcome_id}
         row={
             "outcome_id":f"USRMO-{as_of}",
             "recorded_at":utc_now(),
@@ -407,7 +413,16 @@ class USReturnMaxLedger:
             daily=[]
             full_fill_date=None
             incomplete_turnover_dates=[]
-            for index,row in enumerate(future,1):
+            incomplete_return_dates=[]
+            required_products={s for s,v in targets.items() if float(v)>1e-9}
+            sleeve_future=[]
+            for row in future:
+                returns=row.get("product_returns") or {}
+                if any(s not in returns for s in required_products):
+                    incomplete_return_dates.append(row.get("as_of"))
+                    continue
+                sleeve_future.append(row)
+            for index,row in enumerate(sleeve_future,1):
                 returns=row.get("product_returns") or {}
                 turnover=row.get("product_turnover") or {}
                 for symbol in positions:
@@ -478,7 +493,8 @@ class USReturnMaxLedger:
                 "current_equity_usd":equity,
                 "current_net_pnl_usd":equity-capital,
                 "current_net_return":equity/capital-1.0 if capital>0 else 0.0,
-                "observation_days":len(future),
+                "observation_days":len(sleeve_future),
+                "incomplete_return_dates":sorted(set(x for x in incomplete_return_dates if x)),
                 "incomplete_turnover_dates":sorted(set(x for x in incomplete_turnover_dates if x)),
                 "daily_path":daily,
             })
@@ -490,9 +506,23 @@ class USReturnMaxLedger:
 
     def review_decision(self,decision:dict)->dict:
         decision_date=str(decision.get("market_as_of") or "")
-        future=[o for o in self.outcomes(4000) if str(o.get("as_of") or "")>decision_date]
+        raw_future=[o for o in self.outcomes(4000) if str(o.get("as_of") or "")>decision_date]
         route_weights={str(k):float(v) for k,v in (decision.get("target_strategy_weights") or {}).items()}
         generic_weights={str(k):float(v) for k,v in (decision.get("generic_core_control_weights") or {}).items()}
+        required_strategies={
+            sid for sid,w in {**route_weights,**generic_weights}.items()
+            if sid!="P28_CASH" and float(w)>1e-12
+        }
+        incomplete_outcome_dates=[
+            o.get("as_of") for o in raw_future
+            if any(s not in (o.get("strategy_returns") or {}) for s in required_strategies)
+            or "SPY" not in (o.get("product_returns") or {})
+        ]
+        future=[
+            o for o in raw_future
+            if all(s in (o.get("strategy_returns") or {}) for s in required_strategies)
+            and "SPY" in (o.get("product_returns") or {})
+        ]
         daily=[]
         route_daily=[]
         generic_daily=[]
@@ -532,6 +562,7 @@ class USReturnMaxLedger:
             "market_as_of":decision_date,
             "frozen_at":decision.get("frozen_at"),
             "observation_days":len(future),
+            "incomplete_outcome_dates":sorted(set(x for x in incomplete_outcome_dates if x)),
             "daily_path":daily,
             "current_return_max_theoretical_return":self._compound(route_daily),
             "current_generic_core_theoretical_return":self._compound(generic_daily),
