@@ -907,7 +907,7 @@ const TABLE_HEADER_TIPS={
 };
 
 function normalizeHeaderLabel(text){
- return String(text||'').replace(/\s+/g,'').replace(/[：:]/g,'').trim();
+ return String(text||'').replace(/\\s+/g,'').replace(/[：:]/g,'').trim();
 }
 function tableHeaderTip(label){
  const raw=String(label||'').trim();
