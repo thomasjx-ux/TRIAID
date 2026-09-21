@@ -157,6 +157,10 @@ def market_data_provider_status()->dict:
     return get_market_data_hub().provider_status()
 
 
+def market_data_auction_shadow_probe(market_id:str,symbols:list[str]|tuple[str,...])->dict:
+    return get_market_data_hub().auction_shadow_probe(market_id,symbols)
+
+
 def market_data_latest_quotes(market_id:str,symbols:list[str]|tuple[str,...])->dict:
     return get_market_data_hub().latest_quotes(market_id,symbols)
 
