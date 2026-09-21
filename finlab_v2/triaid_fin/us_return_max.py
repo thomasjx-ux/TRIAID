@@ -10,6 +10,7 @@ from typing import Any
 
 from .contracts import StrategyGroup, StrategyState, TriaidDecision, utc_now
 from .market_lab import policy_positions
+from .adaptive_alpha import us_fast_challenger
 from .store import RunStore
 
 
@@ -227,6 +228,7 @@ class USReturnMaxRoute:
             if "P00_BUY_HOLD" in state_map else None
         )
 
+        fast_challenger=us_fast_challenger(admissible,str(winner.strategy_id))
         target_assets=dict(winner_row["target_asset_weights"])
         target_risk_weight=sum(target_assets.values())
         adv_by_symbol={
@@ -320,6 +322,7 @@ class USReturnMaxRoute:
             "max_return_tie_set":tie_set,
             "tie_break_order":["meta_switch_cost","risk","uncertainty","strategy_id"],
             "selection_holding_horizon_days":holding_days,
+            "fast_challenger":fast_challenger,
             "previous_route_decision_id":(previous_decision or {}).get("decision_id"),
             "candidate_selection_scores":[
                 {
