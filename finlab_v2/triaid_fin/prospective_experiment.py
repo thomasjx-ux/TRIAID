@@ -289,8 +289,16 @@ class ProspectiveExperimentProtocol:
 
         baseline = experiment["frozen_baseline_weights"]
         triaid = experiment["frozen_triaid_weights"]
-        hold_equal = sum(float(baseline.get(sid, 0.0)) * realized[sid] for sid in pool)
-        triaid_static = sum(float(triaid.get(sid, 0.0)) * realized[sid] for sid in pool)
+        hold_daily = [
+            sum(float(baseline.get(sid, 0.0)) * float(p["realized_returns"][sid]) for sid in pool)
+            for p in periods
+        ]
+        triaid_daily = [
+            sum(float(triaid.get(sid, 0.0)) * float(p["realized_returns"][sid]) for sid in pool)
+            for p in periods
+        ]
+        hold_equal = self._compound(hold_daily)
+        triaid_static = self._compound(triaid_daily)
         return {
             "horizon_trading_days": horizon,
             "periods_used": [p["as_of"] for p in periods],
@@ -303,7 +311,8 @@ class ProspectiveExperimentProtocol:
                 "TRIAID_STATIC_ALLOCATION": triaid_static,
                 "TRIAID_STATIC_MINUS_HOLD_EQUAL": triaid_static - hold_equal,
             },
-            "interpretation_guard": "Ranking metrics test recovery-selection ability. Static allocation return includes cash/exposure effects and must not be presented as recovery-selection evidence.",
+            "portfolio_path_semantics": "CONSTANT_FROZEN_TARGET_WEIGHTS_REBALANCED_AT_EACH_COMPLETE_PERIOD; theoretical research path, not broker execution",
+            "interpretation_guard": "Ranking metrics test recovery-selection ability. Portfolio controls compound same-period weighted returns under constant frozen target weights; they are theoretical research paths and must not be presented as broker execution or recovery-selection evidence.",
         }
 
     def observe_period(self, as_of: str, realized_returns: Dict[str, float]) -> dict:
@@ -311,7 +320,7 @@ class ProspectiveExperimentProtocol:
         for experiment in self.state["experiments"]:
             if experiment.get("status") != "OPEN":
                 continue
-            if as_of < str(experiment.get("market_as_of") or ""):
+            if as_of <= str(experiment.get("market_as_of") or ""):
                 continue
             if any(p.get("as_of") == as_of for p in experiment.get("outcomes", [])):
                 continue
@@ -476,6 +485,7 @@ class ProspectiveExperimentProtocol:
             "pending_horizons": pending_horizons,
             "strategy_determination": strategy_rows,
             "daily_fluctuation": daily_rows,
+            "portfolio_path_semantics": "CONSTANT_FROZEN_TARGET_WEIGHTS_REBALANCED_AT_EACH_COMPLETE_PERIOD; theoretical research path, not broker execution",
             "current_portfolio_cumulative_returns": latest_portfolio,
             "evaluations": deepcopy(experiment.get("evaluations", {})),
             "incomplete_observations": deepcopy(experiment.get("incomplete_observations", [])),
