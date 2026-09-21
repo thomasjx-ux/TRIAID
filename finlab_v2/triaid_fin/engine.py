@@ -53,6 +53,19 @@ class EvolutionLabEngine:
         self._live_lock=RLock()
         self._recover_stale_runs()
 
+    @staticmethod
+    def _evidence_eligible_run(run:RunRecord)->bool:
+        metadata=run.market.metadata or {}
+        return (
+            metadata.get("evidence_eligible") is not False
+            and str(metadata.get("run_scope") or "OFFICIAL_EVIDENCE")!="MANUAL_PREVIEW"
+            and run.status!="PREVIEW_READY"
+        )
+
+    def _save_run(self,run:RunRecord)->None:
+        if self._evidence_eligible_run(run):
+            self._save_run(run)
+
     def _recover_stale_runs(self)->None:
         for run in list(self._runs.values()):
             if run.status not in {"CREATED","FETCHING_DATA"}:
@@ -63,7 +76,7 @@ class EvolutionLabEngine:
                 "error":"STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART",
                 "recovery":"Previous process ended before this research run completed.",
             }
-            self.store.save_run(run)
+            self._save_run(run)
 
     def _apply_strategy_profiles(self)->None:
         for market_id in ("US","CN"):
@@ -112,29 +125,48 @@ class EvolutionLabEngine:
         )
         with self._lock:
             self._runs[run_id]=run
-            self.store.save_run(run)
+            self._save_run(run)
         return run
 
-    def create_pending_live_run(self,market_id:str)->RunRecord:
+    def create_pending_live_run(
+        self,
+        market_id:str,
+        run_scope:str="OFFICIAL_EVIDENCE",
+    )->RunRecord:
         market_id=market_id.upper()
+        run_scope=str(run_scope or "OFFICIAL_EVIDENCE").upper()
+        if run_scope not in {"OFFICIAL_EVIDENCE","MANUAL_PREVIEW"}:
+            raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
         run_id=f"{market_id}-live-{uuid4().hex[:12]}"
+        evidence_eligible=run_scope=="OFFICIAL_EVIDENCE"
         run=RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
-            market=MarketSnapshot(market_id=market_id,as_of="",snapshot_id="PENDING"),
+            market=MarketSnapshot(
+                market_id=market_id,
+                as_of="",
+                snapshot_id="PENDING",
+                metadata={
+                    "run_scope":run_scope,
+                    "evidence_eligible":evidence_eligible,
+                    "research_only":True,
+                },
+            ),
             status="FETCHING_DATA",
         )
         with self._lock:
             self._runs[run_id]=run
-            self.store.save_run(run)
+            self._save_run(run)
         return run
 
-    @staticmethod
-    def _complete_daily_evidence_run(run:RunRecord)->bool:
-        # Legacy/manual runs without this flag remain eligible. Live runs explicitly
-        # marked False are provisional intraday research and must not advance daily
-        # lifecycle, prospective experiments, or posterior evaluation.
-        return (run.market.metadata or {}).get("daily_bar_complete") is not False
+    @classmethod
+    def _complete_daily_evidence_run(cls,run:RunRecord)->bool:
+        # Legacy official runs without the explicit flag remain eligible. Manual
+        # previews and provisional intraday runs are never evidence-bearing.
+        return (
+            cls._evidence_eligible_run(run)
+            and (run.market.metadata or {}).get("daily_bar_complete") is not False
+        )
 
     def _previous_us_route_decision(self,market_as_of:str)->dict|None:
         rows=[
@@ -198,6 +230,7 @@ class EvolutionLabEngine:
                 and str(request.market.metadata.get("experiment_mode") or "").upper()=="CN_WORST_POOL_RESCUE"
                 and bool(group.diagnostics.get("experiment_available",True))
                 and request.market.metadata.get("daily_bar_complete") is not False
+                and request.market.metadata.get("evidence_eligible") is not False
             ):
                 profile=self.strategy_evolution.active("CN")
                 prospective=self.prospective_experiment.register(
@@ -236,14 +269,19 @@ class EvolutionLabEngine:
                     "prospective_primary_evidence":"FUTURE_RANKING_ACCURACY_NOT_CASH_REDUCTION" if prospective else None,
                 }
                 run.audit=self.audit.audit(run)
-                run.status="DECISION_READY_AWAITING_OUTCOME" if run.audit.passed else "FAILED"
-                self.store.save_run(run)
+                if not run.audit.passed:
+                    run.status="FAILED"
+                elif request.market.metadata.get("evidence_eligible") is False:
+                    run.status="PREVIEW_READY"
+                else:
+                    run.status="DECISION_READY_AWAITING_OUTCOME"
+                self._save_run(run)
         except Exception as exc:
             with self._lock:
                 run=self._runs[run_id]
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
-                self.store.save_run(run)
+                self._save_run(run)
             raise
 
     def _meta_rebalance_cost(self,run:RunRecord)->float:
@@ -440,7 +478,7 @@ class EvolutionLabEngine:
                         "us_return_max_decision_hash":us_route_bootstrap.get("decision_hash") if us_route_bootstrap else None,
                         "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
                     }
-                    self.store.save_run(run)
+                    self._save_run(run)
                 return
 
             resolved=[]
@@ -470,7 +508,7 @@ class EvolutionLabEngine:
             with self._lock:
                 run=self._runs[run_id]
                 run.previous_run_id=resolved[-1] if resolved else None
-                self.store.save_run(run)
+                self._save_run(run)
             self.execute(run_id,request)
             us_route_decision=None
             if market_id=="US":
@@ -512,13 +550,13 @@ class EvolutionLabEngine:
                     "daily_bar_complete":daily_bar_complete,
                     "evidence_state":"COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY",
                 }
-                self.store.save_run(run)
+                self._save_run(run)
         except Exception as exc:
             with self._lock:
                 run=self._runs[run_id]
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
-                self.store.save_run(run)
+                self._save_run(run)
 
     def recovery_wave_status(self,market_id:str|None=None)->dict:
         return self.recovery_wave_ledger.status(market_id)
@@ -686,7 +724,7 @@ class EvolutionLabEngine:
                 "contribution_deltas":deltas,
             }
             self._runs[run_id]=run
-            self.store.save_run(run)
+            self._save_run(run)
             return run
 
     def get_run(self,run_id:str)->RunRecord:
