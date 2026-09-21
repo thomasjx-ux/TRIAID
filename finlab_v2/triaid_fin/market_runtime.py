@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, time as dt_time, timezone
 
 from .market_data import session_phase
 from .frequency_policy import FrequencyPolicy
@@ -21,6 +21,8 @@ class MarketDataAutomation:
         self.errors:dict[str,str]={}
         self.last_phase:dict[str,str]={}
         self.frequency_policy=FrequencyPolicy(engine.store)
+        self.auction_shadow_day:dict[str,str]={}
+        self.auction_shadow_latest:dict[str,dict]={}
 
     def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
@@ -31,12 +33,8 @@ class MarketDataAutomation:
                 "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
             }
         if phase=="PREOPEN":
-            if market=="US":
-                return {
-                    "PREOPEN":self.frequency_policy.interval(market,"PREOPEN"),
-                    "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
-                }
             return {
+                "PREOPEN":self.frequency_policy.interval(market,"PREOPEN"),
                 "REALTIME":self.frequency_policy.interval(market,"REALTIME"),
             }
         if phase=="BREAK":
@@ -64,6 +62,23 @@ class MarketDataAutomation:
                     self.last_phase[market_id]=phase
                     print("TRIAID_MARKET_PHASE",market_id,phase)
                 capabilities=self.engine.market_data_capabilities(market_id)[market_id]
+                if market_id=="CN" and phase=="PREOPEN":
+                    local_now=datetime.now(ZoneInfo("Asia/Shanghai"))
+                    day=local_now.date().isoformat()
+                    if local_now.time()>=dt_time(9,25) and self.auction_shadow_day.get("CN")!=day:
+                        try:
+                            probe=await asyncio.to_thread(self.engine.market_data_auction_shadow_probe,"CN")
+                            event={
+                                **probe,
+                                "observed_at":datetime.now(timezone.utc).isoformat(),
+                                "trade_date":day,
+                            }
+                            self.engine.store.append_jsonl("auction_shadow_events.jsonl",event)
+                            self.auction_shadow_latest["CN"]=event
+                            self.auction_shadow_day["CN"]=day
+                            print("TRIAID_ZERO_COST_AUCTION_SHADOW",probe.get("available_symbols"),probe.get("total_symbols"),probe.get("all_symbols_available"))
+                        except Exception as exc:
+                            self.errors["CN:AUCTION_SHADOW"]=f"{type(exc).__name__}:{exc}"
                 for mode,interval_seconds in self.refresh_plan(market_id).items():
                     if not capabilities.get(mode,{}).get("supported",False):
                         continue
@@ -277,5 +292,6 @@ class MarketDataAutomation:
                 if self.decision_scheduler is not None
                 else None
             ),
+            "zero_cost_auction_shadow":dict(self.auction_shadow_latest),
             "hub":self.engine.market_data_status(),
         }
