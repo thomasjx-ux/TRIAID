@@ -45,6 +45,14 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         key=_market(market_id)
         return automation.live_indicators(key)
 
+    @router.get("/strategy-context/{market_id}")
+    def market_data_strategy_context_api(market_id:str)->dict:
+        key=_market(market_id)
+        try:
+            return engine.strategy_market_context(key)
+        except Exception as exc:
+            raise HTTPException(status_code=503,detail=f"{type(exc).__name__}:{exc}") from exc
+
     @router.get("/activity/{market_id}")
     def market_data_activity_api(
         market_id:str,
