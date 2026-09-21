@@ -161,6 +161,7 @@ class RunRecord(BaseModel):
         "CREATED",
         "FETCHING_DATA",
         "DECISION_READY_AWAITING_OUTCOME",
+        "PREVIEW_READY",
         "VERIFIED",
         "NO_NEW_DATA",
         "FAILED",
