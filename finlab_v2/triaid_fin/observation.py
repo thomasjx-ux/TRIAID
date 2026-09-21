@@ -7,14 +7,18 @@ from .store import RunStore
 
 
 class MarketObservationStore:
-    version="market-observation@0.2.1"
+    version="market-observation@0.3.0"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
         self.filename="market_observations.jsonl"
         self.transition_filename="market_transitions.jsonl"
         self.index_name="market_observation_index.json"
+        self.watermark_name="market_observation_watermarks.json"
         self.index=store.load_json(self.index_name,default={}) or {}
+        self.watermarks=store.load_json(self.watermark_name,default={}) or {}
+        if not isinstance(self.watermarks,dict):
+            self.watermarks={}
 
     def record(self,snapshot:dict)->dict:
         market=str(snapshot.get("market_id") or "").upper()
@@ -26,6 +30,41 @@ class MarketObservationStore:
 
         key=f"{market}:{mode}"
         signature=f"{source_latest_ts}:{provider}"
+        try:
+            current_ts=int(source_latest_ts)
+        except Exception:
+            current_ts=None
+        persisted_watermark=self.watermarks.get(key)
+        try:
+            persisted_watermark=int(persisted_watermark) if persisted_watermark is not None else None
+        except Exception:
+            persisted_watermark=None
+        if (
+            current_ts is not None
+            and persisted_watermark is not None
+            and current_ts<persisted_watermark
+        ):
+            return {
+                "recorded":False,
+                "reason":"STALE_SOURCE_TIMESTAMP",
+                "market_id":market,
+                "mode":mode,
+                "source_latest_ts":source_latest_ts,
+                "max_source_latest_ts":persisted_watermark,
+                "provider":provider,
+            }
+        if (
+            current_ts is not None
+            and persisted_watermark is not None
+            and current_ts==persisted_watermark
+        ):
+            return {
+                "recorded":False,
+                "reason":"DUPLICATE_SOURCE_TIMESTAMP",
+                "market_id":market,
+                "mode":mode,
+                "source_latest_ts":source_latest_ts,
+            }
         if self.index.get(key)==signature:
             return {
                 "recorded":False,
@@ -51,10 +90,6 @@ class MarketObservationStore:
                 except Exception:
                     pass
 
-        try:
-            current_ts=int(source_latest_ts)
-        except Exception:
-            current_ts=None
         if (
             current_ts is not None
             and max_source_latest_ts is not None
@@ -98,6 +133,12 @@ class MarketObservationStore:
             self.store.append_jsonl(self.transition_filename,transition)
         self.index[key]=signature
         self.store.save_json(self.index_name,self.index)
+        if current_ts is not None:
+            self.watermarks[key]=max(
+                current_ts,
+                int(self.watermarks.get(key,current_ts) or current_ts),
+            )
+            self.store.save_json(self.watermark_name,self.watermarks)
         return {"recorded":True,"observation":row,"transition":transition}
 
     def _transition(self,previous:dict,current:dict)->dict|None:
