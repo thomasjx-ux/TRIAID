@@ -728,6 +728,8 @@ class EvolutionLabEngine:
     def submit_outcome(self,run_id:str,outcome:OutcomeRequest)->RunRecord:
         with self._lock:
             run=self._runs.get(run_id) or self.store.load_run(run_id)
+            if not self._evidence_eligible_run(run):
+                raise ValueError("manual_preview_is_not_evidence_eligible")
             if run.strategy_group is None or run.triaid_decision is None:
                 raise ValueError("Decision is not ready.")
             if run.evaluation and run.evaluation.status=="EVALUATED":
@@ -776,7 +778,7 @@ class EvolutionLabEngine:
             return sorted(self._runs.values(),key=lambda r:r.created_at)
 
     def latest_run(self,market_id:str|None=None)->RunRecord|None:
-        rows=self.all_runs()
+        rows=[r for r in self.all_runs() if self._evidence_eligible_run(r)]
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
         useful=[r for r in rows if r.market.snapshot_id!="PENDING"]
@@ -798,6 +800,13 @@ class EvolutionLabEngine:
             "strategy_registry_count":len(self.strategy_population.definitions()),
             "markets":["US","CN"],
             "run_counts":counts,
+            "run_scope_counts":{
+                "official_evidence":sum(1 for r in self.all_runs() if self._evidence_eligible_run(r)),
+                "manual_preview_in_memory":sum(
+                    1 for r in self.all_runs()
+                    if str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
+                ),
+            },
             "market_data":{
                 "status":market_data_status(),
                 "capabilities":market_data_capabilities(),
