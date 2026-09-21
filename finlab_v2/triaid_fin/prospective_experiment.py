@@ -11,7 +11,7 @@ from .store import RunStore
 class ProspectiveExperimentProtocol:
     """Pre-registered, no-retuning comparison protocol for CN stress-pool recovery."""
 
-    version = "cn-prospective-controls@0.2.0"
+    version = "cn-prospective-controls@0.3.0"
     experiment_mode = "CN_WORST_POOL_RESCUE"
     state_file = "cn_prospective_experiments.json"
 
@@ -20,8 +20,13 @@ class ProspectiveExperimentProtocol:
         raw = store.load_json(self.state_file, default={})
         if not raw:
             raw = {"version": self.version, "experiments": []}
-        raw["version"] = self.version
         raw.setdefault("experiments", [])
+        for experiment in raw["experiments"]:
+            if str(experiment.get("protocol_version") or "")!=self.version:
+                experiment["status"]="INVALIDATED"
+                experiment["invalidated_reason"]="LEGACY_PROTOCOL_OUTCOME_DATE_ALIGNMENT_AND_COMPLETE_BAR_GATING"
+                experiment["invalidated_at"]=experiment.get("invalidated_at") or utc_now()
+        raw["version"] = self.version
         self.state = raw
         self._save()
 
@@ -174,6 +179,7 @@ class ProspectiveExperimentProtocol:
             (
                 x for x in self.state["experiments"]
                 if x.get("source_run_id") == run_id
+                and x.get("protocol_version")==self.version
             ),
             None,
         )
@@ -198,7 +204,7 @@ class ProspectiveExperimentProtocol:
         if not frozen_horizons:
             raise ValueError("At least one positive observation horizon is required.")
 
-        experiment_id = f"CNPROS-{run_id}"
+        experiment_id = f"CNPROS3-{run_id}"
         experiment = {
             "experiment_id": experiment_id,
             "protocol_version": self.version,
@@ -318,7 +324,7 @@ class ProspectiveExperimentProtocol:
     def observe_period(self, as_of: str, realized_returns: Dict[str, float]) -> dict:
         updated = []
         for experiment in self.state["experiments"]:
-            if experiment.get("status") != "OPEN":
+            if experiment.get("status") != "OPEN" or experiment.get("protocol_version")!=self.version:
                 continue
             if as_of <= str(experiment.get("market_as_of") or ""):
                 continue
@@ -508,9 +514,11 @@ class ProspectiveExperimentProtocol:
         return deepcopy(self.state["experiments"][-max(1, int(limit)):])
 
     def latest(self) -> dict | None:
-        if not self.state["experiments"]:
-            return None
-        return deepcopy(self.state["experiments"][-1])
+        current=[
+            x for x in self.state["experiments"]
+            if x.get("protocol_version")==self.version and x.get("status")!="INVALIDATED"
+        ]
+        return deepcopy(current[-1]) if current else None
 
     def status(self) -> dict:
         rows = self.state["experiments"]
@@ -518,7 +526,9 @@ class ProspectiveExperimentProtocol:
             "version": self.version,
             "experiment_mode": self.experiment_mode,
             "experiment_count": len(rows),
-            "open_count": sum(1 for x in rows if x.get("status") == "OPEN"),
-            "complete_count": sum(1 for x in rows if x.get("status") == "COMPLETE"),
-            "latest_experiment_id": rows[-1]["experiment_id"] if rows else None,
+            "current_protocol_count":sum(1 for x in rows if x.get("protocol_version")==self.version),
+            "invalidated_legacy_count":sum(1 for x in rows if x.get("status")=="INVALIDATED"),
+            "open_count": sum(1 for x in rows if x.get("protocol_version")==self.version and x.get("status") == "OPEN"),
+            "complete_count": sum(1 for x in rows if x.get("protocol_version")==self.version and x.get("status") == "COMPLETE"),
+            "latest_experiment_id": (self.latest() or {}).get("experiment_id"),
         }
