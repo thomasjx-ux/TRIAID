@@ -483,10 +483,19 @@ def prepare_live_market(
         },
     )
     realized={pid:history[pid][-1] for pid in history}
+    product_realized={
+        asset:(panel.close[asset][-1]/panel.close[asset][-2]-1.0)
+        for asset in panel.assets
+        if len(panel.close.get(asset,[]))>=2 and panel.close[asset][-2]
+    }
+    snapshot.metadata["session_phase"]=session_phase(panel.spec.market_id)
+    snapshot.metadata["recovery_wave_input_scope"]="TRACKED_PRODUCT_PRICE_VOLUME_ONLY"
     return {
         "snapshot":snapshot,
         "strategy_states":states,
         "realized_returns_from_previous_period":realized,
+        "product_realized_returns_from_previous_period":product_realized,
         "previous_as_of":previous_as_of,
         "latest_as_of":as_of,
+        "panel":panel,
     }
