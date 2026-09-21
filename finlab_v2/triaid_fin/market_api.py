@@ -50,6 +50,23 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     def market_data_providers_api()->dict:
         return engine.market_data_provider_status()
 
+    @router.get("/alpha-evidence/status")
+    def alpha_evidence_status_api()->dict:
+        return engine.alpha_evidence_status()
+
+    @router.get("/alpha-evidence/{market_id}")
+    def alpha_evidence_rows_api(
+        market_id:str,
+        limit:int=Query(default=200,ge=1,le=5000),
+    )->list[dict]:
+        key=_market(market_id)
+        return engine.alpha_evidence_rows(key,limit)
+
+    @router.get("/auction-shadow/{market_id}")
+    def auction_shadow_api(market_id:str)->dict:
+        key=_market(market_id)
+        return engine.market_data_auction_shadow_probe(key)
+
     @router.get("/live-indicators/{market_id}")
     def market_data_live_indicators_api(market_id:str)->dict:
         key=_market(market_id)

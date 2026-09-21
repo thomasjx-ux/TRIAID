@@ -323,6 +323,42 @@ class MarketDataHub:
                 }
         return out
 
+    def auction_shadow_probe(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
+        market=market_id.upper()
+        if market!="CN":
+            return {
+                "market_id":market,
+                "available":False,
+                "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
+                "reason":"CN_ONLY",
+                "symbols":{},
+            }
+        rows={}
+        available=0
+        for symbol in symbols:
+            try:
+                result=self.tencent_cn.auction_shadow_probe(symbol)
+            except Exception as exc:
+                result={
+                    "provider":self.tencent_cn.version,
+                    "symbol":symbol,
+                    "available":False,
+                    "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
+                    "error":f"{type(exc).__name__}:{exc}",
+                }
+            rows[symbol]=result
+            available+=1 if result.get("available") else 0
+        return {
+            "market_id":"CN",
+            "provider":self.tencent_cn.version,
+            "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
+            "available_symbols":available,
+            "total_symbols":len(rows),
+            "all_symbols_available":bool(rows) and available==len(rows),
+            "symbols":rows,
+            "promotion_rule":"ZERO_COST_SOURCE_MUST_PASS_REPEATED_PROSPECTIVE_0925_AVAILABILITY_AND_VALUE_CONSISTENCY_BEFORE_ROUTING",
+        }
+
     def latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
         market=market_id.upper()
         if market!="US":
