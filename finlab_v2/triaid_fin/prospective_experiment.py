@@ -11,7 +11,7 @@ from .store import RunStore
 class ProspectiveExperimentProtocol:
     """Pre-registered, no-retuning comparison protocol for CN stress-pool recovery."""
 
-    version = "cn-prospective-controls@0.1.0"
+    version = "cn-prospective-controls@0.2.0"
     experiment_mode = "CN_WORST_POOL_RESCUE"
     state_file = "cn_prospective_experiments.json"
 
@@ -347,6 +347,141 @@ class ProspectiveExperimentProtocol:
         if updated:
             self._save()
         return {"updated_experiment_ids": updated, "as_of": as_of}
+
+    def daily_report(self, experiment_id: str | None = None) -> dict | None:
+        experiment = self.get(experiment_id) if experiment_id else self.latest()
+        if experiment is None:
+            return None
+
+        pool = list(experiment.get("pool", []))
+        outcomes = list(experiment.get("outcomes", []))
+        cumulative = {
+            sid: self._compound(
+                [float(period.get("realized_returns", {}).get(sid, 0.0)) for period in outcomes]
+            )
+            for sid in pool
+        }
+        current_actual_ranks = self._average_ranks(cumulative, descending=True) if pool else {}
+        triaid_rows = experiment.get("control_rankings", {}).get("TRIAID_STATE_TRANSITION", [])
+        triaid_ranks = {
+            row.get("strategy_id"): float(row.get("rank"))
+            for row in triaid_rows
+            if row.get("strategy_id") is not None and row.get("rank") is not None
+        }
+
+        daily_rows = []
+        running = {sid: 1.0 for sid in pool}
+        baseline_weights = experiment.get("frozen_baseline_weights", {})
+        triaid_weights = experiment.get("frozen_triaid_weights", {})
+        running_hold = 1.0
+        running_triaid = 1.0
+        for period_number, period in enumerate(outcomes, 1):
+            rr = {
+                sid: float(period.get("realized_returns", {}).get(sid, 0.0))
+                for sid in pool
+            }
+            for sid in pool:
+                running[sid] *= 1.0 + rr[sid]
+            hold_return = sum(float(baseline_weights.get(sid, 0.0)) * rr[sid] for sid in pool)
+            triaid_return = sum(float(triaid_weights.get(sid, 0.0)) * rr[sid] for sid in pool)
+            running_hold *= 1.0 + hold_return
+            running_triaid *= 1.0 + triaid_return
+            daily_rows.append({
+                "period_number": period_number,
+                "as_of": period.get("as_of"),
+                "strategy_returns": rr,
+                "strategy_cumulative_returns": {
+                    sid: running[sid] - 1.0 for sid in pool
+                },
+                "portfolio_returns": {
+                    "HOLD_EQUAL": hold_return,
+                    "CASH_DEFENSE": 0.0,
+                    "TRIAID_STATIC_ALLOCATION": triaid_return,
+                },
+                "portfolio_cumulative_returns": {
+                    "HOLD_EQUAL": running_hold - 1.0,
+                    "CASH_DEFENSE": 0.0,
+                    "TRIAID_STATIC_ALLOCATION": running_triaid - 1.0,
+                    "TRIAID_STATIC_MINUS_HOLD_EQUAL": running_triaid - running_hold,
+                },
+            })
+
+        strategy_rows = []
+        frozen_state = experiment.get("frozen_state", {})
+        controls = experiment.get("control_rankings", {})
+        control_rank_maps = {
+            name: {
+                row.get("strategy_id"): float(row.get("rank"))
+                for row in rows
+                if row.get("strategy_id") is not None and row.get("rank") is not None
+            }
+            for name, rows in controls.items()
+        }
+        for sid in pool:
+            row = frozen_state.get(sid, {})
+            strategy_rows.append({
+                "strategy_id": sid,
+                "baseline_weight": float(baseline_weights.get(sid, 0.0)),
+                "triaid_weight": float(triaid_weights.get(sid, 0.0)),
+                "frozen_expected_net_return": row.get("expected_net_return"),
+                "frozen_risk": row.get("risk"),
+                "frozen_uncertainty": row.get("uncertainty"),
+                "predicted_ranks": {
+                    name: rank_map.get(sid)
+                    for name, rank_map in control_rank_maps.items()
+                },
+                "triaid_predicted_rank": triaid_ranks.get(sid),
+                "latest_daily_return": (
+                    float(outcomes[-1].get("realized_returns", {}).get(sid, 0.0))
+                    if outcomes else None
+                ),
+                "realized_cumulative_return": cumulative.get(sid, 0.0),
+                "realized_rank_so_far": current_actual_ranks.get(sid),
+            })
+        strategy_rows.sort(
+            key=lambda x: (
+                x["triaid_predicted_rank"] if x["triaid_predicted_rank"] is not None else 1e9,
+                x["strategy_id"],
+            )
+        )
+
+        latest_portfolio = daily_rows[-1]["portfolio_cumulative_returns"] if daily_rows else {
+            "HOLD_EQUAL": 0.0,
+            "CASH_DEFENSE": 0.0,
+            "TRIAID_STATIC_ALLOCATION": 0.0,
+            "TRIAID_STATIC_MINUS_HOLD_EQUAL": 0.0,
+        }
+        horizons = list(experiment.get("design", {}).get("horizons_trading_days", []))
+        completed_horizons = sorted(int(x) for x in experiment.get("evaluations", {}).keys())
+        pending_horizons = [h for h in horizons if h not in completed_horizons]
+
+        return {
+            "experiment_id": experiment.get("experiment_id"),
+            "source_run_id": experiment.get("source_run_id"),
+            "protocol_version": experiment.get("protocol_version"),
+            "status": experiment.get("status"),
+            "registered_at": experiment.get("registered_at"),
+            "market_as_of": experiment.get("market_as_of"),
+            "pool_rule": experiment.get("design", {}).get("pool_rule"),
+            "no_future_information": experiment.get("design", {}).get("no_future_information"),
+            "no_post_result_retuning": experiment.get("design", {}).get("no_post_result_retuning"),
+            "observation_days": len(outcomes),
+            "horizons_trading_days": horizons,
+            "completed_horizons": completed_horizons,
+            "pending_horizons": pending_horizons,
+            "strategy_determination": strategy_rows,
+            "daily_fluctuation": daily_rows,
+            "current_portfolio_cumulative_returns": latest_portfolio,
+            "evaluations": deepcopy(experiment.get("evaluations", {})),
+            "incomplete_observations": deepcopy(experiment.get("incomplete_observations", [])),
+            "recovery_route_hypothesis": {
+                "status": "RESEARCH_ONLY_NOT_PRODUCTION",
+                "level": "STRATEGY_LEVEL",
+                "hypothesis": "Deeply impaired strategies with improving state/transition structure may offer more upside than pure cash defense if recovery ordering can be predicted prospectively.",
+                "current_test": "Use the frozen adverse strategy pool to test whether TRIAID ranks subsequent recovery better than current-return, 20-day momentum, and low-risk controls.",
+                "product_level_extension": "A separate ETF/index-fund candidate pool is required before making product-level deep-drawdown rebound claims.",
+            },
+        }
 
     def get(self, experiment_id: str) -> dict:
         for experiment in self.state["experiments"]:
