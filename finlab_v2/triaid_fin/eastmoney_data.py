@@ -15,7 +15,7 @@ class EastmoneyDataError(RuntimeError):
 
 class EastmoneyMarketDataProvider:
     name="eastmoney-market-data"
-    version="eastmoney-market-data@0.1.0"
+    version="eastmoney-market-data@0.2.0"
     push_token="7eea3edcaed734bea9cbfc24409ed989"
     suggest_token="D43BF722C8E33BDC906FB84D85E326E8"
 
@@ -141,13 +141,14 @@ class EastmoneyMarketDataProvider:
             raise EastmoneyDataError(f"bad_daily_time:{raw}") from exc
 
     @staticmethod
-    def _minute_timestamp(raw:str)->int:
+    def _minute_timestamp(raw:str,market:str)->int:
         try:
             value=raw.strip()[:16]
-            dt=datetime.strptime(value,"%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+            tz=ZoneInfo("America/New_York" if str(market).upper()=="US" else "Asia/Shanghai")
+            dt=datetime.strptime(value,"%Y-%m-%d %H:%M").replace(tzinfo=tz)
             return int(dt.timestamp())
         except Exception as exc:
-            raise EastmoneyDataError(f"bad_minute_time:{raw}") from exc
+            raise EastmoneyDataError(f"bad_minute_time:{market}:{raw}") from exc
 
     def _kline(
         self,
@@ -170,7 +171,7 @@ class EastmoneyMarketDataProvider:
                 "fields2":"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
                 "ut":self.push_token,
                 "klt":klt,
-                "fqt":"2" if klt=="101" else "0",
+                "fqt":"1" if klt=="101" else "0",
                 "secid":secid,
                 "beg":"19700101" if klt=="101" else "0",
                 "end":"20500101" if klt=="101" else "20500000",
@@ -191,7 +192,7 @@ class EastmoneyMarketDataProvider:
             try:
                 price=float(cols[2])
                 volume=float(cols[5] or 0.0)
-                stamp=self._daily_timestamp(cols[0]) if klt=="101" else self._minute_timestamp(cols[0])
+                stamp=self._daily_timestamp(cols[0]) if klt=="101" else self._minute_timestamp(cols[0],market)
             except Exception:
                 continue
             if price>0 and self._finite(price):
@@ -241,7 +242,7 @@ class EastmoneyMarketDataProvider:
             try:
                 price=float(cols[2])
                 volume=float(cols[5] or 0.0)
-                stamp=self._minute_timestamp(cols[0])
+                stamp=self._minute_timestamp(cols[0],market)
             except Exception:
                 continue
             if price>0 and self._finite(price):
