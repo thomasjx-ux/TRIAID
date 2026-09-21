@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from threading import RLock
 from typing import Dict, List
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from .audit import AuditModule
 from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
@@ -12,6 +14,8 @@ from .evolution import EvolutionModule
 from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
+from .recovery_core import RecoveryWaveCore
+from .recovery_ledger import RecoveryWaveLedger
 from .observation import MarketObservationStore
 from .review import ReviewModule
 from .store import RunStore
@@ -38,6 +42,8 @@ class EvolutionLabEngine:
         self.audit=AuditModule()
         self.review=ReviewModule()
         self.prospective_experiment=ProspectiveExperimentProtocol(self.store)
+        self.recovery_wave_ledger=RecoveryWaveLedger(self.store)
+        self.recovery_wave_core=RecoveryWaveCore(self.evolution.active())
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._recover_stale_runs()
@@ -59,7 +65,9 @@ class EvolutionLabEngine:
             self.strategy_population.configure_market(self.strategy_evolution.active(market_id))
 
     def refresh_core(self)->None:
-        self.core=TriaidCoreModule(self.evolution.active())
+        params=self.evolution.active()
+        self.core=TriaidCoreModule(params)
+        self.recovery_wave_core=RecoveryWaveCore(params)
 
     @property
     def module_manifest(self)->Dict[str,str]:
@@ -80,6 +88,8 @@ class EvolutionLabEngine:
             "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
             "review":self.review.version if hasattr(self,"review") else "review@0.2.0",
             "prospective_experiment":self.prospective_experiment.version if hasattr(self,"prospective_experiment") else "cn-prospective-controls@unknown",
+            "recovery_wave_core":self.recovery_wave_core.version if hasattr(self,"recovery_wave_core") else "recovery-wave-core@unknown",
+            "recovery_wave_ledger":self.recovery_wave_ledger.version if hasattr(self,"recovery_wave_ledger") else "recovery-wave-ledger@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
         }
@@ -250,6 +260,39 @@ class EvolutionLabEngine:
             prepared=prepare_live_market(market_id,profile.window_weights)
             snapshot=prepared["snapshot"]
             snapshot.metadata["strategy_rules_version"]=profile.version
+
+            phase=str(snapshot.metadata.get("session_phase") or "").upper()
+            local_tz=ZoneInfo("America/New_York" if market_id=="US" else "Asia/Shanghai")
+            local_today=datetime.now(local_tz).date().isoformat()
+            daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or str(snapshot.as_of)<local_today
+            recovery_outcome=None
+            if daily_bar_complete:
+                recovery_outcome=self.recovery_wave_ledger.record_outcome(
+                    market_id,
+                    prepared["latest_as_of"],
+                    prepared["previous_as_of"],
+                    prepared.get("product_realized_returns_from_previous_period") or {},
+                    snapshot.snapshot_id,
+                )
+            existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id)
+            if existing_recovery is None:
+                previous_recovery=self.recovery_wave_ledger.latest(market_id)
+                proposed_recovery=self.recovery_wave_core.decide(
+                    prepared["panel"],
+                    snapshot.regime,
+                    previous_recovery,
+                    phase,
+                )
+                recovery_decision=self.recovery_wave_ledger.freeze(
+                    proposed_recovery,
+                    snapshot.snapshot_id,
+                    snapshot.as_of,
+                )
+            else:
+                recovery_decision=existing_recovery
+            snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id")
+            snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash")
+            snapshot.metadata["recovery_wave_daily_bar_complete"]=daily_bar_complete
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
             if market_id=="CN":
                 snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
@@ -307,6 +350,11 @@ class EvolutionLabEngine:
                         "prospective_bootstrap_source_run_id":(
                             existing.run_id if prospective_bootstrap else None
                         ),
+                        "recovery_wave_decision_id":recovery_decision.get("decision_id"),
+                        "recovery_wave_decision_hash":recovery_decision.get("decision_hash"),
+                        "recovery_wave_decision_status":recovery_decision.get("decision_status"),
+                        "recovery_wave_daily_bar_complete":daily_bar_complete,
+                        "recovery_wave_outcome_recorded":bool((recovery_outcome or {}).get("recorded")),
                     }
                     self.store.save_run(run)
                 return
@@ -337,12 +385,35 @@ class EvolutionLabEngine:
                 run.previous_run_id=resolved[-1] if resolved else None
                 self.store.save_run(run)
             self.execute(run_id,request)
+            with self._lock:
+                run=self._runs[run_id]
+                run.diagnostic_summary={
+                    **dict(run.diagnostic_summary or {}),
+                    "recovery_wave_decision_id":recovery_decision.get("decision_id"),
+                    "recovery_wave_decision_hash":recovery_decision.get("decision_hash"),
+                    "recovery_wave_decision_status":recovery_decision.get("decision_status"),
+                    "recovery_wave_daily_bar_complete":daily_bar_complete,
+                    "recovery_wave_outcome_recorded":bool((recovery_outcome or {}).get("recorded")),
+                }
+                self.store.save_run(run)
         except Exception as exc:
             with self._lock:
                 run=self._runs[run_id]
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
                 self.store.save_run(run)
+
+    def recovery_wave_status(self,market_id:str|None=None)->dict:
+        return self.recovery_wave_ledger.status(market_id)
+
+    def latest_recovery_wave_decision(self,market_id:str="CN")->dict|None:
+        return self.recovery_wave_ledger.latest(market_id)
+
+    def recovery_wave_history(self,market_id:str="CN",limit:int=100)->list[dict]:
+        return self.recovery_wave_ledger.decisions(market_id,limit)
+
+    def recovery_wave_daily_report(self,market_id:str="CN")->dict|None:
+        return self.recovery_wave_ledger.daily_report(market_id)
 
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
@@ -572,6 +643,9 @@ class EvolutionLabEngine:
         summary=self.review.daily_summary(rows)
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
+            recovery=self.recovery_wave_ledger.daily_report("CN")
+            if recovery:
+                summary["recovery_wave"]=recovery
             prospective=self.prospective_experiment.daily_report()
             if prospective:
                 try:
