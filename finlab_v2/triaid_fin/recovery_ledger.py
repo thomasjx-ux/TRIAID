@@ -119,7 +119,7 @@ class RecoveryWaveLedger:
     def review_decision(self,decision:dict)->dict:
         market=str(decision.get("market_id") or "").upper()
         decision_date=str(decision.get("market_as_of") or "")
-        future=[
+        raw_future=[
             o for o in self.outcomes(market,2000)
             if str(o.get("as_of") or "")>decision_date
         ]
@@ -129,6 +129,14 @@ class RecoveryWaveLedger:
             if x.get("symbol")
         }
         products=sorted(weights)
+        incomplete_dates=[
+            o.get("as_of") for o in raw_future
+            if any(s not in (o.get("product_returns") or {}) for s in products)
+        ]
+        future=[
+            o for o in raw_future
+            if all(s in (o.get("product_returns") or {}) for s in products)
+        ]
         daily=[]
         portfolio_returns=[]
         equal_returns=[]
@@ -176,6 +184,7 @@ class RecoveryWaveLedger:
             "market_as_of":decision_date,
             "frozen_at":decision.get("frozen_at"),
             "observation_days":len(future),
+            "incomplete_outcome_dates":incomplete_dates,
             "trade_opinions":deepcopy(decision.get("trade_opinions",[])),
             "daily_path":daily,
             "current_portfolio_cumulative_return":self._compound(portfolio_returns),
@@ -188,19 +197,22 @@ class RecoveryWaveLedger:
 
     def verify_integrity(self,market_id:str|None=None)->dict:
         rows=self.decisions(market_id,5000)
-        previous_hash=None
+        previous_hash_by_market={}
         checks=[]
         for row in rows:
+            market=str(row.get("market_id") or "").upper()
             body={k:deepcopy(v) for k,v in row.items() if k not in {"decision_hash","decision_id"}}
             expected=self._hash(body)
             hash_ok=expected==row.get("decision_hash")
-            chain_ok=row.get("previous_decision_hash")==previous_hash
+            expected_previous=previous_hash_by_market.get(market)
+            chain_ok=row.get("previous_decision_hash")==expected_previous
             checks.append({
                 "decision_id":row.get("decision_id"),
+                "market_id":market,
                 "hash_ok":hash_ok,
                 "chain_ok":chain_ok,
             })
-            previous_hash=row.get("decision_hash")
+            previous_hash_by_market[market]=row.get("decision_hash")
         return {
             "passed":all(x["hash_ok"] and x["chain_ok"] for x in checks),
             "decision_count":len(rows),
