@@ -245,8 +245,17 @@ class CapitalCapacityLayer:
             daily=[]
             previous_equity=capital
             incomplete_turnover_dates=[]
+            incomplete_return_dates=[]
+            required_products={s for s,v in targets.items() if float(v)>1e-9}
+            eligible_outcomes=[]
+            for o in outcomes:
+                returns=o.get("product_returns") or {}
+                if any(s not in returns for s in required_products):
+                    incomplete_return_dates.append(o.get("as_of"))
+                    continue
+                eligible_outcomes.append(o)
 
-            for index,o in enumerate(outcomes,1):
+            for index,o in enumerate(eligible_outcomes,1):
                 returns=o.get("product_returns") or {}
                 turnover=o.get("product_turnover") or {}
 
@@ -331,7 +340,8 @@ class CapitalCapacityLayer:
                 "current_equity_cny":cash+sum(positions.values()),
                 "current_net_pnl_cny":cash+sum(positions.values())-capital,
                 "current_net_return":(cash+sum(positions.values()))/capital-1.0 if capital>0 else 0.0,
-                "observation_days":len(outcomes),
+                "observation_days":len(eligible_outcomes),
+                "incomplete_return_dates":sorted(set(x for x in incomplete_return_dates if x)),
                 "incomplete_turnover_dates":sorted(set(x for x in incomplete_turnover_dates if x)),
                 "daily_path":daily,
             })
