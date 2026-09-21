@@ -138,6 +138,8 @@ if recovery_history:
     assert recovery_latest["core_version"]=="recovery-wave-core@0.1.0"
     assert recovery_latest["data_scope"]["constituent_micro_available"] is False
     assert recovery_latest["execution_discipline"]["same_bar_execution_allowed"] is False
+    assert recovery_latest["second_order"]["capital_discipline"]=="TOTAL_RISK_BUDGET_SCALED_BY_STRONGEST_PROSPECTIVE_RECOVERY_EVIDENCE"
+    assert recovery_latest["second_order"]["effective_risk_budget"]<=recovery_latest["second_order"]["base_risk_budget"]+1e-12
     assert recovery_latest["trade_opinions"]
 
 runs_before=call("GET","/api/runs?limit=20")
