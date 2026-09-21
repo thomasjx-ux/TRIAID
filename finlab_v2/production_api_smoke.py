@@ -8,6 +8,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from triaid_fin.recovery_core import RecoveryWaveCore
+from triaid_fin.us_return_max import USReturnMaxRoute
+
 
 BASE=(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:18080").rstrip("/")
 ADMIN_TOKEN=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -132,10 +135,10 @@ if expected_revision:
     assert status["deployment"]["source_revision"]==expected_revision
     assert status["deployment"]==health["deployment"]
 assert status["strategy_registry_count"]==33
-assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.3.0"
+assert status["module_manifest"]["recovery_wave_core"]==RecoveryWaveCore.version
 assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.2.0"
 assert status["module_manifest"]["capital_capacity"]=="capital-capacity-layer@0.1.0"
-assert status["module_manifest"]["us_return_max"]=="us-return-max-route@0.3.0"
+assert status["module_manifest"]["us_return_max"]==USReturnMaxRoute.version
 assert status["module_manifest"]["us_return_max_ledger"]=="us-return-max-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
@@ -161,7 +164,7 @@ assert isinstance(us_return_history,list)
 if us_return_history:
     us_return_latest=call("GET","/api/us-return-max/latest")
     assert us_return_latest["decision_id"]==us_return_history[-1]["decision_id"]
-    assert us_return_latest["route_version"]=="us-return-max-route@0.3.0"
+    assert str(us_return_latest["route_version"]).startswith("us-return-max-route@")
     # Persisted decision rows are cryptographically frozen and may predate the
     # current enum names. Production smoke validates their integrity and semantic
     # guard, while deterministic route smoke validates the current selector enums.
@@ -183,7 +186,7 @@ assert isinstance(recovery_history,list)
 if recovery_history:
     recovery_latest=call("GET","/api/recovery-wave/latest?market_id=CN")
     assert recovery_latest["decision_id"]==recovery_history[-1]["decision_id"]
-    assert recovery_latest["core_version"]=="recovery-wave-core@0.3.0"
+    assert str(recovery_latest["core_version"]).startswith("recovery-wave-core@")
     assert recovery_latest["data_scope"]["constituent_micro_available"] is False
     assert recovery_latest["execution_discipline"]["same_bar_execution_allowed"] is False
     assert recovery_latest["second_order"]["capital_discipline"]=="TOTAL_RISK_BUDGET_SCALED_BY_STRONGEST_PROSPECTIVE_RECOVERY_EVIDENCE"
@@ -207,7 +210,7 @@ for market in ("US","CN"):
     assert isinstance(daily,dict)
     if market=="US":
         assert daily["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
-        assert daily["us_return_max"]["route_version"]=="us-return-max-route@0.3.0"
+        assert str(daily["us_return_max"]["route_version"]).startswith("us-return-max-route@")
         assert daily["us_return_max"]["integrity"]["passed"] is True
         assert daily["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     if market=="CN":
@@ -218,7 +221,7 @@ for market in ("US","CN"):
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
         assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.2.0"
         assert daily["recovery_wave"]["integrity"]["passed"] is True
-        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.3.0"
+        assert str(daily["recovery_wave"]["latest_decision"]["core_version"]).startswith("recovery-wave-core@")
         assert daily["recovery_wave"]["latest_decision"]["trade_opinions"]
         assert daily["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
     curves=call("GET",f"/api/curves?market_id={market}")
