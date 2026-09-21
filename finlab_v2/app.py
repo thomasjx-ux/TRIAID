@@ -114,6 +114,8 @@ def list_runs(market_id: str | None = None, limit: int = Query(default=100, ge=1
             "snapshot_id": r.market.snapshot_id,
             "status": r.status,
             "core_version": r.triaid_decision.core_version if r.triaid_decision else None,
+            "experiment_mode": r.market.metadata.get("experiment_mode"),
+            "diagnostic_summary": r.diagnostic_summary,
             "evaluation": r.evaluation.model_dump() if r.evaluation else None,
         }
         for r in rows[-limit:]
@@ -301,9 +303,24 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .num{white-space:nowrap;font-variant-numeric:tabular-nums}.reason{min-width:320px;line-height:1.45}.strategy-name{font-weight:650}
 .delta{font-weight:700}.corebox{display:flex;gap:12px;flex-wrap:wrap}.corebox .card{flex:1;min-width:240px}
 .small{font-size:12px}.nowrap{white-space:nowrap}
+.livegrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.livepanel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:250px}
+.livehead{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
+.livehead-left{display:flex;align-items:center;gap:8px;font-weight:700}
+.pulse{width:10px;height:10px;border-radius:50%;background:#aeb7c4;box-shadow:0 0 0 0 rgba(19,138,75,.35)}
+.pulse.on{background:var(--good);animation:pulse 1.8s infinite}.pulse.warn{background:var(--warn)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(19,138,75,.32)}70%{box-shadow:0 0 0 8px rgba(19,138,75,0)}100%{box-shadow:0 0 0 0 rgba(19,138,75,0)}}
+.indexgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}
+.indexitem{border:1px solid #edf0f3;border-radius:9px;padding:10px;background:#fbfcfe}
+.indexitem .px{font-size:20px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.indexitem .chg{font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums}
+.commandlog{height:205px;overflow:auto;border:1px solid #edf0f3;border-radius:9px;background:#101722;color:#dbe6f5;padding:8px 10px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.cmd{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}.cmd:last-child{border-bottom:0}
+.cmdtime{color:#7f93aa}.cmdkind{color:#7fc7ff}.cmdmode{color:#ffd37f}
+.live-meta{font-size:11px;color:#748091;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .has-tip{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#aeb7c4;text-underline-offset:4px}
 #hoverTip{position:fixed;display:none;z-index:9999;max-width:360px;padding:9px 11px;border-radius:8px;background:#172033;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:none}
-@media(max-width:760px){.compare{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
+@media(max-width:760px){.compare,.livegrid{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
 </style>
 </head>
 <body>
@@ -314,7 +331,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <div class="muted" id="subtitle">真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化</div>
     </div>
     <div class="toolbar">
-      <select id="market" onchange="refreshAll()"><option value="US">US</option><option value="CN">A股 / CN</option></select>
+      <select id="market" onchange="onMarketChange()"><option value="US">US</option><option value="CN">A股 / CN</option></select>
       <button class="primary" onclick="runNow()" id="runBtn">立即执行</button>
       <button onclick="runAll()" id="runAllBtn">执行两个市场</button>
       <button onclick="toggleLang()">中文 / English</button>
@@ -338,6 +355,26 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <div class="label" id="gainLabel">TRIAID 增益</div>
       <div class="value" id="gain">等待后验</div>
       <div class="sub" id="gainSub">TRIAID 后收益 − 策略群基线</div>
+    </div>
+  </div>
+
+  <h2 id="liveTitle">实时运行指示</h2>
+  <div class="livegrid">
+    <div class="livepanel">
+      <div class="livehead">
+        <div class="livehead-left"><span id="marketPulse" class="pulse"></span><span id="indexWindowTitle">实时指数窗口</span></div>
+        <span class="small muted" id="indexPhase">-</span>
+      </div>
+      <div class="live-meta" id="indexMeta">等待实时市场数据</div>
+      <div class="indexgrid" id="indexRows"></div>
+    </div>
+    <div class="livepanel">
+      <div class="livehead">
+        <div class="livehead-left"><span id="activityPulse" class="pulse"></span><span id="activityWindowTitle">后台指令流水</span></div>
+        <span class="small muted" id="activityPhase">-</span>
+      </div>
+      <div class="live-meta" id="scheduleMeta">等待调度状态</div>
+      <div class="commandlog" id="commandLog"></div>
     </div>
   </div>
 
@@ -424,6 +461,7 @@ const T={
  zh:{
   title:'TRIAID FIN 进化实验台 V2',subtitle:'真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化',
   result:'TRIAID 结果比较',baseReturn:'策略群基线收益',triaidReturn:'TRIAID 后收益',gain:'TRIAID 增益',
+  live:'实时运行指示',indexWindow:'实时指数窗口',activityWindow:'后台指令流水',
   baseSub:'介入前',triaidSub:'介入后',gainSub:'TRIAID 后收益 − 策略群基线',
   overview:'当前状态',date:'最新数据日',core:'当前 Core',selected:'当前策略数',cum:'累计 TRIAID 超额',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
@@ -439,6 +477,7 @@ const T={
  en:{
   title:'TRIAID FIN Evolution Lab V2',subtitle:'Real market → Dynamic strategy population → TRIAID Core → Outcome validation → Continuous evolution',
   result:'TRIAID Result Comparison',baseReturn:'Strategy-group baseline',triaidReturn:'After TRIAID',gain:'TRIAID uplift',
+  live:'Live Runtime Indicators',indexWindow:'Live Market Index Window',activityWindow:'Backend Command Stream',
   baseSub:'Before intervention',triaidSub:'After intervention',gainSub:'After TRIAID − strategy-group baseline',
   overview:'Current State',date:'Latest market date',core:'Active Core',selected:'Selected strategies',cum:'Cumulative TRIAID excess',
   curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
@@ -497,6 +536,7 @@ function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 function applyText(){
  const t=T[lang];
  const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
+ liveTitle:'live',indexWindowTitle:'indexWindow',activityWindowTitle:'activityWindow',
  baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
  selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
  candidatePoolTitle:'candidatePool',
@@ -517,6 +557,58 @@ function statusTip(status){
  return TIP[lang][key]||TIP[lang].state;
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+function localClockFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function localClockFromIso(x){
+ if(!x)return '-';
+ try{return new Date(x).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function setPulse(id,on,warn=false){
+ const node=el(id);node.className='pulse'+(on?' on':warn?' warn':'');
+}
+async function refreshLiveWindows(){
+ const m=el('market').value;
+ try{
+  const [idx,act]=await Promise.all([
+   json('/api/market-data/live-indicators/'+m),
+   json('/api/market-data/activity/'+m+'?limit=80')
+  ]);
+  const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
+  setPulse('marketPulse',fresh,idx.available&&!fresh);
+  el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
+  el('indexMeta').textContent=idx.available
+   ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
+   : (lang==='zh'?'暂无实时数据':'No realtime data');
+  el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
+   const p=Number(x.change_pct);
+   const pText=Number.isFinite(p)?signedPct(p):'-';
+   const px=Number(x.close);
+   return '<div class="indexitem">'+
+    '<div class="small muted">'+esc(x.name||x.symbol)+'</div>'+
+    '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
+    '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
+  }).join('');
+  const events=act.events||[];
+  const last=events.length?events[events.length-1]:null;
+  const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
+  setPulse('activityPulse',!!recent,events.length>0&&!recent);
+  el('activityPhase').textContent=act.session_phase||'-';
+  el('scheduleMeta').textContent=(lang==='zh'?'当前调度: ':'Schedule: ')+(act.schedule_text||'-');
+  el('commandLog').innerHTML=[...events].reverse().map(e=>{
+   return '<div class="cmd"><span class="cmdtime">'+esc(localClockFromIso(e.at))+'</span> '+
+    '<span class="cmdkind">'+esc(e.kind||'EVENT')+'</span> '+
+    '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
+    esc(e.message||'')+'</div>';
+  }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+ }catch(e){
+  setPulse('marketPulse',false,true);setPulse('activityPulse',false,true);
+  el('indexMeta').textContent='Live data error: '+e.message;
+  el('scheduleMeta').textContent='Activity error: '+e.message;
+ }
+}
+function onMarketChange(){refreshAll();refreshLiveWindows()}
 async function runNow(){
  const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});
  el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id);
@@ -564,7 +656,25 @@ async function refreshAll(){
    json('/api/status'),json('/api/daily?market_id='+m),json('/api/strategies?market_id='+m+'&lang='+lang),
    json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100')
   ]);
-  const evaluated=[...runs].reverse().find(x=>x.evaluation&&x.evaluation.status==='EVALUATED')||null;
+  const isCNStress=m==='CN';
+  const evaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCNStress||x.experiment_mode==='CN_WORST_POOL_RESCUE')
+  )||null;
+  if(isCNStress){
+   el('resultTitle').textContent=lang==='zh'?'A股逆向压力实验结果':'CN Adversarial Stress Experiment';
+   el('baseReturnLabel').textContent=lang==='zh'?'最差策略池基线收益':'Worst-pool baseline return';
+   el('baseReturnSub').textContent=lang==='zh'?'故意构造的不利起点':'Intentionally adverse baseline';
+   el('gainLabel').textContent=lang==='zh'?'TRIAID 挽回损失':'TRIAID loss rescue';
+   el('gainSub').textContent=lang==='zh'?'TRIAID 后 − 最差策略池基线':'After TRIAID − worst-pool baseline';
+   el('strategyTitle').textContent=lang==='zh'?'A股最差策略池与 TRIAID 减损调整':'CN Worst Strategy Pool and TRIAID Loss Reduction';
+  }else{
+   el('resultTitle').textContent=T[lang].result;
+   el('baseReturnLabel').textContent=T[lang].baseReturn;
+   el('baseReturnSub').textContent=T[lang].baseSub;
+   el('gainLabel').textContent=T[lang].gain;
+   el('gainSub').textContent=T[lang].gainSub;
+   el('strategyTitle').textContent=T[lang].strategies;
+  }
   const selected=cards.filter(x=>x.selected);
   const latest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
   const lastCurve=curves.length?curves[curves.length-1]:null;
@@ -577,6 +687,12 @@ async function refreshAll(){
    const g=Number(evaluated.evaluation.excess_return||0);
    el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
    el('dailyAnalysis').className=cls(g);
+  }else if(isCNStress&&latest?.diagnostic_summary?.experiment_mode==='CN_WORST_POOL_RESCUE'){
+   const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
+   el('dailyAnalysis').textContent=Number.isFinite(p)
+    ? (lang==='zh'?'当前信息下预计减损 '+signedPct(p)+'，实际挽回以后验为准':'Projected loss reduction '+signedPct(p)+' on current information; realized rescue awaits outcome')
+    : T[lang].pending;
+   el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
@@ -635,8 +751,8 @@ document.addEventListener('mouseout',e=>{
  const target=e.target.closest('[data-tip]');
  if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
 });
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll()}
-applyText();refreshAll();setInterval(refreshAll,15000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll();refreshLiveWindows()}
+applyText();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
 </script>
 </body>
 </html>
