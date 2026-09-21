@@ -110,7 +110,7 @@ missing=sorted(expected_paths-paths)
 assert not missing,f"missing OpenAPI paths: {missing}"
 
 home=call("GET","/")
-assert "TRIAID FIN" in home and "TRIAID 增益" in home
+assert "TRIAID FIN" in home and "TRIAID 相对收益差" in home
 
 status=call("GET","/api/status")
 assert status["architecture_version"].startswith("fin-evolution-lab@")
@@ -145,12 +145,12 @@ if us_return_history:
     us_return_latest=call("GET","/api/us-return-max/latest")
     assert us_return_latest["decision_id"]==us_return_history[-1]["decision_id"]
     assert us_return_latest["route_version"]=="us-return-max-route@0.3.0"
-    assert us_return_latest["objective"].startswith("STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN")
-    assert us_return_latest["strategy_selection_mode"]=="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+    assert us_return_latest["objective"].startswith("STRICT_MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE")
+    assert us_return_latest["strategy_selection_mode"]=="STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
     assert len(us_return_latest["target_strategy_weights"])==1
     assert abs(sum(us_return_latest["target_strategy_weights"].values())-1.0)<1e-12
     assert us_return_latest["selected_strategy_id"] in us_return_latest["max_return_tie_set"]
-    assert us_return_latest["selection_source"]=="ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN"
+    assert us_return_latest["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_STRICT_MAX_STATE_RETURN_ESTIMATE"
     assert us_return_latest["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     assert len(us_return_latest["capital_capacity"]["sleeves"])==4
     assert all(x["starting_cash_only"] is True for x in us_return_latest["capital_capacity"]["sleeves"])
