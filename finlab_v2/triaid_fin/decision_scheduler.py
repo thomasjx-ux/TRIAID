@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.2.1"
+    version="decision-scheduler@0.2.2"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -356,11 +356,27 @@ class DecisionScheduler:
             return None
 
         run=self.engine.run_live_research(market)
-        event_type=(
-            "CLOSE_FINAL"
-            if run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
-            else "CLOSE_WAITING_FOR_NEW_DAILY_DATA"
-        )
+        close_reference_run_id=None
+        final_complete=run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+        if (
+            not final_complete
+            and run.status=="NO_NEW_DATA"
+            and ":FINAL:" in str(run.market.snapshot_id or "")
+            and getattr(run,"previous_run_id",None)
+        ):
+            try:
+                reference=self.engine.get_run(run.previous_run_id)
+            except Exception:
+                reference=None
+            final_complete=bool(
+                reference is not None
+                and reference.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+                and reference.market.snapshot_id==run.market.snapshot_id
+            )
+            if final_complete:
+                close_reference_run_id=reference.run_id
+
+        event_type="CLOSE_FINAL" if final_complete else "CLOSE_WAITING_FOR_NEW_DAILY_DATA"
         row=self._event(market,event_type,{
             "phase":"POSTCLOSE",
             "source_latest_ts":source_ts,
@@ -371,6 +387,12 @@ class DecisionScheduler:
             "run_id":run.run_id,
             "run_status":run.status,
             "snapshot_id":run.market.snapshot_id,
+            "close_reference_run_id":close_reference_run_id,
+            "close_completion_basis":(
+                "EXISTING_COMPLETE_FINAL_SNAPSHOT"
+                if close_reference_run_id
+                else ("NEW_COMPLETE_FINAL_SNAPSHOT" if final_complete else None)
+            ),
         })
         state["last_close_source_ts"]=source_ts
         state["last_close_signature"]=signature
