@@ -274,7 +274,7 @@ def recovery_wave_history(
 def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
     market_id: str | None = Query(default=None),
-    run_id: str | None = Query(default=None),
+    run_id: str | None = None,
 ) -> list[dict]:
     latest_run=None
     if run_id:
