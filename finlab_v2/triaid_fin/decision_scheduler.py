@@ -6,6 +6,8 @@ from statistics import median
 from threading import RLock
 from zoneinfo import ZoneInfo
 
+from .trading_calendar import trading_day_info
+
 
 class DecisionScheduler:
     version="decision-scheduler@0.2.3"
@@ -317,7 +319,13 @@ class DecisionScheduler:
     def _postclose_settled(self,market_id:str)->bool:
         market=market_id.upper()
         now=datetime.now(self._tz(market))
-        close_hour,close_minute=(15,0) if market=="CN" else (16,0)
+        info=trading_day_info(market,now)
+        if market=="CN":
+            close_hour,close_minute=(15,0)
+        elif info.get("early_close") and info.get("early_close_time"):
+            close_hour,close_minute=(int(info["early_close_time"][:2]),int(info["early_close_time"][3:5]))
+        else:
+            close_hour,close_minute=(16,0)
         close_seconds=close_hour*3600+close_minute*60
         now_seconds=now.hour*3600+now.minute*60+now.second
         return now_seconds>=close_seconds+self.close_settle_seconds
@@ -332,7 +340,7 @@ class DecisionScheduler:
         signature=self.engine.observations.snapshot_signature(snapshot)
         recorded=bool((observed or {}).get("recorded"))
         settled=self._postclose_settled(market)
-        if not recorded and not settled:
+        if not settled:
             if state.get("close_wait_signature")==signature:
                 return None
             row=self._event(market,"CLOSE_WAITING_FOR_NEW_DAILY_DATA",{
