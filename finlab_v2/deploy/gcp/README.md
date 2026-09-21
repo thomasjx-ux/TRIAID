@@ -5,10 +5,12 @@ This target is deliberately independent from Railway.
 Architecture:
 
 - Cloud Run: stateless UI and API
-- Supabase: persistent TRIAID state, runs, observations, transitions, scheduler state and audit state
+- Supabase: persistent TRIAID state, runs, observations, transitions, scheduler state and audit state in an isolated gcp-shadow namespace during validation
 - Cloud Scheduler: one weekday minute tick
 - Secret Manager: runtime secrets
 - Railway: remains online as the existing production/backup node during migration
+
+During migration the Google node uses TRIAID_STORAGE_NAMESPACE=gcp-shadow. Railway continues using the existing default namespace, so Google shadow evidence cannot overwrite or append to Railway production evidence.
 
 The Cloud Run service runs with:
 - min instances: 0
@@ -58,6 +60,7 @@ The script:
 Do not stop Railway when this deploy succeeds.
 
 Promotion requires a dual-run comparison first:
+- Google shadow writes remain isolated from Railway production state
 - same source timestamps
 - same market-data provider identity
 - same observation/transition semantics
