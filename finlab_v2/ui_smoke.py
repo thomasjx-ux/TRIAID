@@ -32,6 +32,12 @@ assert 'id="prospectiveStrategyRows"' in html
 assert 'id="prospectiveDailyRows"' in html
 assert "renderProspective" in html
 assert "TRIAID冻结配置累计收益" in html
+assert 'id="recoveryWavePanel"' in html
+assert 'id="recoveryOpinionRows"' in html
+assert 'id="recoveryReviewRows"' in html
+assert "renderRecoveryWave" in html
+assert "TRIAID 二阶恢复波段决策" in html
+assert "当前冻结交易意见" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
 assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')
@@ -52,6 +58,13 @@ assert "prospective_experiment" in dcn
 assert dcn["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"
 assert dcn["prospective_experiment"]["protocol_version"].startswith("cn-prospective-controls@")
 assert dcn["prospective_experiment"]["strategy_determination"]
+
+assert "recovery_wave" in dcn
+assert dcn["recovery_wave"]["integrity"]["passed"] is True
+assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.0"
+assert dcn["recovery_wave"]["latest_decision"]["data_scope"]["constituent_micro_available"] is False
+assert dcn["recovery_wave"]["latest_decision"]["execution_discipline"]["same_bar_execution_allowed"] is False
+assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
 
 cards=strategies("zh","US")
 assert len(cards)==29
