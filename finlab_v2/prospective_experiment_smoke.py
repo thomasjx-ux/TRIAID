@@ -79,7 +79,7 @@ registered=protocol.register(
     previous_states=previous,
 )
 assert registered["status"]=="OPEN"
-assert protocol.version=="cn-prospective-controls@0.2.0"
+assert protocol.version=="cn-prospective-controls@0.3.0"
 assert registered["design"]["horizons_trading_days"]==[3,5,10]
 assert registered["design"]["no_future_information"] is True
 assert registered["design"]["no_post_result_retuning"] is True
@@ -90,15 +90,21 @@ assert set(registered["control_rankings"])=={
 
 # Incomplete periods never count toward a horizon.
 partial={sid:0.001 for sid in ids[:-1]}
-incomplete=protocol.observe_period("2026-09-21",partial)
+same_day=protocol.observe_period("2026-09-21",partial)
+assert same_day["updated_experiment_ids"]==[]
+after_same_day=protocol.get(registered["experiment_id"])
+assert len(after_same_day["outcomes"])==0
+assert after_same_day["incomplete_observations"]==[]
+
+incomplete=protocol.observe_period("2026-09-22",partial)
 assert registered["experiment_id"] in incomplete["updated_experiment_ids"]
 after_incomplete=protocol.get(registered["experiment_id"])
 assert len(after_incomplete["outcomes"])==0
 assert after_incomplete["incomplete_observations"]
 
 dates=[
-    "2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-25",
-    "2026-09-28","2026-09-29","2026-09-30","2026-10-01","2026-10-02",
+    "2026-09-22","2026-09-23","2026-09-24","2026-09-25","2026-09-28",
+    "2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05",
 ]
 for day_index,day in enumerate(dates):
     realized={
@@ -140,7 +146,7 @@ after=protocol.get(registered["experiment_id"])
 assert after["outcomes"]==before["outcomes"]
 assert after["evaluations"]==before["evaluations"]
 
-post_complete=protocol.observe_period("2026-10-05",{sid:0.50 for sid in ids})
+post_complete=protocol.observe_period("2026-10-06",{sid:0.50 for sid in ids})
 assert post_complete["updated_experiment_ids"]==[]
 post_complete_state=protocol.get(registered["experiment_id"])
 assert post_complete_state["outcomes"]==before["outcomes"]
