@@ -10,7 +10,7 @@ from typing import Any
 
 from .contracts import StrategyGroup, StrategyState, TriaidDecision, utc_now
 from .market_lab import policy_positions
-from .adaptive_alpha import us_fast_challenger
+from .adaptive_alpha import PROMOTION_STANDARD, us_fast_challenger
 from .store import RunStore
 
 
@@ -229,6 +229,73 @@ class USReturnMaxRoute:
         )
 
         fast_challenger=us_fast_challenger(admissible,str(winner.strategy_id))
+        challenger_id=str(fast_challenger.get("challenger_strategy_id") or "")
+        challenger_candidate=next((x for x in candidate_rows if x["strategy_id"]==challenger_id),None)
+        pilot_limit=float(PROMOTION_STANDARD["shadow_to_pilot"]["pilot_max_risk_budget"])
+        pilot_capital=float(panel.spec.reference_capital)*pilot_limit
+        pilot_products=[]
+        pilot_entry_cost=0.0
+        pilot_liquidity_pass=True
+        pilot_capacity_pass=True
+        if challenger_candidate is not None:
+            for asset,w in challenger_candidate["target_asset_weights"].items():
+                scaled_weight=max(0.0,float(w))*pilot_limit
+                notional=float(panel.spec.reference_capital)*scaled_weight
+                if notional<=0:
+                    continue
+                adv=self._adv_notional(panel,asset,completed_i)
+                liquidity_ok=adv>0
+                participation=(notional/adv) if liquidity_ok else None
+                capacity_ok=bool(
+                    liquidity_ok
+                    and participation is not None
+                    and participation<=float(panel.spec.max_participation_adv)
+                )
+                pilot_liquidity_pass=pilot_liquidity_pass and liquidity_ok
+                pilot_capacity_pass=pilot_capacity_pass and capacity_ok
+                planned=(
+                    min(float(participation),float(panel.spec.max_participation_adv))
+                    if participation is not None else float(panel.spec.max_participation_adv)
+                )
+                bps=self._execution_bps(
+                    planned,
+                    float(panel.spec.base_cost_bps),
+                    float(panel.spec.impact_coefficient_bps),
+                )
+                cost=notional*bps/10000.0
+                pilot_entry_cost+=cost
+                pilot_products.append({
+                    "symbol":asset,
+                    "pilot_weight_on_total_capital":scaled_weight,
+                    "pilot_notional_usd":notional,
+                    "adv20_notional_usd":adv,
+                    "participation_adv":participation,
+                    "capacity_ok":capacity_ok,
+                    "liquidity_ok":liquidity_ok,
+                    "estimated_entry_cost_usd":cost,
+                    "all_in_bps_per_side":bps,
+                })
+        challenger_state=next((s for s in admissible if str(s.strategy_id)==challenger_id),None)
+        pilot_turnover_fraction=sum(float(x["pilot_weight_on_total_capital"]) for x in pilot_products)
+        fast_challenger["pilot_execution_check"]={
+            "starting_reference_capital_usd":float(panel.spec.reference_capital),
+            "pilot_max_risk_budget":pilot_limit,
+            "pilot_capital_at_risk_usd":pilot_capital,
+            "risk_pass":bool(challenger_state is not None and challenger_state.risk_ok and not challenger_state.hard_failure),
+            "liquidity_pass":bool(challenger_candidate is not None and pilot_liquidity_pass),
+            "capacity_pass":bool(challenger_candidate is not None and pilot_capacity_pass),
+            "pilot_turnover_fraction":pilot_turnover_fraction,
+            "turnover_multiplier":(
+                pilot_turnover_fraction/pilot_limit if pilot_limit>0 else None
+            ),
+            "estimated_entry_cost_usd":pilot_entry_cost,
+            "estimated_entry_cost_fraction_of_total_capital":(
+                pilot_entry_cost/float(panel.spec.reference_capital)
+                if float(panel.spec.reference_capital)>0 else None
+            ),
+            "products":pilot_products,
+            "semantics":"SHADOW_TO_PILOT EXECUTION CHECK AT THE CAPPED PILOT RISK BUDGET; NOT A BROKER FILL",
+        }
         target_assets=dict(winner_row["target_asset_weights"])
         target_risk_weight=sum(target_assets.values())
         adv_by_symbol={

@@ -89,6 +89,7 @@ class AlphaEvidenceLedger:
         feasible={k:v for k,v in sr.items() if k!="P28_CASH"}
         hindsight_id=max(feasible,key=feasible.get) if feasible else None
         hindsight_r=feasible.get(hindsight_id) if hindsight_id else None
+        execution=(decision.get("fast_challenger") or {}).get("pilot_execution_check") or {}
         row={
             "market_id":"US",
             "as_of":outcome.get("as_of"),
@@ -111,6 +112,11 @@ class AlphaEvidenceLedger:
             "missed_opportunity_cost":(
                 float(hindsight_r)-primary_r if hindsight_r is not None else None
             ),
+            "risk_pass":bool(execution.get("risk_pass")),
+            "liquidity_pass":bool(execution.get("liquidity_pass")),
+            "capacity_pass":bool(execution.get("capacity_pass")),
+            "turnover_multiplier":execution.get("turnover_multiplier"),
+            "modeled_entry_cost_fraction":execution.get("estimated_entry_cost_fraction_of_total_capital"),
             "lookahead_or_same_bar_leakage":False,
             "promotion_eligible_observation":challenger_r is not None,
         }
@@ -140,6 +146,9 @@ class AlphaEvidenceLedger:
         budget=float(soft.get("max_shadow_probe_budget") or 0.0)
         soft_weights={s:(budget/len(eligible)) for s in eligible} if eligible else {}
         soft_r=self._weighted(soft_weights,returns)
+        execution=soft.get("pilot_execution_check") or {}
+        entry_cost_fraction=float(execution.get("estimated_entry_cost_fraction_of_total_capital") or 0.0)
+        soft_net_r=soft_r-entry_cost_fraction
         row={
             "market_id":"CN",
             "as_of":outcome.get("as_of"),
@@ -149,10 +158,16 @@ class AlphaEvidenceLedger:
             "strict_portfolio_return":strict_r,
             "market_beta_return":market_beta,
             "strict_algorithm_excess_vs_market":strict_r-market_beta,
-            "soft_probe_return":soft_r,
+            "soft_probe_return_gross":soft_r,
+            "soft_probe_return":soft_net_r,
             "soft_probe_budget":budget,
             "soft_probe_symbols":eligible,
-            "soft_probe_incremental_vs_strict":soft_r-strict_r,
+            "soft_probe_incremental_vs_strict":soft_net_r-strict_r,
+            "modeled_entry_cost_fraction":entry_cost_fraction,
+            "risk_pass":bool(execution.get("risk_pass")),
+            "liquidity_pass":bool(execution.get("liquidity_pass")),
+            "capacity_pass":bool(execution.get("capacity_pass")),
+            "turnover_multiplier":execution.get("turnover_multiplier"),
             "defense_opportunity_cost":max(0.0,market_beta-strict_r),
             "defense_avoided_loss":max(0.0,strict_r-market_beta),
             "lookahead_or_same_bar_leakage":False,
@@ -189,10 +204,13 @@ class AlphaEvidenceLedger:
             ),
             "max_drawdown_deterioration":max(0.0,maxdd_primary-maxdd_challenger),
             # Turnover/capacity/risk are fail-closed until paired execution evidence is available.
-            "turnover_multiplier":None,
-            "capacity_pass":False,
-            "liquidity_pass":False,
-            "risk_pass":False,
+            "turnover_multiplier":(
+                max(float(r["turnover_multiplier"]) for r in rows if r.get("turnover_multiplier") is not None)
+                if any(r.get("turnover_multiplier") is not None for r in rows) else None
+            ),
+            "capacity_pass":bool(rows) and all(bool(r.get("capacity_pass")) for r in rows),
+            "liquidity_pass":bool(rows) and all(bool(r.get("liquidity_pass")) for r in rows),
+            "risk_pass":bool(rows) and all(bool(r.get("risk_pass")) for r in rows),
             "lookahead_or_same_bar_leakage":False,
         }
         gate=promotion_gate(metrics,"shadow_to_pilot")
