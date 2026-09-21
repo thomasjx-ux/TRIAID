@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import secrets
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from triaid_fin.contracts import OutcomeRequest, RunRequest
@@ -20,6 +22,13 @@ engine=EvolutionLabEngine()
 decision_scheduler=DecisionScheduler(engine)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(engine,decision_scheduler)
+
+def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
+    expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
+    if not expected:
+        raise HTTPException(status_code=503,detail="admin mutation disabled: TRIAID_ADMIN_TOKEN not configured")
+    if not x_triaid_admin_token or not secrets.compare_digest(x_triaid_admin_token,expected):
+        raise HTTPException(status_code=403,detail="admin authorization required")
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -95,7 +104,7 @@ def live_run_all(background_tasks: BackgroundTasks) -> dict:
 
 
 @app.post("/api/run", status_code=202)
-def create_run(request: RunRequest, background_tasks: BackgroundTasks) -> dict:
+def create_run(request: RunRequest, background_tasks: BackgroundTasks, _admin:None=Depends(require_admin_token)) -> dict:
     run = engine.create_run(request)
     background_tasks.add_task(engine.execute, run.run_id, request)
     return {"run_id": run.run_id, "status": run.status}
@@ -139,7 +148,7 @@ def latest(market_id: str) -> dict:
 
 
 @app.post("/api/runs/{run_id}/outcome")
-def submit_outcome(run_id: str, outcome: OutcomeRequest) -> dict:
+def submit_outcome(run_id: str, outcome: OutcomeRequest, _admin:None=Depends(require_admin_token)) -> dict:
     try:
         return engine.submit_outcome(run_id, outcome).model_dump()
     except (KeyError, FileNotFoundError) as exc:
@@ -286,12 +295,12 @@ def evolution_status() -> dict:
 
 
 @app.post("/api/evolution/propose")
-def evolution_propose() -> dict:
+def evolution_propose(_admin:None=Depends(require_admin_token)) -> dict:
     return engine.propose_core_candidate()
 
 
 @app.post("/api/evolution/promote/{version}")
-def evolution_promote(version: str, validation: dict[str, Any] = Body(...)) -> dict:
+def evolution_promote(version: str, validation: dict[str, Any] = Body(default={}), _admin:None=Depends(require_admin_token)) -> dict:
     try:
         return engine.promote_core(version, validation)
     except KeyError as exc:
@@ -307,7 +316,7 @@ def strategy_evolution_status(market_id: str | None = None) -> dict:
 
 
 @app.post("/api/strategy-evolution/propose/{market_id}")
-def strategy_evolution_propose(market_id: str) -> dict:
+def strategy_evolution_propose(market_id: str, _admin:None=Depends(require_admin_token)) -> dict:
     market_id=market_id.upper()
     if market_id not in {"US","CN"}:
         raise HTTPException(status_code=400, detail="market_id must be US or CN")
@@ -318,7 +327,8 @@ def strategy_evolution_propose(market_id: str) -> dict:
 def strategy_evolution_promote(
     market_id: str,
     version: str,
-    validation: dict[str, Any] = Body(...),
+    validation: dict[str, Any] = Body(default={}),
+    _admin:None=Depends(require_admin_token),
 ) -> dict:
     market_id=market_id.upper()
     if market_id not in {"US","CN"}:
