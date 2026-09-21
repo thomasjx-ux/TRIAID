@@ -24,6 +24,7 @@ class CoreParameters:
 class EvolutionModule:
     version = "core-evolution@0.2.0"
     min_verified_runs = 20
+    min_verified_runs_per_market = 10
 
     def __init__(self, store: RunStore) -> None:
         self.store = store
@@ -68,19 +69,42 @@ class EvolutionModule:
             r for r in runs
             if r.evaluation and r.evaluation.status=="EVALUATED"
             and (r.market.metadata or {}).get("daily_bar_complete") is not False
+            and str(r.market.market_id).upper() in {"US","CN"}
         ]
         eligible=sorted(eligible,key=lambda r:(r.market.as_of,r.created_at,r.run_id))
-        if len(eligible)<self.min_verified_runs:
+        by_market={
+            market:[r for r in eligible if str(r.market.market_id).upper()==market]
+            for market in ("US","CN")
+        }
+        if (
+            len(eligible)<self.min_verified_runs
+            or any(len(by_market[m])<self.min_verified_runs_per_market for m in ("US","CN"))
+        ):
             return {
                 "created":False,
-                "reason":"INSUFFICIENT_POSTERIOR_EVALUATIONS",
-                "required":self.min_verified_runs,
-                "available":len(eligible),
+                "reason":"INSUFFICIENT_MARKET_STRATIFIED_POSTERIOR_EVALUATIONS",
+                "required_total":self.min_verified_runs,
+                "required_per_market":self.min_verified_runs_per_market,
+                "available_total":len(eligible),
+                "available_by_market":{m:len(rows) for m,rows in by_market.items()},
                 "diagnosis":self.diagnose(eligible),
             }
-        dev_count=max(1,int(len(eligible)*0.70))
-        dev=eligible[:dev_count]
-        holdout=eligible[dev_count:]
+
+        dev=[]
+        holdout=[]
+        development_run_ids_by_market={}
+        reserved_holdout_run_ids_by_market={}
+        market_diagnosis={}
+        for market,rows in by_market.items():
+            dev_count=max(1,int(len(rows)*0.70))
+            market_dev=rows[:dev_count]
+            market_holdout=rows[dev_count:]
+            dev.extend(market_dev)
+            holdout.extend(market_holdout)
+            development_run_ids_by_market[market]=[r.run_id for r in market_dev]
+            reserved_holdout_run_ids_by_market[market]=[r.run_id for r in market_holdout]
+            market_diagnosis[market]=self.diagnose(market_dev)
+
         diag=self.diagnose(dev)
         parent=self.active()
 
@@ -91,13 +115,18 @@ class EvolutionModule:
         cand.status="candidate"
         cand.parent_version=parent.version
 
-        if (diag["mean_excess_return"] or 0.0) < 0 or (diag["negative_rate"] or 0.0) > 0.55:
+        weak_market=any(
+            (market_diagnosis[m]["mean_excess_return"] or 0.0)<0
+            or (market_diagnosis[m]["negative_rate"] or 0.0)>0.55
+            for m in ("US","CN")
+        )
+        if weak_market:
             cand.intervention_strength=max(0.10,parent.intervention_strength*0.85)
             cand.uncertainty_penalty=min(3.0,parent.uncertainty_penalty*1.10)
-            cand.hypothesis="Reduce intervention strength and demand more evidence because development-period interventions show excessive negative relative return."
+            cand.hypothesis="Reduce intervention strength and demand more evidence because at least one market's development-period interventions show weak relative-return evidence."
         else:
             cand.intervention_strength=min(0.90,parent.intervention_strength*1.05)
-            cand.hypothesis="Slightly increase intervention strength because development-period interventions show positive average relative return."
+            cand.hypothesis="Slightly increase intervention strength because both US and CN development-period interventions show non-negative relative-return evidence."
 
         created_at=datetime.now(timezone.utc).isoformat()
         self.state["cores"][version]=asdict(cand)
@@ -108,7 +137,10 @@ class EvolutionModule:
             "created_at":created_at,
             "development_run_ids":[r.run_id for r in dev],
             "reserved_holdout_run_ids":[r.run_id for r in holdout],
+            "development_run_ids_by_market":development_run_ids_by_market,
+            "reserved_holdout_run_ids_by_market":reserved_holdout_run_ids_by_market,
             "diagnosis":diag,
+            "market_diagnosis":market_diagnosis,
             "hypothesis":cand.hypothesis,
         })
         self.store.save_json("core_evolution.json",self.state)
@@ -117,7 +149,10 @@ class EvolutionModule:
             "candidate":asdict(cand),
             "development_runs":len(dev),
             "reserved_holdout_runs":len(holdout),
+            "development_runs_by_market":{m:len(development_run_ids_by_market[m]) for m in ("US","CN")},
+            "reserved_holdout_runs_by_market":{m:len(reserved_holdout_run_ids_by_market[m]) for m in ("US","CN")},
             "diagnosis":diag,
+            "market_diagnosis":market_diagnosis,
         }
 
     def candidate_manifest(self,version:str)->dict|None:
