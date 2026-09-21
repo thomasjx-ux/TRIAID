@@ -107,6 +107,19 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=503,detail=f"{type(exc).__name__}:{exc}") from exc
 
+    @router.post("/automation/tick")
+    async def market_data_automation_tick_api(
+        market_id:str|None=Query(default=None),
+        _admin:None=Depends(_require_admin_token),
+    )->dict:
+        markets=(_market(market_id),) if market_id else None
+        try:
+            return await automation.tick_once(markets)
+        except ValueError as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503,detail=f"{type(exc).__name__}:{exc}") from exc
+
     @router.get("/frequency-policy")
     def frequency_policy_status_api()->dict:
         return automation.frequency_policy.status()
