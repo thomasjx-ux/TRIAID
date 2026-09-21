@@ -502,7 +502,7 @@ def build_strategy_states(
                 risk=0.0 if pid=="P28_CASH" else risk,
                 uncertainty=0.0 if pid=="P28_CASH" else uncertainty,
                 estimated_cost=0.0,
-                oos_marginal_value=expected,
+                oos_marginal_value=None,
                 metrics=metrics,
                 recent_returns=[float(x) for x in rs[-252:]],
                 selection_reason=BilingualText(
