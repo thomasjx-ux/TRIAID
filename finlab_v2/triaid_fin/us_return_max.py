@@ -593,7 +593,13 @@ class USReturnMaxLedger:
         if not rows:
             return None
         latest=rows[-1]
-        previous=rows[-2] if len(rows)>1 else None
+        latest_date=str(latest.get("market_as_of") or "")
+        prior_frozen=[
+            row for row in rows[:-1]
+            if str(row.get("decision_status") or "")=="DAILY_FROZEN"
+            and str(row.get("market_as_of") or "")<latest_date
+        ]
+        previous=prior_frozen[-1] if prior_frozen else None
         return {
             "report_version":self.version,
             "route_version":latest.get("route_version"),
