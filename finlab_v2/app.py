@@ -158,6 +158,32 @@ def curves(market_id: str | None = None) -> list[dict]:
     return engine.curves(market_id)
 
 
+@app.get("/api/experiments/cn/prospective/status")
+def cn_prospective_status() -> dict:
+    return engine.prospective_experiment_status()
+
+
+@app.get("/api/experiments/cn/prospective")
+def cn_prospective_list(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict]:
+    return engine.prospective_experiments(limit)
+
+
+@app.get("/api/experiments/cn/prospective/latest")
+def cn_prospective_latest() -> dict:
+    row = engine.latest_prospective_experiment()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no prospective CN experiment")
+    return row
+
+
+@app.get("/api/experiments/cn/prospective/{experiment_id}")
+def cn_prospective_detail(experiment_id: str) -> dict:
+    try:
+        return engine.prospective_experiment_detail(experiment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="prospective experiment not found") from exc
+
+
 @app.get("/api/strategies")
 def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
