@@ -7,7 +7,7 @@ from .store import RunStore
 
 
 class MarketObservationStore:
-    version="market-observation@0.2.0"
+    version="market-observation@0.2.1"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
@@ -36,13 +36,39 @@ class MarketObservationStore:
             }
 
         previous=None
+        max_source_latest_ts=None
         for candidate in reversed(self.store.read_jsonl(self.filename,limit=500)):
             if (
                 str(candidate.get("market_id","")).upper()==market
                 and str(candidate.get("mode","")).upper()==mode
             ):
-                previous=candidate
-                break
+                if previous is None:
+                    previous=candidate
+                try:
+                    candidate_ts=int(candidate.get("source_latest_ts"))
+                    if max_source_latest_ts is None or candidate_ts>max_source_latest_ts:
+                        max_source_latest_ts=candidate_ts
+                except Exception:
+                    pass
+
+        try:
+            current_ts=int(source_latest_ts)
+        except Exception:
+            current_ts=None
+        if (
+            current_ts is not None
+            and max_source_latest_ts is not None
+            and current_ts<max_source_latest_ts
+        ):
+            return {
+                "recorded":False,
+                "reason":"STALE_SOURCE_TIMESTAMP",
+                "market_id":market,
+                "mode":mode,
+                "source_latest_ts":source_latest_ts,
+                "max_source_latest_ts":max_source_latest_ts,
+                "provider":provider,
+            }
 
         provider_changed=bool(
             previous
