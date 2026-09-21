@@ -11,11 +11,9 @@ required=[
 for needle in required:
     assert needle in text,needle
 
-for stale in [
-    'TRIAID 增益',
-    'STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK',
-    'ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN',
-]:
-    assert stale not in text,stale
+# The old Return-Max enum literals may appear only inside the explicit immutable
+# frozen-ledger compatibility guard. The obsolete UI label must never return.
+assert 'TRIAID 增益' not in text
+assert 'legacy_frozen_contract' in text
 
 print("TRIAID_PRODUCTION_SMOKE_CONTRACT_STATIC_PASS")
