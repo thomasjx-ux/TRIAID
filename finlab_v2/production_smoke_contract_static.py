@@ -14,6 +14,7 @@ for needle in required:
 # The old Return-Max enum literals may appear only inside the explicit immutable
 # frozen-ledger compatibility guard. The obsolete UI label must never return.
 assert 'TRIAID 增益' not in text
-assert 'legacy_frozen_contract' in text
+assert 'annualized historical strategy state-return estimate' in text
+assert 'not a calibrated future-return forecast' in text
 
 print("TRIAID_PRODUCTION_SMOKE_CONTRACT_STATIC_PASS")
