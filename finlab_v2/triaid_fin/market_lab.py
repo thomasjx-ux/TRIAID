@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from statistics import mean, pstdev
+from zoneinfo import ZoneInfo
 
 from .contracts import BilingualText, MarketSnapshot, StrategyState
 from .market_data import MarketDataError, get_market_data_hub, session_phase
@@ -553,9 +554,15 @@ def prepare_live_market(
     daily_content_fingerprint=hashlib.sha256(
         json.dumps(final_payload,sort_keys=True,separators=(",",":")).encode("utf-8")
     ).hexdigest()
+    local_tz=ZoneInfo("America/New_York" if panel.spec.market_id=="US" else "Asia/Shanghai")
+    local_today=datetime.now(local_tz).date().isoformat()
+    daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or as_of<local_today
     snapshot_id=f"{panel.spec.market_id}:{latest_ts}"
-    if phase in {"POSTCLOSE","CLOSED"}:
-        snapshot_id=f"{snapshot_id}:FINAL:{daily_content_fingerprint[:12]}"
+    if daily_bar_complete:
+        # Canonical complete-daily identity is independent of provider timestamp.
+        # Same market date + same aligned close/volume content must dedupe across
+        # provider failover or timestamp-normalization differences.
+        snapshot_id=f"{panel.spec.market_id}:{as_of}:FINAL:{daily_content_fingerprint[:12]}"
     snapshot=MarketSnapshot(
         market_id=panel.spec.market_id,
         as_of=as_of,
@@ -574,7 +581,7 @@ def prepare_live_market(
             "impact_coefficient_bps":panel.spec.impact_coefficient_bps,
             "max_participation_adv":panel.spec.max_participation_adv,
             "daily_content_fingerprint":daily_content_fingerprint,
-            "daily_bar_complete":phase in {"POSTCLOSE","CLOSED"},
+            "daily_bar_complete":daily_bar_complete,
         },
     )
     realized={pid:history[pid][-1] for pid in history}
