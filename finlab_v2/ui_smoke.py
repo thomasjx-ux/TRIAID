@@ -1,4 +1,4 @@
-from app import daily, evolution_status, home, status, strategies
+from app import daily, evolution_status, home, status, strategies, engine
 
 html=home()
 assert "TRIAID 相对收益差" in html
@@ -109,7 +109,7 @@ assert d["date"]
 # Contract-specific US Return-Max behavior is covered by us_return_max_smoke.py.
 if "us_return_max" in d:
     assert d["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
-    assert d["us_return_max"]["route_version"]=="us-return-max-route@0.3.0"
+    assert d["us_return_max"]["route_version"]==engine.us_return_max.version
     assert d["us_return_max"]["integrity"]["passed"] is True
 
 dcn=daily("CN")
@@ -121,7 +121,7 @@ if "prospective_experiment" in dcn:
     assert dcn["prospective_experiment"]["protocol_version"].startswith("cn-prospective-controls@")
 if "recovery_wave" in dcn:
     assert dcn["recovery_wave"]["integrity"]["passed"] is True
-    assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.3.0"
+    assert dcn["recovery_wave"]["latest_decision"]["core_version"]==engine.recovery_wave_core.version
     assert dcn["recovery_wave"]["latest_decision"]["data_scope"]["constituent_micro_available"] is False
     assert dcn["recovery_wave"]["latest_decision"]["execution_discipline"]["same_bar_execution_allowed"] is False
     assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
