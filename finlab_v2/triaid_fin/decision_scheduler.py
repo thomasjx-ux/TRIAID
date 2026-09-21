@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.2.2"
+    version="decision-scheduler@0.2.3"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -347,13 +347,6 @@ class DecisionScheduler:
             state["close_wait_signature"]=signature
             self._save()
             return row
-
-        if (
-            not recorded
-            and settled
-            and state.get("last_close_signature")==signature
-        ):
-            return None
 
         run=self.engine.run_live_research(market)
         close_reference_run_id=None
