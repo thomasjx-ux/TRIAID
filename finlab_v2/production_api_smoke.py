@@ -114,7 +114,7 @@ assert storage["backend"]["backend"]=="supabase"
 assert storage["durability"]=="PERSISTENT"
 
 prospective_status=call("GET","/api/experiments/cn/prospective/status")
-assert prospective_status["version"]=="cn-prospective-controls@0.1.0"
+assert prospective_status["version"]=="cn-prospective-controls@0.2.0"
 prospective_rows=call("GET","/api/experiments/cn/prospective?limit=5")
 assert isinstance(prospective_rows,list)
 if prospective_rows:
@@ -132,6 +132,11 @@ for market in ("US","CN"):
     assert latest["market"]["market_id"]==market
     daily=call("GET",f"/api/daily?market_id={market}")
     assert isinstance(daily,dict)
+    if market=="CN":
+        assert daily["prospective_experiment"]["protocol_version"]=="cn-prospective-controls@0.2.0"
+        assert daily["prospective_experiment"]["strategy_determination"]
+        assert "daily_fluctuation" in daily["prospective_experiment"]
+        assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
     curves=call("GET",f"/api/curves?market_id={market}")
     assert isinstance(curves,list)
     cards=call("GET",f"/api/strategies?market_id={market}&lang=zh")
@@ -286,7 +291,7 @@ for item in created["runs"]:
     assert item["run_id"] in after_ids
 
 prospective_after=call("GET","/api/experiments/cn/prospective/latest")
-assert prospective_after["protocol_version"]=="cn-prospective-controls@0.1.0"
+assert prospective_after["protocol_version"]=="cn-prospective-controls@0.2.0"
 assert prospective_after["design"]["horizons_trading_days"]==[3,5,10]
 assert prospective_after["design"]["no_future_information"] is True
 assert prospective_after["design"]["no_post_result_retuning"] is True
