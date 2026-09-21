@@ -339,5 +339,5 @@ def build_storage_backend(root:str|None=None):
         return SupabaseStorageBackend()
     raise StorageBackendError(
         f"unsupported_storage_backend:{backend}. "
-        "Supported now: file. Future backends can implement the same contract."
+        "Supported backends: file, supabase."
     )
