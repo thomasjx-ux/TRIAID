@@ -93,6 +93,10 @@ Production Python dependencies are exact-version pinned in requirements.txt. Dep
 
 Deployment preflight is evidence-isolated. `bootstrap_live.py` fails closed when pointed at a non-file storage backend unless `TRIAID_BOOTSTRAP_ALLOW_PERSISTENT=1` is explicitly set for a deliberate migration. Normal Railway validation runs bootstrap with `TRIAID_STORAGE_BACKEND=file` and a temporary data directory, so deployment checks cannot create official runs, lifecycle changes, prospective observations, Recovery Wave decisions or US Return-Max decisions in production persistence.
 
+Candidate application construction must not mutate production state. Module constructors may load and normalize persisted state in memory, but they must not write defaults, migrations or recovery results. GET/status paths must remain persistence-neutral. The only production-persistence preflight before promotion is `production_storage_readonly_probe.py`, which constructs only `RunStore`, verifies Supabase durability/integrity and confirms the run ledger is unchanged.
+
+Stale incomplete official-run recovery is explicit operational maintenance, not constructor behavior. Final production startup may enable `TRIAID_STARTUP_MAINTENANCE=1`; the maintenance action records `runtime_maintenance_events.jsonl`. Candidate smoke servers must force this flag off.
+
 ## External infrastructure dependency
 
 Current production persistence is external Supabase storage, not a Railway volume. Required production configuration includes:
@@ -109,6 +113,8 @@ Every infrastructure change must keep passing:
 - backend_audit_regression.py
 - manual_preview_isolation_smoke.py
 - bootstrap_persistence_guard_smoke.py
+- startup_readonly_contract_smoke.py
+- production_smoke_contract_static.py
 - bootstrap_live.py for US and CN on isolated file storage
 - ui_smoke.py
 - market-data capability boundaries
