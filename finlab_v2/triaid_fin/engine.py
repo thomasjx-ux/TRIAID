@@ -280,10 +280,8 @@ class EvolutionLabEngine:
             snapshot.metadata["strategy_rules_version"]=profile.version
 
             phase=str(snapshot.metadata.get("session_phase") or "").upper()
-            local_tz=ZoneInfo("America/New_York" if market_id=="US" else "Asia/Shanghai")
-            local_today=datetime.now(local_tz).date().isoformat()
-            daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or str(snapshot.as_of)<local_today
-            snapshot.metadata["daily_bar_complete"]=bool(daily_bar_complete)
+            daily_bar_complete=bool(snapshot.metadata.get("daily_bar_complete"))
+            snapshot.metadata["daily_bar_complete"]=daily_bar_complete
             snapshot.metadata["evidence_state"]="COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY"
             recovery_outcome=None
             recovery_decision=None
