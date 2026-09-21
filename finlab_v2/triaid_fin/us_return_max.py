@@ -27,7 +27,7 @@ class USReturnMaxRoute:
     - four USD sleeves share the same signal and differ only by starting capital.
     """
 
-    version="us-return-max-route@0.2.0"
+    version="us-return-max-route@0.3.0"
     interface_version="us-return-max-contract@1"
     capital_version="us-return-max-capacity@0.1.0"
     sleeves=USD_CAPITAL_SLEEVES
@@ -105,6 +105,47 @@ class USReturnMaxRoute:
         return winner,sorted(str(s.strategy_id) for s in tied)
 
     @staticmethod
+    def _admissible_states(states:list[StrategyState])->list[StrategyState]:
+        return [
+            s for s in states
+            if str(s.lifecycle or "").lower()=="active"
+            and bool(s.eligible)
+            and not bool(s.hard_failure)
+            and bool(s.liquidity_ok)
+            and bool(s.capacity_ok)
+            and bool(s.risk_ok)
+            and bool(s.concentration_ok)
+        ]
+
+    @classmethod
+    def _meta_switch_cost_fraction(
+        cls,
+        panel:Any,
+        completed_i:int,
+        previous_asset_weights:dict[str,float],
+        target_asset_weights:dict[str,float],
+    )->float:
+        spec=panel.spec
+        cost=0.0
+        for asset in panel.assets:
+            delta=abs(
+                float(target_asset_weights.get(asset,0.0))
+                - float(previous_asset_weights.get(asset,0.0))
+            )
+            if delta<=1e-15:
+                continue
+            adv=cls._adv_notional(panel,asset,completed_i)
+            participation=(float(spec.reference_capital)*delta/adv) if adv>0 else float(spec.max_participation_adv)
+            planned=min(max(0.0,participation),float(spec.max_participation_adv))
+            bps=cls._execution_bps(
+                planned,
+                float(spec.base_cost_bps),
+                float(spec.impact_coefficient_bps),
+            )
+            cost+=delta*bps/10000.0
+        return cost
+
+    @staticmethod
     def _asset_targets(panel:Any,i:int,strategy_weights:dict[str,float])->dict[str,float]:
         positions=policy_positions(panel,i)
         assets=panel.assets
@@ -126,6 +167,7 @@ class USReturnMaxRoute:
         generic_decision:TriaidDecision,
         states:list[StrategyState],
         input_phase:str|None,
+        previous_decision:dict|None=None,
     )->dict:
         if str(panel.spec.market_id).upper()!="US":
             raise ValueError("USReturnMaxRoute only supports US.")
@@ -134,7 +176,46 @@ class USReturnMaxRoute:
         completed_i=self._completed_index(panel,input_phase)
         state_map={s.strategy_id:s for s in states}
 
-        winner,tie_set=self._strict_max_strategy(states)
+        admissible=self._admissible_states(states)
+        if not admissible:
+            raise ValueError("US Return-Max requires at least one admissible active strategy.")
+        previous_asset_weights={
+            str(k):float(v)
+            for k,v in ((previous_decision or {}).get("target_asset_weights") or {}).items()
+        }
+        holding_days=21
+        candidate_rows=[]
+        for state in admissible:
+            sid=str(state.strategy_id)
+            weights={sid:1.0}
+            assets=self._asset_targets(panel,visible_i,weights)
+            switch_cost=self._meta_switch_cost_fraction(
+                panel,completed_i,previous_asset_weights,assets
+            )
+            annualized_switch_cost=switch_cost*(252.0/holding_days)
+            state_estimate=0.0 if sid=="P28_CASH" else float(state.expected_net_return)
+            candidate_rows.append({
+                "state":state,
+                "strategy_id":sid,
+                "state_return_estimate":state_estimate,
+                "meta_switch_cost_fraction":switch_cost,
+                "annualized_meta_switch_cost":annualized_switch_cost,
+                "net_selection_score":state_estimate-annualized_switch_cost,
+                "target_asset_weights":assets,
+            })
+        best=max(float(x["net_selection_score"]) for x in candidate_rows)
+        tied=[x for x in candidate_rows if abs(float(x["net_selection_score"])-best)<=1e-12]
+        winner_row=min(
+            tied,
+            key=lambda x:(
+                float(x["meta_switch_cost_fraction"]),
+                float(x["state"].risk or 0.0),
+                float(x["state"].uncertainty or 0.0),
+                str(x["strategy_id"]),
+            ),
+        )
+        winner=winner_row["state"]
+        tie_set=sorted(str(x["strategy_id"]) for x in tied)
         route_weights={str(winner.strategy_id):1.0}
         population_weights={str(k):float(v) for k,v in group.weights.items()}
         generic_weights={str(k):float(v) for k,v in generic_decision.weights_after.items()}
@@ -146,7 +227,7 @@ class USReturnMaxRoute:
             if "P00_BUY_HOLD" in state_map else None
         )
 
-        target_assets=self._asset_targets(panel,visible_i,route_weights)
+        target_assets=dict(winner_row["target_asset_weights"])
         target_risk_weight=sum(target_assets.values())
         adv_by_symbol={
             a:self._adv_notional(panel,a,completed_i)
@@ -232,12 +313,24 @@ class USReturnMaxRoute:
             "decision_status":"PROVISIONAL_INTRADAY" if self._is_intraday_phase(input_phase) else "DAILY_FROZEN",
             "research_only":True,
             "broker_execution_enabled":False,
-            "objective":"STRICT_MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
-            "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_STRICT_MAX_STATE_RETURN_ESTIMATE",
-            "strategy_selection_mode":"STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK",
+            "objective":"MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
+            "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
+            "strategy_selection_mode":"MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK",
             "selected_strategy_id":str(winner.strategy_id),
             "max_return_tie_set":tie_set,
-            "tie_break_order":["estimated_cost","risk","uncertainty","strategy_id"],
+            "tie_break_order":["meta_switch_cost","risk","uncertainty","strategy_id"],
+            "selection_holding_horizon_days":holding_days,
+            "previous_route_decision_id":(previous_decision or {}).get("decision_id"),
+            "candidate_selection_scores":[
+                {
+                    "strategy_id":row["strategy_id"],
+                    "state_return_estimate":row["state_return_estimate"],
+                    "meta_switch_cost_fraction":row["meta_switch_cost_fraction"],
+                    "annualized_meta_switch_cost":row["annualized_meta_switch_cost"],
+                    "net_selection_score":row["net_selection_score"],
+                }
+                for row in sorted(candidate_rows,key=lambda x:(-float(x["net_selection_score"]),str(x["strategy_id"])))
+            ],
             "target_strategy_weights":route_weights,
             "return_first_population_control_weights":population_weights,
             "generic_core_control_weights":generic_weights,
@@ -245,7 +338,7 @@ class USReturnMaxRoute:
             "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
-            "selection_metric_semantics":"StrategyState.expected_net_return is a legacy field name for the weighted 21/63/126/252-day annualized historical strategy state-return estimate; it is not a calibrated future-return forecast.",
+            "selection_metric_semantics":"Selection uses the weighted 21/63/126/252-day annualized historical strategy state-return estimate minus an annualized 21-day proxy for the immediate meta-allocation switch cost from the prior frozen route. It is not a calibrated future-return forecast.",
             "projected_field_semantics":"Fields named projected_annualized_expected_net_return preserve the existing API contract but contain weighted state-return estimates under the frozen decision, not guaranteed or calibrated future returns.",
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
