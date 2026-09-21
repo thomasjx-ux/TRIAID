@@ -89,7 +89,7 @@ class RecoveryWaveCore:
     microstructure evidence.
     """
 
-    version="recovery-wave-core@0.2.0"
+    version="recovery-wave-core@0.3.0"
     interface_version="recovery-wave-contract@1"
     horizons=(3,5,10,20)
     analog_count=20
@@ -173,27 +173,50 @@ class RecoveryWaveCore:
             if len(selected)>=self.analog_count:
                 break
 
+        # Deterministically split nearest historical analogues into separate
+        # horizon-selection and validation sets. The same analogue outcomes must
+        # not both choose the horizon and supply the reported return estimate.
+        ordered_selected=sorted(selected,key=lambda x:x[1])
+        selection_analogs=ordered_selected[::2]
+        validation_analogs=ordered_selected[1::2]
         horizon_stats={}
         all_indexes=[i for i,_ in candidate_features]
         for h in self.horizons:
-            analog_returns=[close[i+h]/close[i]-1.0 for _,i in selected if close[i]>0]
+            selection_returns=[close[i+h]/close[i]-1.0 for _,i in selection_analogs if close[i]>0]
+            validation_returns=[close[i+h]/close[i]-1.0 for _,i in validation_analogs if close[i]>0]
             base_returns=[close[i+h]/close[i]-1.0 for i in all_indexes if close[i]>0]
-            if not analog_returns or not base_returns:
+            if not selection_returns or not validation_returns or not base_returns:
                 continue
-            hit=sum(1 for x in analog_returns if x>0)/len(analog_returns)
             base_hit=sum(1 for x in base_returns if x>0)/len(base_returns)
-            analog_mean=mean(analog_returns)
             base_mean=mean(base_returns)
+            sel_hit=sum(1 for x in selection_returns if x>0)/len(selection_returns)
+            val_hit=sum(1 for x in validation_returns if x>0)/len(validation_returns)
+            sel_mean=mean(selection_returns)
+            val_mean=mean(validation_returns)
             horizon_stats[str(h)]={
                 "horizon_days":h,
-                "analog_samples":len(analog_returns),
-                "historical_positive_rate":hit,
+                "analog_samples":len(selection_returns)+len(validation_returns),
+                "selection_samples":len(selection_returns),
+                "validation_samples":len(validation_returns),
+                "selection_positive_rate":sel_hit,
+                "validation_positive_rate":val_hit,
                 "unconditional_positive_rate":base_hit,
-                "positive_rate_edge":hit-base_hit,
-                "historical_mean_forward_return":analog_mean,
+                "selection_positive_rate_edge":sel_hit-base_hit,
+                "validation_positive_rate_edge":val_hit-base_hit,
+                "selection_mean_forward_return":sel_mean,
+                "validation_mean_forward_return":val_mean,
                 "unconditional_mean_forward_return":base_mean,
-                "mean_return_edge":analog_mean-base_mean,
-                "historical_median_forward_return":median(analog_returns),
+                "selection_mean_return_edge":sel_mean-base_mean,
+                "validation_mean_return_edge":val_mean-base_mean,
+                "selection_median_forward_return":median(selection_returns),
+                "validation_median_forward_return":median(validation_returns),
+                # Backward-compatible fields now deliberately point only to the
+                # validation half, not to the sample used to select the horizon.
+                "historical_positive_rate":val_hit,
+                "positive_rate_edge":val_hit-base_hit,
+                "historical_mean_forward_return":val_mean,
+                "mean_return_edge":val_mean-base_mean,
+                "historical_median_forward_return":median(validation_returns),
             }
 
         return {
@@ -201,7 +224,9 @@ class RecoveryWaveCore:
             "reason":"OK" if horizon_stats else "NO_VALID_FORWARD_WINDOWS",
             "candidate_count":len(candidate_features),
             "selected_analogs":len(selected),
-            "analog_selection":"nearest standardized historical product states; robust MAD scaling; minimum 20-day separation; fixed max 20 analogs",
+            "selection_analogs":len(selection_analogs),
+            "validation_analogs":len(validation_analogs),
+            "analog_selection":"nearest standardized historical product states; robust MAD scaling; minimum 20-day separation; fixed max 20 analogs; chronological alternating split separates horizon selection from validation",
             "horizons":horizon_stats,
         }
 
@@ -255,16 +280,20 @@ class RecoveryWaveCore:
                     if not row:
                         continue
                     if (
-                        float(row["positive_rate_edge"])>0
-                        and float(row["mean_return_edge"])>0
-                        and float(row["historical_median_forward_return"])>0
+                        float(row["selection_positive_rate_edge"])>0
+                        and float(row["selection_mean_return_edge"])>0
+                        and float(row["selection_median_forward_return"])>0
+                        and float(row["validation_positive_rate_edge"])>0
+                        and float(row["validation_mean_return_edge"])>0
+                        and float(row["validation_median_forward_return"])>0
                     ):
                         chosen=row
                         break
             if chosen:
-                support=min(1.0,float(chosen["analog_samples"])/float(self.analog_count))
-                certainty=max(0.0,float(chosen["positive_rate_edge"]))*support
-                gain=max(0.0,float(chosen["mean_return_edge"]))
+                validation_target=max(1,self.analog_count//2)
+                support=min(1.0,float(chosen["validation_samples"])/float(validation_target))
+                certainty=max(0.0,float(chosen["validation_positive_rate_edge"]))*support
+                gain=max(0.0,float(chosen["validation_mean_return_edge"]))
                 h=int(chosen["horizon_days"])
                 speed=gain/max(1,h)
                 raw=depth*certainty*gain*(20.0/max(1,h))
@@ -357,12 +386,14 @@ class RecoveryWaveCore:
                 "drawdown_depth_percentile":state["drawdown_depth_percentile"],
                 "state_direction":state["state_direction"],
                 "analog_samples":state["analog_forecast"].get("selected_analogs",0),
+                "analog_selection_samples":horizon_row.get("selection_samples") if horizon_row else None,
+                "analog_validation_samples":horizon_row.get("validation_samples") if horizon_row else None,
                 "research_only":True,
                 "broker_order_generated":False,
                 "rationale_zh":(
                     f"当前回撤 {state['features']['drawdown_252']:.2%}，回撤深度历史分位 {state['drawdown_depth_percentile']:.1%}；"
                     + (
-                        f"历史相似状态最早在 {horizon} 个交易日窗口同时出现正恢复率优势、正平均收益优势和正中位收益。"
+                        f"历史相似状态最早在 {horizon} 个交易日窗口中，独立的选择半样本和验证半样本都同时出现正恢复率优势、正平均收益优势和正中位收益。"
                         if horizon else
                         "历史相似状态尚未形成同时满足恢复率、平均收益和中位收益为正的前瞻窗口，因此不建议建立恢复仓位。"
                     )
@@ -370,7 +401,7 @@ class RecoveryWaveCore:
                 "rationale_en":(
                     f"Current drawdown is {state['features']['drawdown_252']:.2%} at a {state['drawdown_depth_percentile']:.1%} historical depth percentile. "
                     + (
-                        f"The earliest historical-analog window with positive hit-rate edge, mean-return edge and median forward return is {horizon} trading days."
+                        f"The earliest historical-analog window where separate selection and validation halves both have positive hit-rate edge, mean-return edge and median forward return is {horizon} trading days."
                         if horizon else
                         "Historical analogs do not yet show a forward window with simultaneously positive hit-rate edge, mean-return edge and median return."
                     )
@@ -405,7 +436,7 @@ class RecoveryWaveCore:
             "method":{
                 "layer_1":"PRODUCT_MICRO_STATE",
                 "layer_2":"CROSS_PRODUCT_RECOVERY_OPPORTUNITY",
-                "forecast":"HISTORICAL_NEAREST_STATE_ANALOGS_NO_FUTURE_LEAKAGE",
+                "forecast":"HISTORICAL_NEAREST_STATE_ANALOGS_SPLIT_SELECTION_VALIDATION_NO_CURRENT_FUTURE_LEAKAGE",
                 "horizons_trading_days":list(self.horizons),
                 "analog_count_max":self.analog_count,
                 "analog_min_separation_days":self.analog_min_separation_days,
