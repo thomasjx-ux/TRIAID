@@ -509,6 +509,54 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     </div>
   </div>
 
+  <div class="prospective-panel" id="recoveryWavePanel">
+    <div class="prospective-head">
+      <div>
+        <b id="recoveryWaveTitle">TRIAID 二阶恢复波段决策</b>
+        <div class="prospective-meta" id="recoveryWaveMeta">-</div>
+      </div>
+      <span class="tag" id="recoveryWaveStatus">-</span>
+    </div>
+    <div class="summary prospective-kpis">
+      <div class="item"><span class="label" id="recoveryCashLabel">现金剩余</span><b id="recoveryCash">-</b></div>
+      <div class="item"><span class="label" id="recoveryPrevDaysLabel">上一轮已观察</span><b id="recoveryPrevDays">-</b></div>
+      <div class="item"><span class="label" id="recoveryPrevReturnLabel">上一轮实际收益</span><b id="recoveryPrevReturn">-</b></div>
+      <div class="item"><span class="label" id="recoveryPrevGapLabel">相对等权对照</span><b id="recoveryPrevGap">-</b></div>
+    </div>
+    <div class="prospective-note" id="recoveryWaveNote">-</div>
+    <h3 id="recoveryOpinionTitle">当前冻结交易意见</h3>
+    <div class="tablewrap" style="max-height:430px">
+      <table>
+        <thead><tr>
+          <th id="rwthProduct">产品</th>
+          <th id="rwthAction">意见</th>
+          <th id="rwthTarget">目标权重</th>
+          <th id="rwthChange">本轮调整</th>
+          <th id="rwthDrawdown">当前回撤</th>
+          <th id="rwthDirection">状态方向</th>
+          <th id="rwthHorizon">预计反转</th>
+          <th id="rwthHitEdge">恢复率优势</th>
+          <th id="rwthExpected">历史相似状态预期</th>
+          <th id="rwthSamples">样本</th>
+        </tr></thead>
+        <tbody id="recoveryOpinionRows"></tbody>
+      </table>
+    </div>
+    <h3 id="recoveryReviewTitle">上一轮决策真实回顾</h3>
+    <div class="tablewrap" style="max-height:360px">
+      <table>
+        <thead><tr>
+          <th id="rvrDate">结果日</th>
+          <th id="rvrPortfolio">冻结组合当日</th>
+          <th id="rvrEqual">等权对照当日</th>
+          <th id="rvrCum">冻结组合累计</th>
+          <th id="rvrGap">累计差值</th>
+        </tr></thead>
+        <tbody id="recoveryReviewRows"></tbody>
+      </table>
+    </div>
+  </div>
+
   <h2 id="overviewTitle">当前状态</h2>
   <div class="grid">
     <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
@@ -559,6 +607,8 @@ const T={
   daily:'今日摘要',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'今日结论',
   prospective:'A股前瞻对照实验',prospectiveDays:'已观察交易日',prospectiveHold:'最差池累计收益',prospectiveTriaid:'TRIAID冻结配置累计收益',prospectiveGap:'TRIAID相对最差池',
   prospectiveStrategy:'策略确定与恢复排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID预测名次',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
+  recoveryWave:'TRIAID 二阶恢复波段决策',recoveryCash:'现金剩余',recoveryPrevDays:'上一轮已观察',recoveryPrevReturn:'上一轮实际收益',recoveryPrevGap:'相对等权对照',
+  recoveryOpinion:'当前冻结交易意见',recoveryReview:'上一轮决策真实回顾',product:'产品',action:'意见',target:'目标权重',change:'本轮调整',drawdown:'当前回撤',direction:'状态方向',horizon:'预计反转',hitEdge:'恢复率优势',expected:'历史相似状态预期',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
   strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'预期净回报',risk:'风险',
   before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已验证决策',negative:'负贡献比例',next:'下一步',
@@ -577,6 +627,8 @@ const T={
   daily:'Daily Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Daily conclusion',
   prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
   prospectiveStrategy:'Strategy Determination and Recovery Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID predicted rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
+  recoveryWave:'TRIAID Second-Order Recovery Wave Decision',recoveryCash:'Cash residual',recoveryPrevDays:'Prior decision observed days',recoveryPrevReturn:'Prior realized return',recoveryPrevGap:'Vs equal-weight control',
+  recoveryOpinion:'Current Frozen Trade Opinion',recoveryReview:'Prior Decision Realized Review',product:'Product',action:'Opinion',target:'Target weight',change:'This decision change',drawdown:'Current drawdown',direction:'State direction',horizon:'Expected reversal',hitEdge:'Recovery-rate edge',expected:'Historical-analog expectation',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
   strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Expected net return',risk:'Risk',
   before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Verified decisions',negative:'Negative-contribution rate',next:'Next step',
@@ -638,7 +690,10 @@ function applyText(){
  regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',
  prospectiveTitle:'prospective',prospectiveDaysLabel:'prospectiveDays',prospectiveHoldLabel:'prospectiveHold',prospectiveTriaidLabel:'prospectiveTriaid',prospectiveGapLabel:'prospectiveGap',
  prospectiveStrategyTitle:'prospectiveStrategy',prospectiveDailyTitle:'prospectiveDaily',
- pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',strategyTitle:'strategies',
+ pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',
+ recoveryWaveTitle:'recoveryWave',recoveryCashLabel:'recoveryCash',recoveryPrevDaysLabel:'recoveryPrevDays',recoveryPrevReturnLabel:'recoveryPrevReturn',recoveryPrevGapLabel:'recoveryPrevGap',
+ recoveryOpinionTitle:'recoveryOpinion',recoveryReviewTitle:'recoveryReview',rwthProduct:'product',rwthAction:'action',rwthTarget:'target',rwthChange:'change',rwthDrawdown:'drawdown',rwthDirection:'direction',rwthHorizon:'horizon',rwthHitEdge:'hitEdge',rwthExpected:'expected',rwthSamples:'samples',
+ rvrDate:'resultDate',rvrPortfolio:'portfolioDay',rvrEqual:'equalDay',rvrCum:'portfolioCum',rvrGap:'gapCum',strategyTitle:'strategies',
  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
  evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
  proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
@@ -790,6 +845,58 @@ function renderProspective(report){
     '<td class="num '+cls(Number(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL||0))+'">'+signedPct(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL)+'</td></tr>';
  }).join('') || '<tr><td colspan="'+(pool.length+4)+'">'+(lang==='zh'?'等待首个后续真实交易日结果':'Awaiting the first subsequent realized trading-day result')+'</td></tr>';
 }
+function renderRecoveryWave(report){
+ const panel=el('recoveryWavePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ const labels={
+  '510300.SS':'沪深300ETF · 510300',
+  '510500.SS':'中证500ETF · 510500',
+  '159915.SZ':'创业板ETF · 159915',
+  '512100.SS':'中证1000ETF · 512100'
+ };
+ el('recoveryWaveStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源时间 ':'Source ')+(d.source_latest_ts||'-');
+ el('recoveryCash').textContent=fmtPct(d.cash_residual_weight);
+ el('recoveryPrevDays').textContent=review?String(review.observation_days??0):'-';
+ el('recoveryPrevReturn').textContent=review?fmtPct(review.current_portfolio_cumulative_return):'-';
+ el('recoveryPrevReturn').className=review?cls(Number(review.current_portfolio_cumulative_return||0)):'';
+ el('recoveryPrevGap').textContent=review?signedPct(review.current_excess_vs_equal_weight):'-';
+ el('recoveryPrevGap').className=review?cls(Number(review.current_excess_vs_equal_weight||0)):'';
+ const scope=d.data_scope||{};
+ el('recoveryWaveNote').textContent=lang==='zh'
+  ? '这是 Shadow Core 的冻结研究交易意见，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算结果；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。所有历史相似状态统计均在决策时点之前计算，后续只能追加真实结果，不能改原始建议。'
+  : 'These are frozen Shadow Core research opinions and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The current micro layer uses only real tracked-product price/volume data; constituent-level index internals are not yet connected. Historical analog statistics use only information available before the decision and frozen recommendations cannot be rewritten after outcomes.';
+ const opinions=d.trade_opinions||[];
+ el('recoveryOpinionRows').innerHTML=opinions.map(x=>{
+   const horizon=x.expected_reversal_horizon_days==null?'-':(x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'));
+   const hit=x.historical_recovery_edge==null?'-':signedPct(x.historical_recovery_edge);
+   const exp=x.expected_forward_return==null?'-':signedPct(x.expected_forward_return);
+   const rationale=lang==='zh'?x.rationale_zh:x.rationale_en;
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(labels[x.symbol]||x.symbol)+'</span><br><span class="small muted">'+esc(x.symbol)+'</span></td>'+
+    '<td><span class="tag">'+esc(x.action||'-')+'</span></td>'+
+    '<td class="num triaid">'+fmtPct(x.target_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.suggested_weight_change||0))+'">'+signedPct(x.suggested_weight_change)+'</td>'+
+    '<td class="num '+cls(Number(x.drawdown_252||0))+'">'+fmtPct(x.drawdown_252)+'</td>'+
+    '<td>'+esc(x.state_direction||'-')+'</td>'+
+    '<td class="num">'+horizon+'</td>'+
+    '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
+    '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
+    '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+ }).join('') || '<tr><td colspan="10">'+(lang==='zh'?'暂无冻结交易意见':'No frozen trade opinion')+'</td></tr>';
+ const path=(review&&review.daily_path)||[];
+ el('recoveryReviewRows').innerHTML=path.map(x=>{
+   return '<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_return||0))+'">'+signedPct(x.portfolio_return)+'</td>'+
+    '<td class="num '+cls(Number(x.equal_weight_return||0))+'">'+signedPct(x.equal_weight_return)+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_cumulative_return||0))+'">'+fmtPct(x.portfolio_cumulative_return)+'</td>'+
+    '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
+ }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
+}
 async function refreshAll(){
  const m=el('market').value;
  try{
@@ -836,6 +943,7 @@ async function refreshAll(){
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
   renderProspective(isCNStress?d.prospective_experiment:null);
+  renderRecoveryWave(isCNStress?d.recovery_wave:null);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
