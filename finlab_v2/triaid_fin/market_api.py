@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 
@@ -114,7 +115,13 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     )->dict:
         markets=(_market(market_id),) if market_id else None
         try:
-            return await automation.tick_once(markets)
+            result=await automation.tick_once(markets)
+            if calendar_sync is not None:
+                result["calendar_sync"]=await asyncio.to_thread(
+                    calendar_sync.sync_once,
+                    False,
+                )
+            return result
         except ValueError as exc:
             raise HTTPException(status_code=400,detail=str(exc)) from exc
         except Exception as exc:
