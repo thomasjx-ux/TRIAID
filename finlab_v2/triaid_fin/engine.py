@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from statistics import mean
 from threading import RLock
 from typing import Dict, List
 from uuid import uuid4
@@ -807,10 +808,111 @@ class EvolutionLabEngine:
     def propose_core_candidate(self)->dict:
         return self.evolution.propose_candidate(self.all_runs())
 
-    def promote_core(self,version:str,validation:dict)->dict:
-        result=self.evolution.promote(version,validation)
+    def validate_core_candidate(self,version:str)->dict:
+        candidate=self.evolution.get(version)
+        manifest=self.evolution.candidate_manifest(version)
+        if manifest is None or not candidate.parent_version:
+            receipt={
+                "receipt_id":f"COREVAL-{version}-{uuid4().hex[:12]}",
+                "passed":False,
+                "replay_pass":False,
+                "holdout_pass":False,
+                "shadow_pass":False,
+                "audit_pass":False,
+                "reason":"CANDIDATE_EVIDENCE_MANIFEST_MISSING",
+            }
+            return self.evolution.record_validation(version,receipt)
+        parent=self.evolution.get(candidate.parent_version)
+        run_map={r.run_id:r for r in self.all_runs()}
+        dev=[run_map[x] for x in manifest.get("development_run_ids",[]) if x in run_map]
+        holdout=[run_map[x] for x in manifest.get("reserved_holdout_run_ids",[]) if x in run_map]
+        created_at=str(manifest.get("created_at") or "")
+        shadow=[
+            r for r in self.all_runs()
+            if created_at and r.created_at>created_at
+            and r.evaluation and r.evaluation.status=="EVALUATED"
+            and self._complete_daily_evidence_run(r)
+            and r.run_id not in set(manifest.get("development_run_ids",[]))
+            and r.run_id not in set(manifest.get("reserved_holdout_run_ids",[]))
+        ]
+
+        def replay(rows:list[RunRecord])->dict:
+            cand_vals=[];parent_vals=[];valid=True
+            cand_core=TriaidCoreModule(candidate)
+            parent_core=TriaidCoreModule(parent)
+            for run in rows:
+                if not run.strategy_group or not run.evaluation or run.evaluation.status!="EVALUATED":
+                    valid=False
+                    continue
+                try:
+                    cand_decision=cand_core.decide(run.market,run.strategy_group,run.strategy_states)
+                    parent_decision=parent_core.decide(run.market,run.strategy_group,run.strategy_states)
+                    realized=run.evaluation.strategy_realized_returns
+                    def cost(decision):
+                        turnover=sum(
+                            abs(float(decision.weights_after.get(k,0.0))-float(run.strategy_group.weights.get(k,0.0)))
+                            for k in set(decision.weights_after)|set(run.strategy_group.weights)
+                        )
+                        bps=float(run.market.metadata.get("base_cost_bps",2.0) or 2.0)
+                        return turnover*bps/10000.0
+                    cand_eval=self.evaluation.evaluate(run.strategy_group,cand_decision,realized,cost(cand_decision))
+                    parent_eval=self.evaluation.evaluate(run.strategy_group,parent_decision,realized,cost(parent_decision))
+                    cand_vals.append(float(cand_eval.triaid_return))
+                    parent_vals.append(float(parent_eval.triaid_return))
+                except Exception:
+                    valid=False
+            return {
+                "count":len(cand_vals),
+                "candidate_mean":mean(cand_vals) if cand_vals else None,
+                "parent_mean":mean(parent_vals) if parent_vals else None,
+                "valid":valid and len(cand_vals)==len(rows),
+            }
+
+        dev_result=replay(dev)
+        holdout_result=replay(holdout)
+        shadow_result=replay(shadow)
+        replay_pass=bool(
+            dev_result["valid"] and dev_result["count"]>=1
+            and dev_result["candidate_mean"]>=dev_result["parent_mean"]-1e-12
+        )
+        holdout_pass=bool(
+            holdout_result["valid"] and holdout_result["count"]>=1
+            and holdout_result["candidate_mean"]>=holdout_result["parent_mean"]-1e-12
+        )
+        shadow_pass=bool(
+            shadow_result["valid"] and shadow_result["count"]>=5
+            and shadow_result["candidate_mean"]>=shadow_result["parent_mean"]-1e-12
+        )
+        audit_pass=bool(
+            0.0<=candidate.intervention_strength<=1.0
+            and candidate.risk_penalty>=0
+            and candidate.uncertainty_penalty>=0
+            and 0.0<=candidate.risk_off_multiplier<=1.0
+            and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
+        )
+        receipt={
+            "receipt_id":f"COREVAL-{version}-{uuid4().hex[:12]}",
+            "passed":all((replay_pass,holdout_pass,shadow_pass,audit_pass)),
+            "replay_pass":replay_pass,
+            "holdout_pass":holdout_pass,
+            "shadow_pass":shadow_pass,
+            "audit_pass":audit_pass,
+            "development":dev_result,
+            "holdout":holdout_result,
+            "shadow":shadow_result,
+            "shadow_min_runs":5,
+            "candidate_parent":candidate.parent_version,
+            "validation_discipline":"INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
+        }
+        return self.evolution.record_validation(version,receipt)
+
+    def promote_core(self,version:str,validation:dict|None=None)->dict:
+        receipt=self.validate_core_candidate(version)
+        result=self.evolution.promote(version,{"receipt_id":receipt.get("receipt_id")})
         if result.get("promoted"):
             self.refresh_core()
+        else:
+            result["validation_receipt"]=receipt
         return result
 
     def strategy_evolution_status(self,market_id:str|None=None)->dict:
