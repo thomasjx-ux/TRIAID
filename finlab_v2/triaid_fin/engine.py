@@ -124,12 +124,17 @@ class EvolutionLabEngine:
     def execute(self,run_id:str,request:RunRequest)->None:
         try:
             previous_group=self._previous_group_for(request.market.market_id,run_id)
+            current_mode=str(request.market.metadata.get("experiment_mode") or "")
             previous_state_rows=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==request.market.market_id.upper()
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_states
+                and (
+                    not current_mode
+                    or str(r.market.metadata.get("experiment_mode") or "")==current_mode
+                )
             ]
             previous_states=previous_state_rows[-1].strategy_states if previous_state_rows else []
             group=self.strategy_population.select(
@@ -248,7 +253,7 @@ class EvolutionLabEngine:
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
             if market_id=="CN":
                 snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
-                snapshot.metadata["experiment_design"]="Equal-weight the currently worst eligible risky strategies using only current information, start cash at zero, then measure TRIAID loss reduction prospectively."
+                snapshot.metadata["experiment_design"]="Freeze the adverse risky pool using only information available at the decision time, preregister established control rankings, and test future recovery ordering over the existing 3/5/10-day CN decision horizons. Cash defense is reported separately from recovery-selection evidence."
 
             current_experiment=snapshot.metadata.get("experiment_mode")
             existing_decisions=[
@@ -262,14 +267,46 @@ class EvolutionLabEngine:
                 and r.triaid_decision is not None
             ]
             if existing_decisions:
+                existing=existing_decisions[-1]
+                prospective_bootstrap=None
+                if market_id=="CN":
+                    prior_rows=[
+                        r for r in self.all_runs()
+                        if r.run_id!=existing.run_id
+                        and r.market.market_id.upper()=="CN"
+                        and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+                        and r.strategy_states
+                        and str(r.market.metadata.get("experiment_mode") or "")==str(current_experiment or "")
+                        and r.created_at<existing.created_at
+                    ]
+                    previous_states=prior_rows[-1].strategy_states if prior_rows else []
+                    prospective_bootstrap=self.prospective_experiment.register(
+                        run_id=existing.run_id,
+                        market=existing.market,
+                        group=existing.strategy_group,
+                        states=existing.strategy_states,
+                        decision=existing.triaid_decision,
+                        horizons=(
+                            int(profile.exit_confirm_days),
+                            int(profile.entry_confirm_days),
+                            int(profile.cooldown_days),
+                        ),
+                        previous_states=previous_states,
+                    )
                 with self._lock:
                     run=self._runs[run_id]
                     run.market=snapshot
                     run.status="NO_NEW_DATA"
-                    run.previous_run_id=existing_decisions[-1].run_id
+                    run.previous_run_id=existing.run_id
                     run.diagnostic_summary={
                         "message":"Market source timestamp unchanged; existing complete decision remains current.",
                         "dedupe_basis":"COMPLETE_DECISION_FOR_SNAPSHOT",
+                        "prospective_bootstrap_experiment_id":(
+                            prospective_bootstrap.get("experiment_id") if prospective_bootstrap else None
+                        ),
+                        "prospective_bootstrap_source_run_id":(
+                            existing.run_id if prospective_bootstrap else None
+                        ),
                     }
                     self.store.save_run(run)
                 return
