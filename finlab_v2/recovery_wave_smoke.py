@@ -70,7 +70,7 @@ panel=MarketPanel(
 
 core=RecoveryWaveCore(CoreParameters(version="selftest",risk_off_multiplier=0.55))
 decision=core.decide(panel,"risk_off",None,"POSTCLOSE")
-assert decision["core_version"]=="recovery-wave-core@0.3.0"
+assert decision["core_version"]=="recovery-wave-core@0.4.0"
 assert decision["research_only"] is True
 assert decision["broker_execution_enabled"] is False
 assert decision["data_scope"]["constituent_micro_available"] is False
@@ -108,7 +108,7 @@ assert dup["decision_hash"]==first["decision_hash"]
 assert first["previous_decision_id"]==legacy_same_snapshot["decision_id"]
 assert first["previous_decision_hash"]==legacy_same_snapshot["decision_hash"]
 assert legacy_same_snapshot["decision_id"]!=first["decision_id"]
-assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.3.0")["decision_id"]==first["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.4.0")["decision_id"]==first["decision_id"]
 assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==legacy_same_snapshot["decision_id"]
 
 products=[x["symbol"] for x in first["trade_opinions"]]
