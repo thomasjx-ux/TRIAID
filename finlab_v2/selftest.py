@@ -144,7 +144,7 @@ try:
     assert trading_day_info("CN","2027-10-01")["calendar_origin"]=="SYNCED_OFFICIAL"
     assert trading_day_info("CN","2027-10-01")["is_trading_day"] is False
     install_synced_calendar({})
-    assert runtime.refresh_plan_for_phase("CN","PREOPEN")=={"REALTIME":60}
+    assert runtime.refresh_plan_for_phase("CN","PREOPEN")=={"PREOPEN":300,"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","OPEN")=={"INTRADAY":300,"REALTIME":60}
     assert runtime.refresh_plan_for_phase("CN","BREAK")=={"REALTIME":300}
     assert runtime.refresh_plan_for_phase("US","PREOPEN")=={"PREOPEN":300,"REALTIME":60}
