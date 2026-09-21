@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import hashlib
 import json
 from statistics import mean, pstdev
@@ -9,7 +10,7 @@ from .store import RunStore
 
 
 class MarketObservationStore:
-    version="market-observation@0.4.0"
+    version="market-observation@0.5.0"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
@@ -21,6 +22,17 @@ class MarketObservationStore:
         self.watermarks=store.load_json(self.watermark_name,default={}) or {}
         if not isinstance(self.watermarks,dict):
             self.watermarks={}
+
+    @staticmethod
+    def _freshness_value(market:str,mode:str,source_latest_ts)->int|None:
+        try:
+            stamp=int(source_latest_ts)
+        except Exception:
+            return None
+        if str(mode).upper()=="DAILY":
+            tz=ZoneInfo("America/New_York" if str(market).upper()=="US" else "Asia/Shanghai")
+            return datetime.fromtimestamp(stamp,tz).date().toordinal()
+        return stamp
 
     @staticmethod
     def snapshot_signature(snapshot:dict)->str:
@@ -50,15 +62,17 @@ class MarketObservationStore:
             current_ts=int(source_latest_ts)
         except Exception:
             current_ts=None
+        current_freshness=self._freshness_value(market,mode,source_latest_ts)
         persisted_watermark=self.watermarks.get(key)
         try:
             persisted_watermark=int(persisted_watermark) if persisted_watermark is not None else None
         except Exception:
             persisted_watermark=None
+        persisted_freshness=self._freshness_value(market,mode,persisted_watermark)
         if (
-            current_ts is not None
-            and persisted_watermark is not None
-            and current_ts<persisted_watermark
+            current_freshness is not None
+            and persisted_freshness is not None
+            and current_freshness<persisted_freshness
         ):
             return {
                 "recorded":False,
@@ -72,6 +86,7 @@ class MarketObservationStore:
 
         previous=None
         max_source_latest_ts=None
+        max_freshness=None
         for candidate in reversed(self.store.read_jsonl(self.filename,limit=500)):
             if (
                 str(candidate.get("market_id","")).upper()==market
@@ -79,17 +94,19 @@ class MarketObservationStore:
             ):
                 if previous is None:
                     previous=candidate
-                try:
-                    candidate_ts=int(candidate.get("source_latest_ts"))
-                    if max_source_latest_ts is None or candidate_ts>max_source_latest_ts:
+                candidate_ts=candidate.get("source_latest_ts")
+                candidate_freshness=self._freshness_value(market,mode,candidate_ts)
+                if candidate_freshness is not None and (max_freshness is None or candidate_freshness>max_freshness):
+                    max_freshness=candidate_freshness
+                    try:
+                        max_source_latest_ts=int(candidate_ts)
+                    except Exception:
                         max_source_latest_ts=candidate_ts
-                except Exception:
-                    pass
 
         if (
-            current_ts is not None
-            and max_source_latest_ts is not None
-            and current_ts<max_source_latest_ts
+            current_freshness is not None
+            and max_freshness is not None
+            and current_freshness<max_freshness
         ):
             return {
                 "recorded":False,
