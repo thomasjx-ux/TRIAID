@@ -117,11 +117,11 @@ assert tie_set==["P00_BUY_HOLD","P09_SHOCK_GUARD"]
 assert tie_winner.strategy_id=="P00_BUY_HOLD"
 
 decision=route.decide(panel,group,generic,states,"OPEN")
-assert decision["route_version"]=="us-return-max-route@0.2.0"
+assert decision["route_version"]=="us-return-max-route@0.3.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
-assert decision["objective"].startswith("STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN")
-assert decision["selection_source"]=="ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN"
-assert decision["strategy_selection_mode"]=="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+assert decision["objective"].startswith("MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST")
+assert decision["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST"
+assert decision["strategy_selection_mode"]=="MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
 assert decision["selected_strategy_id"]=="P18_XMOM20"
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
 assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
@@ -205,7 +205,7 @@ assert small_real["total_execution_cost_usd"] < large_real["total_execution_cost
 integrity=ledger.verify_integrity()
 assert integrity["passed"] is True
 report=ledger.daily_report()
-assert report["route_version"]=="us-return-max-route@0.2.0"
+assert report["route_version"]=="us-return-max-route@0.3.0"
 assert report["integrity"]["passed"] is True
 
 print("TRIAID_US_RETURN_MAX_SMOKE_PASS")
