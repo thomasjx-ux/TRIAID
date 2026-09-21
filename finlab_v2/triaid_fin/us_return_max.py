@@ -20,8 +20,8 @@ class USReturnMaxRoute:
     """US return-maximization route with executable capital-capacity sleeves.
 
     The route intentionally differs from the CN recovery-wave route:
-    - primary selection is the maximum current multi-window annualized historical state-return estimate across admissible active strategies;
-    - ties are broken deterministically by lower estimated cost, risk, uncertainty, then ID;
+    - primary selection maximizes the current multi-window annualized historical state-return estimate net of modeled route switching cost across admissible active strategies;
+    - ties are broken deterministically by lower modeled switching cost, risk, uncertainty, then ID;
     - no recovery/drawdown thesis is required;
     - the frozen winner is expanded to executable ETF exposures;
     - four USD sleeves share the same signal and differ only by starting capital.
