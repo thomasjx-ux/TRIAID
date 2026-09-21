@@ -14,6 +14,7 @@ from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.frequency_policy import FrequencyPolicy
 from triaid_fin.market_data import session_phase
 from triaid_fin.market_runtime import MarketDataAutomation
+from triaid_fin.observation import MarketObservationStore
 from triaid_fin.trading_calendar import trading_day_info, official_session_phase, calendar_status, install_synced_calendar
 from triaid_fin.trading_calendar_sync import parse_nyse_calendar, parse_cn_notice
 
@@ -220,6 +221,12 @@ try:
     assert rejected_stale["recorded"] is False
     assert rejected_stale["reason"]=="STALE_SOURCE_TIMESTAMP"
     assert rejected_stale["max_source_latest_ts"]==1234568490
+    restarted_observations=MarketObservationStore(engine.store)
+    assert restarted_observations.watermarks["US:INTRADAY"]==1234568490
+    rejected_after_restart=restarted_observations.record(stale_obs)
+    assert rejected_after_restart["recorded"] is False
+    assert rejected_after_restart["reason"]=="STALE_SOURCE_TIMESTAMP"
+    assert rejected_after_restart["max_source_latest_ts"]==1234568490
     assert engine.market_observation_status()["count"]==3
     assert engine.market_observation_status()["transition_count"]==1
     assert len(engine.market_observations("US","INTRADAY",10))==3
