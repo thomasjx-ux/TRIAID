@@ -522,24 +522,22 @@ class MarketDataHub:
             raise MarketDataError(f"provider_route_missing:{market}:{mode}")
 
         attempt_errors=[]
-        panel=None
-        for provider in providers:
+        candidates=[]
+        for provider_index,provider in enumerate(providers):
             if not bool(getattr(provider,"configured",True)):
                 attempt_errors.append(f"{getattr(provider,'version',type(provider).__name__)}:not_configured")
                 continue
             try:
-                panel=self._panel_from_provider(
+                candidate=self._panel_from_provider(
                     provider,market,mode,symbols,benchmark,cfg,now
                 )
-                if attempt_errors:
-                    self._record_failover(market,mode,attempt_errors,provider.version,symbols)
-                break
+                candidates.append((provider_index,candidate))
             except Exception as exc:
                 attempt_errors.append(
                     f"{getattr(provider,'version',type(provider).__name__)}:{type(exc).__name__}:{exc}"
                 )
 
-        if panel is None:
+        if not candidates:
             with self._lock:
                 self._errors[key]={
                     "at":now,
@@ -549,6 +547,51 @@ class MarketDataHub:
                 }
             raise MarketDataError(
                 f"all_providers_failed:{market}:{mode}:{' | '.join(attempt_errors)}"
+            )
+
+        # For realtime research, provider success alone is not enough: a recovered
+        # primary may still lag a fresher fallback. Choose the freshest successful
+        # source and never allow the cached source timestamp to move backwards.
+        # For slower modes, preserve route priority unless the primary regresses.
+        if mode=="REALTIME":
+            provider_index,panel=max(
+                candidates,
+                key=lambda item:(int(item[1].source_latest_ts),-int(item[0])),
+            )
+        else:
+            provider_index,panel=candidates[0]
+
+        if cached is not None and int(panel.source_latest_ts)<int(cached.source_latest_ts):
+            fresher=[
+                item for item in candidates
+                if int(item[1].source_latest_ts)>=int(cached.source_latest_ts)
+            ]
+            if fresher:
+                provider_index,panel=max(
+                    fresher,
+                    key=lambda item:(int(item[1].source_latest_ts),-int(item[0])),
+                )
+            else:
+                with self._lock:
+                    self._errors.pop(key,None)
+                return cached
+
+        selected_provider=providers[provider_index]
+        if provider_index>0:
+            primary_version=getattr(providers[0],"version",type(providers[0]).__name__)
+            selected_version=getattr(selected_provider,"version",type(selected_provider).__name__)
+            freshness_note=(
+                f"{primary_version}:freshness_override:"
+                f"selected={selected_version}:source_latest_ts={panel.source_latest_ts}"
+            )
+            self._record_failover(
+                market,mode,[*attempt_errors,freshness_note],selected_version,symbols
+            )
+        elif attempt_errors:
+            self._record_failover(
+                market,mode,attempt_errors,
+                getattr(selected_provider,"version",type(selected_provider).__name__),
+                symbols,
             )
 
         with self._lock:
