@@ -239,6 +239,8 @@ class USReturnMaxRoute:
             "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
+            "selection_metric_semantics":"StrategyState.expected_net_return is a legacy field name for the weighted 21/63/126/252-day annualized historical strategy state-return estimate; it is not a calibrated future-return forecast.",
+            "projected_field_semantics":"Fields named projected_annualized_expected_net_return preserve the existing API contract but contain weighted state-return estimates under the frozen decision, not guaranteed or calibrated future returns.",
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
             "controls":{
@@ -563,7 +565,7 @@ class USReturnMaxLedger:
             "previous_decision_review":self.review_decision(previous) if previous else None,
             "latest_outcome_as_of":self.outcomes(1)[-1].get("as_of") if self.outcomes(1) else None,
             "integrity":self.verify_integrity(),
-            "interpretation_guard":"US Return-Max uses the frozen return-first strategy mix. Four USD sleeves differ only by capital size. Theoretical strategy returns and executable sleeve returns are reported separately; modeled impact is not a broker fill.",
+            "interpretation_guard":"US Return-Max uses a frozen ranking signal based on the multi-window annualized historical state-return estimate. Four USD sleeves differ only by capital size. Theoretical-holdings posterior returns and simulated-execution sleeve returns are reported separately; modeled impact and fills are not broker executions.",
         }
 
     def status(self)->dict:
