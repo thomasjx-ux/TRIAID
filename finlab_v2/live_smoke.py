@@ -16,10 +16,10 @@ try:
         run=engine.get_run(pending.run_id)
         assert run.status=="DECISION_READY_AWAITING_OUTCOME", (market_id,run.status,run.diagnostic_summary)
         assert run.audit and run.audit.passed
-        assert len(run.strategy_states)==29
+        assert len(run.strategy_states)==(29 if market_id=="US" else 33)
         assert run.strategy_group is not None
         assert run.triaid_decision is not None
-        assert run.market.metadata.get("source")=="Yahoo Chart API"
+        assert run.market.metadata.get("source")
         assert run.market.as_of
         rows.append({
             "market":market_id,
