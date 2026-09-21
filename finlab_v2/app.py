@@ -39,7 +39,7 @@ async def lifespan(app:FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.8.3",lifespan=lifespan)
+app=FastAPI(title="TRIAID FIN Evolution Lab V2",version="0.9.0",lifespan=lifespan)
 app.include_router(build_market_data_router(engine,market_automation,calendar_sync))
 app.include_router(build_decision_router(decision_scheduler))
 
