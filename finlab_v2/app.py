@@ -786,6 +786,151 @@ const TIP={
   retired:'RETIRED: removed from the current strategy system unless new evidence justifies reconsideration.'
  }
 };
+
+const TABLE_HEADER_TIPS={
+ zh:{
+  '策略':'当前策略名称或策略编号。鼠标移到具体策略状态上还可查看生命周期说明。',
+  '状态':'当前策略或任务的状态。ACTIVE、SHADOW、FROZEN 等状态代表不同的准入和运行阶段。',
+  '预期净回报':'基于当前时点可见信息估计的预期净收益，属于前瞻预测，不是已经实现的收益。',
+  '风险':'当前策略收益波动和不确定性的风险度量。数值越高代表收益路径越不稳定。',
+  '介入前':'TRIAID Core 介入前，由基础策略群或对照方案给出的配置权重。',
+  'TRIAID后':'TRIAID 根据当前状态、风险和不确定性重新评估后的配置权重。',
+  '增减':'TRIAID 后权重减去介入前权重。正数表示增配，负数表示减配。',
+  '策略说明与选择原因':'策略的核心逻辑、适用状态、进入当前策略群的原因以及 TRIAID 调整原因。',
+  '说明':'当前行策略或结果的补充解释，包括适用条件、状态和选择依据。',
+  'Return-Max权重':'美股 Return-Max 路线当前冻结的策略权重，以预期净收益最大化为主目标。',
+  '通用Core权重':'通用 TRIAID Core 在同一时点给出的对照策略权重，用于与 Return-Max 路线比较。',
+  'ETF':'最终可执行的 ETF 标的。策略层权重会展开到这些底层资产。',
+  '目标权重':'当前冻结决策建议配置到该产品或资产的目标比例，不代表已经自动成交。',
+  '起始资金':'本资金袖套用于容量和成本评估的初始账户规模。',
+  '目标投入':'按当前目标权重计划投入风险资产的名义资金规模。',
+  '单日ADV占比':'计划成交额占该资产近似日均成交额 ADV 的比例，用于限制市场冲击。',
+  '最少成交天数':'在当前 ADV 参与率限制下，完成目标仓位至少需要的交易日数量。',
+  '预计往返成本':'按当前流动性和冲击模型估计的买入加卖出总执行成本。',
+  '成交比例':'当前资金袖套已完成的目标成交比例。',
+  '已成交比例':'当前资金袖套已完成的目标成交比例。',
+  '当前净值':'当前资金袖套在计入持仓收益和执行成本后的账户价值。',
+  '净利润':'当前净值减去起始资金后的净损益。',
+  '净收益率':'相对起始资金的净收益率，已计入模型中的执行成本。',
+  '执行成本':'本轮已经计入的交易执行成本，包括基础成本和流动性冲击代理。',
+  '累计执行成本':'截至当前累计产生的模型化执行成本。',
+  '未成交目标':'受容量或参与率约束尚未完成的目标名义仓位。',
+  '结果日':'该行真实后验结果对应的完整交易日。',
+  'Return-Max累计':'从冻结决策开始，Return-Max 组合截至该日的累计净收益。',
+  '通用Core累计':'从同一起点开始，通用 Core 对照组合截至该日的累计净收益。',
+  'SPY累计':'同期 SPY 买入持有对照的累计收益。',
+  'TRIAID预测名次':'冻结时由 TRIAID 根据当时可见信息给出的策略相对排序。',
+  '基线权重':'不使用 TRIAID 状态调整时的冻结对照权重。',
+  'TRIAID权重':'登记时冻结的 TRIAID 配置权重，后续结果不能倒推修改。',
+  '最近一日':'最新一个完整交易日该策略的真实单日收益。',
+  '累计收益':'从实验登记或冻结起点到当前的累计真实收益。',
+  '当前实际名次':'根据已经发生的真实累计收益计算出的当前实际排序。',
+  '确定依据':'冻结时选择、排序或配置该策略所使用的证据和规则。',
+  '产品':'当前恢复波段决策对应的 ETF 或可交易产品。',
+  '意见':'本轮冻结的研究意见，例如增配、减配、持有或观察，不会自动发送券商订单。',
+  '本轮调整':'目标权重相对上一轮目标权重的变化幅度。',
+  '当前回撤':'当前价格相对近期高点的回落幅度，用于描述恢复空间和压力。',
+  '状态方向':'当前状态更偏向修复、承压、转强、转弱或震荡的方向判断。',
+  '预计反转':'根据冻结时状态估计的潜在反转或恢复时间窗口。',
+  '预计恢复速度/日':'若进入恢复阶段，模型估计的平均每日恢复速度。',
+  '恢复率优势':'历史相似状态中，该产品相对对照的恢复成功率或恢复效率优势。',
+  '历史相似状态预期':'基于历史相似状态得到的前瞻收益参考，不等于保证实现的收益。',
+  '样本':'形成当前历史相似状态统计所使用的有效样本数量。',
+  '预期波段净利润':'按当前目标仓位、预期收益和执行成本估计的波段净利润。',
+  '预期净收益率':'扣除模型化执行成本后的预期波段净收益率。',
+  '冻结组合当日':'冻结的 TRIAID 组合在该完整交易日的真实收益。',
+  '等权对照当日':'同一组产品等权对照在该完整交易日的真实收益。',
+  '冻结组合累计':'从冻结决策起点到该日的 TRIAID 组合累计收益。',
+  '累计差值':'冻结组合累计收益减去等权对照累计收益。',
+  '交易日':'该行后验路径对应的完整交易日。',
+  '最差池':'登记时冻结的最差策略池对照，不允许根据后续结果换成员。',
+  'TRIAID':'登记时冻结的 TRIAID 配置或其对应的真实后验表现。',
+  '差值':'TRIAID 与当前表格对照方案之间的收益或指标差异。',
+  '目标风险仓位':'当前路线允许配置到风险资产的目标比例，其余部分保留为现金或防守资产。'
+ },
+ en:{
+  'Strategy':'Current strategy name or ID. Hovering a lifecycle badge provides additional state detail.',
+  'State':'Current strategy or task state. ACTIVE, SHADOW, FROZEN and related states represent different admission and operating stages.',
+  'Expectednetreturn':'Forward expected net return estimated only from information available at the decision time; it is not realized profit.',
+  'Risk':'Risk measure based on recent return variability and uncertainty. Higher values indicate a less stable return path.',
+  'BeforeTRIAID':'Baseline allocation before TRIAID Core intervention.',
+  'AfterTRIAID':'Allocation after TRIAID evaluates current state, risk and uncertainty.',
+  'Change':'After-TRIAID weight minus baseline weight. Positive adds allocation and negative reduces it.',
+  'Explanation':'Supporting explanation for the row, including logic, conditions and selection rationale.',
+  'Return-Maxweight':'Frozen strategy weight from the US Return-Max route, whose primary objective is expected net return maximization.',
+  'GenericCoreweight':'Contemporaneous generic TRIAID Core allocation used as the control for the Return-Max route.',
+  'ETF':'Executable underlying ETF exposure produced from the strategy-level allocation.',
+  'Targetweight':'Frozen target allocation for this product or asset; it does not imply that a broker order has been sent.',
+  'Startingcapital':'Initial account size used for capacity and transaction-cost evaluation.',
+  'Targetinvested':'Target notional amount allocated to risky assets under the frozen decision.',
+  'One-dayADVshare':'Planned trade size as a share of approximate average daily volume, used to limit market impact.',
+  'Minimumexecutiondays':'Minimum trading days required to complete the target position under the ADV participation cap.',
+  'Estimatedround-tripcost':'Estimated total buy-plus-sell execution cost under the current liquidity and impact model.',
+  'Fillratio':'Share of the target position completed so far.',
+  'Currentequity':'Current account value after realized market moves and modeled execution costs.',
+  'NetP&L':'Current equity minus starting capital.',
+  'Netreturn':'Net return relative to starting capital after modeled execution costs.',
+  'Executioncost':'Modeled trading cost already incurred, including base cost and liquidity-impact proxy.',
+  'Cumulativeexecutioncost':'Cumulative modeled execution cost to date.',
+  'Remainingtarget':'Target notional position not yet completed because of capacity or participation constraints.',
+  'Resultdate':'Complete trading day represented by this realized outcome row.',
+  'Return-Maxcumulative':'Cumulative net return of the frozen Return-Max portfolio since the decision date.',
+  'GenericCorecumulative':'Cumulative net return of the generic Core control from the same starting point.',
+  'SPYcumulative':'Cumulative SPY buy-and-hold return over the same period.',
+  'TRIAIDpredictedrank':'Relative ranking frozen by TRIAID using only information available at registration.',
+  'Baselineweight':'Frozen control allocation without TRIAID state adjustment.',
+  'TRIAIDweight':'TRIAID allocation frozen at registration and not retuned using future outcomes.',
+  'Latestday':'Realized return for the latest complete trading day.',
+  'Cumulativereturn':'Realized cumulative return since experiment registration or decision freeze.',
+  'Currentrealizedrank':'Current ranking computed from realized cumulative returns observed so far.',
+  'Rationale':'Evidence and rule used to select, rank or allocate the strategy at freeze time.',
+  'Product':'ETF or executable product covered by the current recovery-wave decision.',
+  'Action':'Frozen research opinion such as add, reduce, hold or observe; no broker order is generated.',
+  'Currentdrawdown':'Current decline from a recent high, used as a proxy for pressure and recovery room.',
+  'Statedirection':'Current directional state such as recovering, weakening, strengthening, stressed or mixed.',
+  'Expectedreversal':'Estimated reversal or recovery horizon from the frozen state.',
+  'Expectedrecoveryspeed/day':'Estimated average daily recovery speed if a recovery phase develops.',
+  'Recoveryedge':'Historical recovery-rate or recovery-efficiency advantage relative to the control.',
+  'Historicalanalogueexpectation':'Forward-return reference derived from historical analogue states; it is not a guaranteed outcome.',
+  'Samples':'Number of valid historical analogue samples supporting the current statistic.',
+  'ExpectedswingnetP&L':'Estimated swing net profit after target sizing and modeled execution costs.',
+  'Expectednetreturn':'Expected swing net return after modeled execution costs.',
+  'Frozenportfoliodaily':'Realized daily return of the frozen TRIAID portfolio for this complete trading day.',
+  'Equal-weightcontroldaily':'Realized daily return of the equal-weight control over the same products.',
+  'Frozenportfoliocumulative':'Cumulative return of the frozen TRIAID portfolio since the decision date.',
+  'Cumulativegap':'Frozen portfolio cumulative return minus equal-weight control cumulative return.',
+  'Tradingday':'Complete trading day represented by this row.',
+  'Worstpool':'Worst-strategy control pool frozen at registration; membership cannot be changed after outcomes are observed.',
+  'TRIAID':'Frozen TRIAID allocation or its realized prospective performance.',
+  'Gap':'Difference between TRIAID and the control shown in this table.'
+ }
+};
+
+function normalizeHeaderLabel(text){
+ return String(text||'').replace(/\s+/g,'').replace(/[：:]/g,'').trim();
+}
+function tableHeaderTip(label){
+ const raw=String(label||'').trim();
+ const key=normalizeHeaderLabel(raw);
+ const local=TABLE_HEADER_TIPS[lang]||{};
+ if(local[key])return local[key];
+ const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
+ if(fallbackOther[key])return fallbackOther[key];
+ if(!raw)return lang==='zh'?'本列表头说明。':'Table-column explanation.';
+ return lang==='zh'
+  ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
+  : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.';
+}
+function applyTableHeaderTooltips(root=document){
+ root.querySelectorAll('table th').forEach(th=>{
+  const label=(th.dataset.headerLabel||th.textContent||'').trim();
+  if(!label)return;
+  th.classList.add('has-tip');
+  th.dataset.tip=tableHeaderTip(label);
+  th.setAttribute('aria-label',label+' — '+th.dataset.tip);
+ });
+}
+
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function fmtMoney(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return '¥'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function fmtUsd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return "$"+v.toLocaleString(undefined,{maximumFractionDigits:0})}
@@ -818,6 +963,7 @@ function applyText(){
   cthStrategy:'strategy',cthState:'state',cthExp:'exp',cthRisk:'risk',cthWhy:'candidateWhy'
  };
  Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
+ applyTableHeaderTooltips();
 }
 function statusTip(status){
  const key=String(status||'').toLowerCase();
@@ -1192,6 +1338,10 @@ document.addEventListener('mouseout',e=>{
  const target=e.target.closest('[data-tip]');
  if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
 });
+const tableHeaderObserver=new MutationObserver(mutations=>{
+ if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
+});
+tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll();refreshLiveWindows()}
 applyText();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
 </script>
