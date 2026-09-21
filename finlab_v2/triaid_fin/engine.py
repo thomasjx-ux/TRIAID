@@ -23,10 +23,11 @@ from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
+from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.10.0"
+    architecture_version = "fin-evolution-lab@0.11.0"
     market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
@@ -44,6 +45,8 @@ class EvolutionLabEngine:
         self.prospective_experiment=ProspectiveExperimentProtocol(self.store)
         self.recovery_wave_ledger=RecoveryWaveLedger(self.store)
         self.recovery_wave_core=RecoveryWaveCore(self.evolution.active())
+        self.us_return_max=USReturnMaxRoute()
+        self.us_return_max_ledger=USReturnMaxLedger(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._recover_stale_runs()
@@ -91,6 +94,8 @@ class EvolutionLabEngine:
             "recovery_wave_core":self.recovery_wave_core.version if hasattr(self,"recovery_wave_core") else "recovery-wave-core@unknown",
             "recovery_wave_ledger":self.recovery_wave_ledger.version if hasattr(self,"recovery_wave_ledger") else "recovery-wave-ledger@unknown",
             "capital_capacity":self.recovery_wave_core.capital_capacity.version if hasattr(self,"recovery_wave_core") else "capital-capacity-layer@unknown",
+            "us_return_max":self.us_return_max.version if hasattr(self,"us_return_max") else "us-return-max-route@unknown",
+            "us_return_max_ledger":self.us_return_max_ledger.version if hasattr(self,"us_return_max_ledger") else "us-return-max-ledger@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
         }
@@ -267,38 +272,54 @@ class EvolutionLabEngine:
             local_today=datetime.now(local_tz).date().isoformat()
             daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or str(snapshot.as_of)<local_today
             recovery_outcome=None
-            if daily_bar_complete:
-                recovery_outcome=self.recovery_wave_ledger.record_outcome(
-                    market_id,
-                    prepared["latest_as_of"],
-                    prepared["previous_as_of"],
-                    prepared.get("product_realized_returns_from_previous_period") or {},
-                    snapshot.snapshot_id,
-                    prepared.get("product_turnover_notional_from_previous_period") or {},
-                )
-            existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
-            if existing_recovery is None:
-                previous_recovery=self.recovery_wave_ledger.latest(market_id)
-                proposed_recovery=self.recovery_wave_core.decide(
-                    prepared["panel"],
-                    snapshot.regime,
-                    previous_recovery,
-                    phase,
-                )
-                recovery_decision=self.recovery_wave_ledger.freeze(
-                    proposed_recovery,
-                    snapshot.snapshot_id,
-                    snapshot.as_of,
-                )
-            else:
-                recovery_decision=existing_recovery
-            snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id")
-            snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash")
-            snapshot.metadata["recovery_wave_daily_bar_complete"]=daily_bar_complete
-            snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
+            recovery_decision=None
+            us_return_outcome=None
             if market_id=="CN":
+                if daily_bar_complete:
+                    recovery_outcome=self.recovery_wave_ledger.record_outcome(
+                        market_id,
+                        prepared["latest_as_of"],
+                        prepared["previous_as_of"],
+                        prepared.get("product_realized_returns_from_previous_period") or {},
+                        snapshot.snapshot_id,
+                        prepared.get("product_turnover_notional_from_previous_period") or {},
+                    )
+                existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
+                if existing_recovery is None:
+                    previous_recovery=self.recovery_wave_ledger.latest(market_id)
+                    proposed_recovery=self.recovery_wave_core.decide(
+                        prepared["panel"],
+                        snapshot.regime,
+                        previous_recovery,
+                        phase,
+                    )
+                    recovery_decision=self.recovery_wave_ledger.freeze(
+                        proposed_recovery,
+                        snapshot.snapshot_id,
+                        snapshot.as_of,
+                    )
+                else:
+                    recovery_decision=existing_recovery
+                snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id")
+                snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash")
+                snapshot.metadata["recovery_wave_daily_bar_complete"]=daily_bar_complete
                 snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
                 snapshot.metadata["experiment_design"]="Freeze the adverse risky pool using only information available at the decision time, preregister established control rankings, and test future recovery ordering over the existing 3/5/10-day CN decision horizons. Cash defense is reported separately from recovery-selection evidence."
+                snapshot.metadata["market_route"]="CN_RECOVERY_CAPACITY"
+            else:
+                if daily_bar_complete:
+                    us_return_outcome=self.us_return_max_ledger.record_outcome(
+                        prepared["latest_as_of"],
+                        prepared["previous_as_of"],
+                        prepared.get("realized_returns_from_previous_period") or {},
+                        prepared.get("product_realized_returns_from_previous_period") or {},
+                        prepared.get("product_turnover_notional_from_previous_period") or {},
+                        snapshot.snapshot_id,
+                    )
+                snapshot.metadata["experiment_mode"]="US_RETURN_MAX_CAPACITY"
+                snapshot.metadata["experiment_design"]="Use the existing return-first reselect strategy population as the primary US route, expand the frozen strategy mix to executable ETF exposures, and validate realized return versus SPY buy-and-hold and the generic TRIAID Core under four USD capital sleeves."
+                snapshot.metadata["market_route"]="US_RETURN_MAXIMIZATION"
+            snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
             current_experiment=snapshot.metadata.get("experiment_mode")
             existing_decisions=[
@@ -338,6 +359,27 @@ class EvolutionLabEngine:
                         ),
                         previous_states=previous_states,
                     )
+                us_route_bootstrap=None
+                if market_id=="US":
+                    us_route_bootstrap=self.us_return_max_ledger.by_snapshot(
+                        snapshot.snapshot_id,
+                        self.us_return_max.version,
+                    )
+                    if us_route_bootstrap is None:
+                        proposed_us_route=self.us_return_max.decide(
+                            prepared["panel"],
+                            existing.strategy_group,
+                            existing.triaid_decision,
+                            existing.strategy_states,
+                            phase,
+                        )
+                        us_route_bootstrap=self.us_return_max_ledger.freeze(
+                            proposed_us_route,
+                            snapshot.snapshot_id,
+                            snapshot.as_of,
+                        )
+                    snapshot.metadata["us_return_max_decision_id"]=us_route_bootstrap.get("decision_id")
+                    snapshot.metadata["us_return_max_decision_hash"]=us_route_bootstrap.get("decision_hash")
                 with self._lock:
                     run=self._runs[run_id]
                     run.market=snapshot
@@ -352,11 +394,14 @@ class EvolutionLabEngine:
                         "prospective_bootstrap_source_run_id":(
                             existing.run_id if prospective_bootstrap else None
                         ),
-                        "recovery_wave_decision_id":recovery_decision.get("decision_id"),
-                        "recovery_wave_decision_hash":recovery_decision.get("decision_hash"),
-                        "recovery_wave_decision_status":recovery_decision.get("decision_status"),
-                        "recovery_wave_daily_bar_complete":daily_bar_complete,
+                        "recovery_wave_decision_id":recovery_decision.get("decision_id") if recovery_decision else None,
+                        "recovery_wave_decision_hash":recovery_decision.get("decision_hash") if recovery_decision else None,
+                        "recovery_wave_decision_status":recovery_decision.get("decision_status") if recovery_decision else None,
+                        "recovery_wave_daily_bar_complete":daily_bar_complete if market_id=="CN" else None,
                         "recovery_wave_outcome_recorded":bool((recovery_outcome or {}).get("recorded")),
+                        "us_return_max_decision_id":us_route_bootstrap.get("decision_id") if us_route_bootstrap else None,
+                        "us_return_max_decision_hash":us_route_bootstrap.get("decision_hash") if us_route_bootstrap else None,
+                        "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
                     }
                     self.store.save_run(run)
                 return
@@ -387,15 +432,42 @@ class EvolutionLabEngine:
                 run.previous_run_id=resolved[-1] if resolved else None
                 self.store.save_run(run)
             self.execute(run_id,request)
+            us_route_decision=None
+            if market_id=="US":
+                completed_run=self.get_run(run_id)
+                us_route_decision=self.us_return_max_ledger.by_snapshot(
+                    snapshot.snapshot_id,
+                    self.us_return_max.version,
+                )
+                if us_route_decision is None:
+                    proposed_us_route=self.us_return_max.decide(
+                        prepared["panel"],
+                        completed_run.strategy_group,
+                        completed_run.triaid_decision,
+                        completed_run.strategy_states,
+                        phase,
+                    )
+                    us_route_decision=self.us_return_max_ledger.freeze(
+                        proposed_us_route,
+                        snapshot.snapshot_id,
+                        snapshot.as_of,
+                    )
+                snapshot.metadata["us_return_max_decision_id"]=us_route_decision.get("decision_id")
+                snapshot.metadata["us_return_max_decision_hash"]=us_route_decision.get("decision_hash")
             with self._lock:
                 run=self._runs[run_id]
+                run.market=snapshot
                 run.diagnostic_summary={
                     **dict(run.diagnostic_summary or {}),
-                    "recovery_wave_decision_id":recovery_decision.get("decision_id"),
-                    "recovery_wave_decision_hash":recovery_decision.get("decision_hash"),
-                    "recovery_wave_decision_status":recovery_decision.get("decision_status"),
-                    "recovery_wave_daily_bar_complete":daily_bar_complete,
+                    "recovery_wave_decision_id":recovery_decision.get("decision_id") if recovery_decision else None,
+                    "recovery_wave_decision_hash":recovery_decision.get("decision_hash") if recovery_decision else None,
+                    "recovery_wave_decision_status":recovery_decision.get("decision_status") if recovery_decision else None,
+                    "recovery_wave_daily_bar_complete":daily_bar_complete if market_id=="CN" else None,
                     "recovery_wave_outcome_recorded":bool((recovery_outcome or {}).get("recorded")),
+                    "us_return_max_decision_id":us_route_decision.get("decision_id") if us_route_decision else None,
+                    "us_return_max_decision_hash":us_route_decision.get("decision_hash") if us_route_decision else None,
+                    "us_return_max_decision_status":us_route_decision.get("decision_status") if us_route_decision else None,
+                    "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
                 }
                 self.store.save_run(run)
         except Exception as exc:
@@ -416,6 +488,18 @@ class EvolutionLabEngine:
 
     def recovery_wave_daily_report(self,market_id:str="CN")->dict|None:
         return self.recovery_wave_ledger.daily_report(market_id)
+
+    def us_return_max_status(self)->dict:
+        return self.us_return_max_ledger.status()
+
+    def latest_us_return_max_decision(self)->dict|None:
+        return self.us_return_max_ledger.latest()
+
+    def us_return_max_history(self,limit:int=100)->list[dict]:
+        return self.us_return_max_ledger.decisions(limit)
+
+    def us_return_max_daily_report(self)->dict|None:
+        return self.us_return_max_ledger.daily_report()
 
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
@@ -643,6 +727,11 @@ class EvolutionLabEngine:
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
         summary=self.review.daily_summary(rows)
+        include_us=(market_id is None) or market_id.upper()=="US"
+        if include_us:
+            us_return=self.us_return_max_ledger.daily_report()
+            if us_return:
+                summary["us_return_max"]=us_return
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
