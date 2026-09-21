@@ -123,6 +123,9 @@ assert decision["objective"].startswith("MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RET
 assert decision["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST"
 assert decision["strategy_selection_mode"]=="MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
 assert decision["selected_strategy_id"]=="P18_XMOM20"
+assert decision["fast_challenger"]["shadow_only"] is True
+assert decision["fast_challenger"]["applied_to_weights"] is False
+assert decision["fast_challenger"]["windows_days"]==[1,3,5]
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
 assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
 assert decision["return_first_population_control_weights"]==group.weights
