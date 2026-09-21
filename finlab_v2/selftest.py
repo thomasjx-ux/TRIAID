@@ -224,6 +224,22 @@ try:
     assert engine.market_observation_status()["transition_count"]==1
     assert len(engine.market_observations("US","INTRADAY",10))==3
     assert len(engine.market_transitions("US","INTRADAY",10))==1
+    rt1={
+        "market_id":"US","mode":"REALTIME","session_phase":"OPEN",
+        "provider":"realtime-selftest","quality":"indicative_not_execution_grade","execution_grade":False,
+        "source_latest_ts":1234569000,"interval":"1m","points":2,
+        "symbols":["SPY"],"latest":{"SPY":{"close":500.0,"volume":2000.0}},
+    }
+    rt2={**rt1,"source_latest_ts":1234569060,"points":3,"latest":{"SPY":{"close":505.0,"volume":2200.0}}}
+    assert engine.record_market_observation(rt1)["recorded"] is True
+    assert engine.record_market_observation(rt2)["recorded"] is True
+    live_window=runtime.live_indicators("US")
+    assert live_window["available"] is True
+    assert live_window["provider"]=="realtime-selftest"
+    assert abs(live_window["instruments"][0]["change_pct"]-0.01)<1e-12
+    activity_window=runtime.activity("US",20)
+    assert any(x["kind"]=="DATA_FETCH" for x in activity_window["events"])
+    assert "refresh_plan" in activity_window
     caps=engine.market_data_capabilities()
     products=engine.market_data_product_capabilities()
     providers=engine.market_data_provider_status()
@@ -300,6 +316,42 @@ try:
     assert decision.triaid_decision
     assert decision.triaid_decision.core_version==engine.evolution.active().version
     assert sum(decision.triaid_decision.weights_after.values())<=1.0000001
+
+    cn_ids=[
+        "P00_BUY_HOLD","P01_VOL10","P02_VOL15","P03_DD_GUARD","P04_TREND50",
+        "P05_TREND200","P06_DUAL_TREND","P07_MOM63","P08_STRESS_BLEND","P09_SHOCK_GUARD",
+        "P10_VOL20","P11_TREND20",
+    ]
+    cn_states=[
+        state(sid,-0.02-0.01*i,0.10+0.005*i,0.01)
+        for i,sid in enumerate(cn_ids)
+    ]+[state("P28_CASH",0.0,0.0,0.0)]
+    cn_request=RunRequest(
+        market=MarketSnapshot(
+            market_id="CN",
+            as_of="2026-09-21",
+            snapshot_id="SELFTEST:CN:WORST",
+            regime="risk_off",
+            metadata={"experiment_mode":"CN_WORST_POOL_RESCUE"},
+        ),
+        strategy_states=cn_states,
+        max_group_size=12,
+    )
+    cn_run=engine.create_run(cn_request)
+    engine.execute(cn_run.run_id,cn_request)
+    cn_decision=engine.get_run(cn_run.run_id)
+    assert cn_decision.status=="DECISION_READY_AWAITING_OUTCOME"
+    assert cn_decision.strategy_group
+    assert cn_decision.strategy_group.diagnostics["optimizer"]=="adversarial-worst-pool-v1"
+    assert cn_decision.strategy_group.diagnostics["experiment_mode"]=="CN_WORST_POOL_RESCUE"
+    risky_members=[x for x in cn_decision.strategy_group.members if x!="P28_CASH"]
+    assert len(risky_members)==10
+    assert "P28_CASH" in cn_decision.strategy_group.members
+    assert cn_decision.strategy_group.weights["P28_CASH"]==0.0
+    assert abs(sum(cn_decision.strategy_group.weights[x] for x in risky_members)-1.0)<1e-12
+    assert cn_decision.triaid_decision.weights_after["P28_CASH"]>0.5
+    assert cn_decision.diagnostic_summary["projected_excess_expected_return"]>0
+    assert cn_decision.diagnostic_summary["realized_outcome_pending"] is True
 
     verified=engine.submit_outcome(
         run.run_id,
