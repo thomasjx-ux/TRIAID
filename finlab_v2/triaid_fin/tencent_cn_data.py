@@ -14,7 +14,7 @@ class TencentCNDataError(RuntimeError):
 
 class TencentCNMarketDataProvider:
     name="tencent-cn-market-data"
-    version="tencent-cn-market-data@0.1.0"
+    version="tencent-cn-market-data@0.2.0"
 
     @property
     def configured(self)->bool:
@@ -66,11 +66,11 @@ class TencentCNMarketDataProvider:
         code=self._symbol(symbol)
         payload=self._get(
             "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
-            {"param":f"{code},day,,,640,hfq"},
+            {"param":f"{code},day,,,640,qfq"},
             timeout,
         )
         node=(payload.get("data") or {}).get(code) or {}
-        rows=node.get("hfqday") or node.get("day") or []
+        rows=node.get("qfqday") or node.get("day") or []
         parsed=[]
         for raw in rows:
             if not isinstance(raw,list) or len(raw)<6:
