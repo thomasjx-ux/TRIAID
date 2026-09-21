@@ -506,7 +506,7 @@ class EvolutionLabEngine:
 
             resolved=[]
             prospective_observation=None
-            if daily_bar_complete:
+            if evidence_eligible and daily_bar_complete:
                 resolved=self._resolve_previous_period(
                     market_id,
                     prepared["previous_as_of"],
@@ -517,12 +517,18 @@ class EvolutionLabEngine:
                         prepared["latest_as_of"],
                         prepared["realized_returns_from_previous_period"],
                     )
-            states=self.population_state.apply(
-                market_id,
-                prepared["strategy_states"],
-                observation_key=f"DAILY:{snapshot.as_of}",
-                advance_observation=daily_bar_complete,
-            )
+            if evidence_eligible:
+                states=self.population_state.apply(
+                    market_id,
+                    prepared["strategy_states"],
+                    observation_key=f"DAILY:{snapshot.as_of}",
+                    advance_observation=daily_bar_complete,
+                )
+            else:
+                states=self.population_state.preview(
+                    market_id,
+                    prepared["strategy_states"],
+                )
             request=RunRequest(
                 market=snapshot,
                 strategy_states=states,
@@ -534,7 +540,7 @@ class EvolutionLabEngine:
                 self._save_run(run)
             self.execute(run_id,request)
             us_route_decision=None
-            if market_id=="US":
+            if market_id=="US" and evidence_eligible:
                 completed_run=self.get_run(run_id)
                 us_route_decision=self.us_return_max_ledger.by_snapshot(
                     snapshot.snapshot_id,
@@ -571,8 +577,17 @@ class EvolutionLabEngine:
                     "us_return_max_decision_status":us_route_decision.get("decision_status") if us_route_decision else None,
                     "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
                     "daily_bar_complete":daily_bar_complete,
-                    "evidence_state":"COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY",
+                    "evidence_state":(
+                        "MANUAL_PREVIEW_NON_EVIDENCE"
+                        if not evidence_eligible
+                        else ("COMPLETE_DAILY" if daily_bar_complete else "PROVISIONAL_INTRADAY")
+                    ),
+                    "run_scope":run_scope,
+                    "evidence_eligible":evidence_eligible,
+                    "persistent_run_record":evidence_eligible,
                 }
+                if not evidence_eligible and run.status!="FAILED":
+                    run.status="PREVIEW_READY"
                 self._save_run(run)
         except Exception as exc:
             with self._lock:
