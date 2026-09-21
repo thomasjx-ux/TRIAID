@@ -47,3 +47,7 @@ jobs:
           python strategy_evolution_validation_smoke.py
           python ui_smoke.py
           python production_smoke_contract_static.py
+          python serverless_scheduler_smoke.py
+      - name: Build portable Cloud Run container
+        working-directory: finlab_v2
+        run: docker build -t triaid-fin-v2:gcp .
