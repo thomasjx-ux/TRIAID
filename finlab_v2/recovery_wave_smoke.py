@@ -79,8 +79,12 @@ assert decision["execution_discipline"]["same_bar_execution_allowed"] is False
 assert decision["execution_discipline"]["execution_rule"]=="DECISION_AT_T_APPLIES_FROM_NEXT_COMPLETE_TRADABLE_BAR"
 assert set(decision["first_order_states"])==set(spec.risk_assets)
 assert len(decision["trade_opinions"])==4
-assert sum(x["target_weight"] for x in decision["trade_opinions"])<=0.55000001
-assert abs(decision["cash_residual_weight"]-(1.0-sum(x["target_weight"] for x in decision["trade_opinions"])))<1e-8
+allocated=sum(x["target_weight"] for x in decision["trade_opinions"])
+assert decision["second_order"]["base_risk_budget"]==0.55
+assert 0.0<=decision["second_order"]["evidence_strength"]<=1.0
+assert 0.0<=decision["second_order"]["effective_risk_budget"]<=0.55
+assert allocated<=decision["second_order"]["effective_risk_budget"]+1e-8
+assert abs(decision["cash_residual_weight"]-(1.0-allocated))<1e-8
 for row in decision["trade_opinions"]:
     assert row["action"] in {"INITIATE","ADD","HOLD","REDUCE","EXIT","WAIT"}
     assert row["analog_samples"]<=20
