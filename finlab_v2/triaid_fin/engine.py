@@ -629,6 +629,17 @@ class EvolutionLabEngine:
             run=self._runs.get(run_id) or self.store.load_run(run_id)
             if run.strategy_group is None or run.triaid_decision is None:
                 raise ValueError("Decision is not ready.")
+            if run.evaluation and run.evaluation.status=="EVALUATED":
+                incoming={str(k):float(v) for k,v in outcome.realized_returns.items()}
+                existing={str(k):float(v) for k,v in run.evaluation.strategy_realized_returns.items()}
+                same_returns=(
+                    set(incoming)==set(existing)
+                    and all(abs(incoming[k]-existing[k])<=1e-15 for k in incoming)
+                )
+                same_cost=abs(float(outcome.trading_cost)-float(run.evaluation.trading_cost))<=1e-15
+                if same_returns and same_cost:
+                    return run
+                raise ValueError("outcome_already_evaluated_conflict")
             run.evaluation=self.evaluation.evaluate(
                 run.strategy_group,
                 run.triaid_decision,
