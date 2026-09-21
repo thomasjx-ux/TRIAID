@@ -318,20 +318,37 @@ class EvolutionLabEngine:
             resolved.append(run.run_id)
         return resolved
 
-    def execute_live(self,run_id:str,market_id:str)->None:
-        # Live runs mutate shared lifecycle/evidence ledgers. Serialize them so
-        # API-triggered runs and scheduler/automation runs cannot interleave
-        # read-modify-write state in a single replica.
+    def execute_live(
+        self,
+        run_id:str,
+        market_id:str,
+        run_scope:str="OFFICIAL_EVIDENCE",
+    )->None:
+        # Official evidence runs mutate shared lifecycle/evidence ledgers and are
+        # serialized with manual previews. Preview runs themselves remain read-only.
         with self._live_lock:
-            return self._execute_live_locked(run_id,market_id)
+            return self._execute_live_locked(run_id,market_id,run_scope)
 
-    def _execute_live_locked(self,run_id:str,market_id:str)->None:
+    def _execute_live_locked(
+        self,
+        run_id:str,
+        market_id:str,
+        run_scope:str="OFFICIAL_EVIDENCE",
+    )->None:
         market_id=market_id.upper()
+        run_scope=str(run_scope or "OFFICIAL_EVIDENCE").upper()
+        if run_scope not in {"OFFICIAL_EVIDENCE","MANUAL_PREVIEW"}:
+            raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
+        evidence_eligible=run_scope=="OFFICIAL_EVIDENCE"
         try:
             profile=self.strategy_evolution.active(market_id)
             prepared=prepare_live_market(market_id,profile.window_weights)
             snapshot=prepared["snapshot"]
             snapshot.metadata["strategy_rules_version"]=profile.version
+            snapshot.metadata["run_scope"]=run_scope
+            snapshot.metadata["evidence_eligible"]=evidence_eligible
+            snapshot.metadata["research_only"]=True
+            snapshot.metadata["broker_execution_enabled"]=False
 
             phase=str(snapshot.metadata.get("session_phase") or "").upper()
             daily_bar_complete=bool(snapshot.metadata.get("daily_bar_complete"))
