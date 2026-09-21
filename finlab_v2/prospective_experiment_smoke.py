@@ -78,7 +78,7 @@ registered=protocol.register(
     horizons=(3,5,10),
     previous_states=previous,
 )
-assert registered["status"]=="OPEN"
+assert registered["status"]=="OPEN"\nassert protocol.version=="cn-prospective-controls@0.2.0"
 assert registered["design"]["horizons_trading_days"]==[3,5,10]
 assert registered["design"]["no_future_information"] is True
 assert registered["design"]["no_post_result_retuning"] is True
@@ -109,6 +109,15 @@ for day_index,day in enumerate(dates):
 
 done=protocol.get(registered["experiment_id"])
 assert done["status"]=="COMPLETE"
+report=protocol.daily_report(registered["experiment_id"])
+assert report is not None
+assert report["observation_days"]==10
+assert report["horizons_trading_days"]==[3,5,10]
+assert report["pending_horizons"]==[]
+assert len(report["strategy_determination"])==10
+assert len(report["daily_fluctuation"])==10
+assert "TRIAID_STATIC_MINUS_HOLD_EQUAL" in report["current_portfolio_cumulative_returns"]
+assert report["recovery_route_hypothesis"]["status"]=="RESEARCH_ONLY_NOT_PRODUCTION"
 assert len(done["outcomes"])==10
 assert set(done["evaluations"])=={"3","5","10"}
 for horizon in ("3","5","10"):
