@@ -28,8 +28,8 @@ from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.11.0"
-    market_adapter_version = "market-lab@0.3.0"
+    architecture_version = "fin-evolution-lab@0.12.0"
+    market_adapter_version = "market-lab@0.4.0"
 
     def __init__(self) -> None:
         self.store=RunStore()
