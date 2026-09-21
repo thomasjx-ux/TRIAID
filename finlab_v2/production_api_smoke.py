@@ -11,6 +11,7 @@ import urllib.request
 
 BASE=(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:18080").rstrip("/")
 ADMIN_TOKEN=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
+MUTATING_SMOKE=os.getenv("TRIAID_PRODUCTION_SMOKE_MUTATIONS","0").strip()=="1"
 RESULTS=[]
 
 
@@ -180,7 +181,7 @@ if recovery_history:
     assert all(x["starting_cash_only"] is True for x in cap["sleeves"])
     assert all(x["liquidity_data_complete"] is True for x in cap["sleeves"])
 
-runs_before=call("GET","/api/runs?limit=20")
+runs_before=call("GET","/api/runs?limit=1000")
 assert isinstance(runs_before,list)
 
 for market in ("US","CN"):
@@ -280,17 +281,19 @@ assert cn_unknown["reason"]=="CALENDAR_YEAR_UNAVAILABLE"
 freq=call("GET","/api/market-data/frequency-policy")
 assert freq["principle"].startswith("START_HIGHEST")
 
-# Round-trip one frequency control without changing its effective level/lock.
+# Production preflight is read-only by default. A mutating smoke must be
+# explicitly opted in and should only be used against an isolated backend.
 fcur=freq["markets"]["US"]["REALTIME"]
 old_level=int(fcur["level"])
 old_lock=fcur.get("manual_lock")
-query=urllib.parse.urlencode({
-    "level":old_level,
-    "lock":"true" if old_lock else "false",
-    "reason":(old_lock or {}).get("reason","production-smoke-preserve"),
-})
-fset=call("POST",f"/api/market-data/frequency-policy/US/REALTIME/set-level?{query}")
-assert int(fset["level"])==old_level
+if MUTATING_SMOKE:
+    query=urllib.parse.urlencode({
+        "level":old_level,
+        "lock":"true" if old_lock else "false",
+        "reason":(old_lock or {}).get("reason","production-smoke-preserve"),
+    })
+    fset=call("POST",f"/api/market-data/frequency-policy/US/REALTIME/set-level?{query}")
+    assert int(fset["level"])==old_level
 
 # Read-only telemetry streams.
 obs=call("GET","/api/market-data/observations?limit=5")
@@ -300,11 +303,15 @@ assert obs_status["persistent"] is True
 transitions=call("GET","/api/market-data/transitions?limit=5")
 assert isinstance(transitions,list)
 
-# Explicit fresh daily data through the whole provider->hub->observation path.
+# Fetch fresh provider data without writing observations during production
+# preflight. The explicit POST refresh path is covered by deterministic smoke tests.
 for market in ("US","CN"):
-    refreshed=call("POST",f"/api/market-data/refresh/{market}/DAILY",timeout=60)
-    assert refreshed["market_id"]==market
-    snap=call("GET",f"/api/market-data/snapshot/{market}/DAILY",timeout=30)
+    if MUTATING_SMOKE:
+        refreshed=call("POST",f"/api/market-data/refresh/{market}/DAILY",timeout=60)
+        assert refreshed["market_id"]==market
+        snap=call("GET",f"/api/market-data/snapshot/{market}/DAILY",timeout=30)
+    else:
+        snap=call("GET",f"/api/market-data/snapshot/{market}/DAILY?refresh=true",timeout=60)
     assert snap["market_id"]==market and snap["points"]>=300
     context=call("GET",f"/api/market-data/strategy-context/{market}",timeout=30)
     assert context["market_id"]==market
@@ -357,46 +364,56 @@ for market in ("US","CN"):
     q=call("GET",f"/api/market-data/quotes/{market}",timeout=20)
     assert "available" in q
 
-# Error-contract wiring for mutating endpoints without changing research state.
-call("POST","/api/run",body={},expected=(422,))
-call("POST","/api/runs/__smoke_missing__/outcome",body={"realized_returns":{}},expected=(404,))
-call("POST","/api/evolution/promote/__smoke_missing__",body={},expected=(404,))
-call("POST","/api/strategy-evolution/propose/XX",expected=(400,))
-call("POST","/api/strategy-evolution/promote/US/__smoke_missing__",body={},expected=(404,))
+created={"runs":[]}
+prospective_after=None
+if MUTATING_SMOKE:
+    # Mutating contract checks are intentionally opt-in. Never enable this against
+    # the production persistence namespace.
+    call("POST","/api/run",body={},expected=(422,))
+    call("POST","/api/runs/__smoke_missing__/outcome",body={"realized_returns":{}},expected=(404,))
+    call("POST","/api/evolution/promote/__smoke_missing__",body={},expected=(404,))
+    call("POST","/api/strategy-evolution/propose/XX",expected=(400,))
+    call("POST","/api/strategy-evolution/promote/US/__smoke_missing__",body={},expected=(404,))
 
-# Real research decision path: both markets, then poll persistent run records.
-created=call("POST","/api/live/run-all",expected=(202,),timeout=20)
-assert len(created["runs"])==2
-for item in created["runs"]:
-    run_id=item["run_id"]
-    deadline=time.monotonic()+120
-    final=None
-    while time.monotonic()<deadline:
-        final=call("GET",f"/api/runs/{run_id}",timeout=20)
-        if final["status"] not in {"CREATED","FETCHING_DATA"}:
-            break
-        time.sleep(1)
-    assert final is not None
-    assert final["status"] in {"DECISION_READY_AWAITING_OUTCOME","NO_NEW_DATA","VERIFIED"}
-    assert final["status"]!="FAILED"
+    created=call("POST","/api/live/run-all",expected=(202,),timeout=20)
+    assert len(created["runs"])==2
+    for item in created["runs"]:
+        run_id=item["run_id"]
+        deadline=time.monotonic()+120
+        final=None
+        while time.monotonic()<deadline:
+            final=call("GET",f"/api/runs/{run_id}",timeout=20)
+            if final["status"] not in {"CREATED","FETCHING_DATA"}:
+                break
+            time.sleep(1)
+        assert final is not None
+        assert final["status"] in {"DECISION_READY_AWAITING_OUTCOME","NO_NEW_DATA","VERIFIED"}
+        assert final["status"]!="FAILED"
 
-runs_after=call("GET","/api/runs?limit=50")
-after_ids={x["run_id"] for x in runs_after}
-for item in created["runs"]:
-    assert item["run_id"] in after_ids
+    runs_after=call("GET","/api/runs?limit=1000")
+    after_ids={x["run_id"] for x in runs_after}
+    for item in created["runs"]:
+        assert item["run_id"] in after_ids
 
-prospective_after=call("GET","/api/experiments/cn/prospective/latest")
-assert str(prospective_after["protocol_version"]).startswith("cn-prospective-controls@")
-assert prospective_after["design"]["horizons_trading_days"]==[3,5,10]
-assert prospective_after["design"]["no_future_information"] is True
-assert prospective_after["design"]["no_post_result_retuning"] is True
-assert len(prospective_after["pool"])>=2
-assert "TRIAID_STATE_TRANSITION" in prospective_after["control_rankings"]
+    prospective_after=call("GET","/api/experiments/cn/prospective/latest")
+    assert str(prospective_after["protocol_version"]).startswith("cn-prospective-controls@")
+    assert prospective_after["design"]["horizons_trading_days"]==[3,5,10]
+    assert prospective_after["design"]["no_future_information"] is True
+    assert prospective_after["design"]["no_post_result_retuning"] is True
+    assert len(prospective_after["pool"])>=2
+    assert "TRIAID_STATE_TRANSITION" in prospective_after["control_rankings"]
+else:
+    # The strongest production-integrity assertion: preflight must not add or
+    # replace persistent research runs.
+    runs_after=call("GET","/api/runs?limit=1000")
+    before_ids=[x["run_id"] for x in runs_before]
+    after_ids=[x["run_id"] for x in runs_after]
+    assert after_ids==before_ids,"read-only production smoke changed persistent run ledger"
 
 # Latency guardrails. External market-data calls get a wider allowance.
 slow=[x for x in RESULTS if x[3]>40]
 assert not slow,f"endpoint calls exceeded 40s: {slow}"
-control=[x for x in RESULTS if "/instrument/" not in x[1] and "/refresh/" not in x[1]]
+control=[x for x in RESULTS if "/instrument/" not in x[1] and "/refresh/" not in x[1] and "refresh=true" not in x[1]]
 control_slow=[x for x in control if x[3]>12]
 assert not control_slow,f"control endpoints exceeded 12s: {control_slow}"
 
@@ -406,7 +423,9 @@ print({
     "max_seconds":round(max(x[3] for x in RESULTS),3),
     "storage":"supabase",
     "persistent":True,
+    "mutating_smoke":MUTATING_SMOKE,
+    "persistent_run_ledger_unchanged":not MUTATING_SMOKE,
     "live_runs":[x["run_id"] for x in created["runs"]],
-    "prospective_experiment_id":prospective_after["experiment_id"],
-    "prospective_source_run_id":prospective_after["source_run_id"],
+    "prospective_experiment_id":prospective_after["experiment_id"] if prospective_after else None,
+    "prospective_source_run_id":prospective_after["source_run_id"] if prospective_after else None,
 })

@@ -19,4 +19,10 @@ for needle in [
 
 assert "TRIAID 增益" not in smoke
 
+
+smoke_text=Path("production_api_smoke.py").read_text(encoding="utf-8")
+assert 'TRIAID_PRODUCTION_SMOKE_MUTATIONS","0"' in smoke_text
+assert 'read-only production smoke changed persistent run ledger' in smoke_text
+assert 'if MUTATING_SMOKE:' in smoke_text
+
 print("TRIAID_PRODUCTION_SMOKE_CONTRACT_STATIC_PASS")
