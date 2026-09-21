@@ -119,10 +119,10 @@ if "recovery_wave" in dcn:
     assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.3.0"
     assert dcn["recovery_wave"]["latest_decision"]["data_scope"]["constituent_micro_available"] is False
     assert dcn["recovery_wave"]["latest_decision"]["execution_discipline"]["same_bar_execution_allowed"] is False
-assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
-assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["enabled"] is True
-assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
-assert len(dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["sleeves"])==4
+    assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
+    assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["enabled"] is True
+    assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
+    assert len(dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["sleeves"])==4
 
 cards=strategies("zh","US")
 assert len(cards)==29
