@@ -5,12 +5,18 @@ route=Path("triaid_fin/us_return_max.py").read_text(encoding="utf-8")
 
 for needle in [
     "TRIAID 相对收益差",
-    "annualized historical strategy state-return estimate",
-    "not a calibrated future-return forecast",
+    "RecoveryWaveCore.version",
+    "USReturnMaxRoute.version",
+    "us-return-max-route@0.1.0",
+    "us-return-max-route@0.2.0",
+    "if metric_semantics:",
+    "if \"capital_capacity\" in us_return_latest:",
 ]:
     assert needle in smoke,needle
 
 for needle in [
+    "historical strategy state-return estimate",
+    "calibrated future-return forecast",
     "MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
     "MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK",
     "ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
