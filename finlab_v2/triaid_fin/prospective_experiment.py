@@ -456,6 +456,7 @@ class ProspectiveExperimentProtocol:
         pending_horizons = [h for h in horizons if h not in completed_horizons]
 
         return {
+            "report_version": self.version,
             "experiment_id": experiment.get("experiment_id"),
             "source_run_id": experiment.get("source_run_id"),
             "protocol_version": experiment.get("protocol_version"),
