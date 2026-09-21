@@ -162,6 +162,83 @@ def market_data_instrument_series(market_id:str,symbol:str,mode:str="DAILY")->di
     return get_market_data_hub().instrument_series(market_id,symbol,mode)
 
 
+def strategy_market_context(market_id:str)->dict:
+    key=market_id.upper()
+    if key not in MARKETS:
+        raise MarketDataError(f"unsupported_market:{market_id}")
+    daily=fetch_panel(key,"DAILY",force=False)
+    if len(daily.ts)<2:
+        raise MarketDataError(f"insufficient_daily_history:{key}")
+    i=len(daily.ts)-1
+    current_positions=policy_positions(daily,i)
+    if key=="CN":
+        current_positions.update(cn_shadow_positions(daily,i))
+
+    live=get_market_data_hub().cached_panel(key,"REALTIME")
+    price_panel=(
+        live
+        if live is not None and live.ts and int(live.ts[-1])>=int(daily.ts[-1])
+        else daily
+    )
+    instrument_names={
+        "SPY":"SPDR S&P 500 ETF",
+        "QQQ":"Invesco QQQ",
+        "IWM":"iShares Russell 2000 ETF",
+        "TLT":"iShares 20+ Year Treasury Bond ETF",
+        "GLD":"SPDR Gold Shares",
+        "510300.SS":"沪深300ETF",
+        "510500.SS":"中证500ETF",
+        "159915.SZ":"创业板ETF",
+        "512100.SS":"中证1000ETF",
+        "511010.SS":"国债ETF",
+    }
+
+    instruments={}
+    for asset in daily.assets:
+        day_close=float(daily.close[asset][-1])
+        previous_close=float(daily.close[asset][-2])
+        change=(day_close/previous_close-1.0) if previous_close else 0.0
+        latest_series=price_panel.close.get(asset) or daily.close[asset]
+        instruments[asset]={
+            "symbol":asset,
+            "name":instrument_names.get(asset,asset),
+            "latest_price":float(latest_series[-1]),
+            "last_trading_day_close":day_close,
+            "last_trading_day_change":float(change),
+        }
+
+    strategies={}
+    for strategy_id,weights in current_positions.items():
+        holdings=[]
+        invested=0.0
+        for asset,weight in zip(daily.assets,weights):
+            w=max(0.0,float(weight))
+            if w<=1e-12:
+                continue
+            invested+=w
+            holdings.append({
+                **instruments[asset],
+                "weight":w,
+            })
+        holdings.sort(key=lambda row:(-row["weight"],row["symbol"]))
+        strategies[strategy_id]={
+            "assets":holdings,
+            "cash_weight":max(0.0,1.0-invested),
+        }
+
+    return {
+        "market_id":key,
+        "currency":daily.spec.currency,
+        "position_as_of":datetime.fromtimestamp(daily.ts[-1],tz=timezone.utc).date().isoformat(),
+        "last_trading_day":datetime.fromtimestamp(daily.ts[-1],tz=timezone.utc).date().isoformat(),
+        "price_mode":price_panel.data_mode,
+        "provider":price_panel.provider,
+        "source_latest_ts":int(price_panel.ts[-1]),
+        "instruments":instruments,
+        "strategies":strategies,
+    }
+
+
 
 def _ret(xs:list[float])->list[float]:
     out=[0.0]*len(xs)
