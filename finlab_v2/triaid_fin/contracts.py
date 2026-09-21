@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def utc_now() -> str:
@@ -48,6 +49,27 @@ class StrategyState(BaseModel):
     recent_returns: List[float] = Field(default_factory=list)
     selection_reason: Optional[BilingualText] = None
 
+    @field_validator("expected_net_return","risk","uncertainty","estimated_cost","oos_marginal_value")
+    @classmethod
+    def _finite_scalar(cls,value):
+        if value is not None and not math.isfinite(float(value)):
+            raise ValueError("strategy state numeric fields must be finite")
+        return value
+
+    @field_validator("metrics")
+    @classmethod
+    def _finite_metrics(cls,value):
+        if any(not math.isfinite(float(x)) for x in value.values()):
+            raise ValueError("strategy metrics must be finite")
+        return value
+
+    @field_validator("recent_returns")
+    @classmethod
+    def _finite_recent_returns(cls,value):
+        if any(not math.isfinite(float(x)) for x in value):
+            raise ValueError("recent strategy returns must be finite")
+        return value
+
 
 class MarketSnapshot(BaseModel):
     market_id: str
@@ -65,7 +87,14 @@ class RunRequest(BaseModel):
 
 class OutcomeRequest(BaseModel):
     realized_returns: Dict[str, float]
-    trading_cost: float = 0.0
+    trading_cost: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
+
+    @field_validator("realized_returns")
+    @classmethod
+    def _finite_realized_returns(cls,value):
+        if any(not math.isfinite(float(x)) for x in value.values()):
+            raise ValueError("realized returns must be finite")
+        return value
 
 
 class StrategyGroup(BaseModel):
@@ -78,6 +107,16 @@ class StrategyGroup(BaseModel):
     reasons: Dict[str, BilingualText]
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("weights")
+    @classmethod
+    def _valid_group_weights(cls,value):
+        vals=[float(x) for x in value.values()]
+        if any(not math.isfinite(x) or x<0 for x in vals):
+            raise ValueError("strategy-group weights must be finite and nonnegative")
+        if sum(vals)>1.0000001:
+            raise ValueError("strategy-group weights cannot exceed 1")
+        return value
+
 
 class TriaidDecision(BaseModel):
     core_version: str
@@ -86,6 +125,16 @@ class TriaidDecision(BaseModel):
     weights_after: Dict[str, float]
     reasons: Dict[str, BilingualText]
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("weights_before","weights_after")
+    @classmethod
+    def _valid_decision_weights(cls,value):
+        vals=[float(x) for x in value.values()]
+        if any(not math.isfinite(x) or x<0 for x in vals):
+            raise ValueError("decision weights must be finite and nonnegative")
+        if sum(vals)>1.0000001:
+            raise ValueError("decision weights cannot exceed 1")
+        return value
 
 
 class EvaluationResult(BaseModel):
