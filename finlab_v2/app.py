@@ -184,6 +184,26 @@ def cn_prospective_detail(experiment_id: str) -> dict:
         raise HTTPException(status_code=404, detail="prospective experiment not found") from exc
 
 
+@app.get("/api/us-return-max/status")
+def us_return_max_status() -> dict:
+    return engine.us_return_max_status()
+
+
+@app.get("/api/us-return-max/latest")
+def us_return_max_latest() -> dict:
+    row=engine.latest_us_return_max_decision()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no US return-max decision")
+    return row
+
+
+@app.get("/api/us-return-max/history")
+def us_return_max_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.us_return_max_history(limit)
+
+
 @app.get("/api/recovery-wave/status")
 def recovery_wave_status(market_id: str = "CN") -> dict:
     return engine.recovery_wave_status(market_id)
