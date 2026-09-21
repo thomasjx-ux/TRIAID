@@ -130,6 +130,12 @@ after=protocol.get(registered["experiment_id"])
 assert after["outcomes"]==before["outcomes"]
 assert after["evaluations"]==before["evaluations"]
 
+post_complete=protocol.observe_period("2026-10-05",{sid:0.50 for sid in ids})
+assert post_complete["updated_experiment_ids"]==[]
+post_complete_state=protocol.get(registered["experiment_id"])
+assert post_complete_state["outcomes"]==before["outcomes"]
+assert post_complete_state["evaluations"]==before["evaluations"]
+
 # Registration is immutable/idempotent for the same source run.
 again=protocol.register(
     run_id="CN-live-prospective-smoke",
