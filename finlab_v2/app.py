@@ -184,6 +184,27 @@ def cn_prospective_detail(experiment_id: str) -> dict:
         raise HTTPException(status_code=404, detail="prospective experiment not found") from exc
 
 
+@app.get("/api/recovery-wave/status")
+def recovery_wave_status(market_id: str = "CN") -> dict:
+    return engine.recovery_wave_status(market_id)
+
+
+@app.get("/api/recovery-wave/latest")
+def recovery_wave_latest(market_id: str = "CN") -> dict:
+    row=engine.latest_recovery_wave_decision(market_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="no recovery-wave decision")
+    return row
+
+
+@app.get("/api/recovery-wave/history")
+def recovery_wave_history(
+    market_id: str = "CN",
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.recovery_wave_history(market_id,limit)
+
+
 @app.get("/api/strategies")
 def strategies(
     lang: str = Query(default="zh", pattern="^(zh|en)$"),
