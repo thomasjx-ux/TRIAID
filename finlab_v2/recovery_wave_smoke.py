@@ -70,7 +70,7 @@ panel=MarketPanel(
 
 core=RecoveryWaveCore(CoreParameters(version="selftest",risk_off_multiplier=0.55))
 decision=core.decide(panel,"risk_off",None,"POSTCLOSE")
-assert decision["core_version"]=="recovery-wave-core@0.1.0"
+assert decision["core_version"]=="recovery-wave-core@0.1.1"
 assert decision["research_only"] is True
 assert decision["broker_execution_enabled"] is False
 assert decision["data_scope"]["constituent_micro_available"] is False
@@ -97,6 +97,13 @@ first=ledger.freeze(decision,"CN:SNAP:1","2026-09-21")
 dup=ledger.freeze(decision,"CN:SNAP:1","2026-09-21")
 assert dup["decision_id"]==first["decision_id"]
 assert dup["decision_hash"]==first["decision_hash"]
+
+legacy_variant=deepcopy(decision)
+legacy_variant["core_version"]="recovery-wave-core@0.1.0"
+legacy_same_snapshot=ledger.freeze(legacy_variant,"CN:SNAP:1","2026-09-21")
+assert legacy_same_snapshot["decision_id"]!=first["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==first["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.0")["decision_id"]==legacy_same_snapshot["decision_id"]
 
 products=[x["symbol"] for x in first["trade_opinions"]]
 full_returns={s:0.01*(i+1) for i,s in enumerate(products)}
