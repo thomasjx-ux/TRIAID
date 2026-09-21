@@ -324,6 +324,67 @@ class RecoveryWaveCore:
             speed_values[symbol]=speed
 
         soft_recovery_shadow=cn_soft_recovery_shadow(first_order,regime)
+        soft_symbols=list(soft_recovery_shadow.get("eligible_symbols") or [])
+        soft_budget=float(soft_recovery_shadow.get("max_shadow_probe_budget") or 0.0)
+        completed_i=self.capital_capacity._completed_index(panel,input_phase)
+        soft_products=[]
+        soft_entry_cost=0.0
+        soft_liquidity_pass=True
+        soft_capacity_pass=True
+        if soft_symbols and soft_budget>0:
+            per_symbol_weight=soft_budget/len(soft_symbols)
+            for symbol in soft_symbols:
+                adv=self.capital_capacity._adv_notional(panel,symbol,completed_i)
+                notional=float(panel.spec.reference_capital)*per_symbol_weight
+                liquidity_ok=adv>0
+                participation=(notional/adv) if liquidity_ok else None
+                capacity_ok=bool(
+                    liquidity_ok
+                    and participation is not None
+                    and participation<=float(panel.spec.max_participation_adv)
+                )
+                soft_liquidity_pass=soft_liquidity_pass and liquidity_ok
+                soft_capacity_pass=soft_capacity_pass and capacity_ok
+                planned=(
+                    min(float(participation),float(panel.spec.max_participation_adv))
+                    if participation is not None else float(panel.spec.max_participation_adv)
+                )
+                bps=self.capital_capacity._execution_bps(
+                    planned,
+                    float(panel.spec.base_cost_bps),
+                    float(panel.spec.impact_coefficient_bps),
+                )
+                cost=notional*float(bps["all_in_bps_per_side"])/10000.0
+                soft_entry_cost+=cost
+                soft_products.append({
+                    "symbol":symbol,
+                    "pilot_weight_on_total_capital":per_symbol_weight,
+                    "pilot_notional_cny":notional,
+                    "adv20_notional_cny":adv,
+                    "participation_adv":participation,
+                    "capacity_ok":capacity_ok,
+                    "liquidity_ok":liquidity_ok,
+                    "estimated_entry_cost_cny":cost,
+                    "all_in_bps_per_side":float(bps["all_in_bps_per_side"]),
+                })
+        soft_recovery_shadow["pilot_execution_check"]={
+            "starting_reference_capital_cny":float(panel.spec.reference_capital),
+            "pilot_risk_budget":soft_budget,
+            "risk_pass":bool(soft_symbols and soft_budget<=0.05),
+            "liquidity_pass":bool(soft_symbols and soft_liquidity_pass),
+            "capacity_pass":bool(soft_symbols and soft_capacity_pass),
+            "pilot_turnover_fraction":soft_budget,
+            "turnover_multiplier":(
+                soft_budget/0.10 if soft_budget>0 else None
+            ),
+            "estimated_entry_cost_cny":soft_entry_cost,
+            "estimated_entry_cost_fraction_of_total_capital":(
+                soft_entry_cost/float(panel.spec.reference_capital)
+                if float(panel.spec.reference_capital)>0 else None
+            ),
+            "products":soft_products,
+            "semantics":"SHADOW SOFT-RECOVERY EXECUTION CHECK AT ITS CAPPED PROBE BUDGET; NOT A BROKER FILL",
+        }
         depth_rank=self._rank(depth_values,True)
         certainty_rank=self._rank(certainty_values,True)
         gain_rank=self._rank(gain_values,True)
