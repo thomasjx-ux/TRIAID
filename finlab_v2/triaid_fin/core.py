@@ -103,11 +103,11 @@ class TriaidCoreModule:
                 zh="当前证据不足以支持改变该策略权重，因此保持基本不变。"
                 en="Current evidence does not justify a material weight change, so the allocation is left essentially unchanged."
             elif delta>0:
-                zh="在当前策略群内，该策略的预期净回报相对风险与不确定性更有优势，因此 TRIAID 增配。"
-                en="Within the current group, expected net return is stronger relative to risk and uncertainty, so TRIAID increases the allocation."
+                zh="在当前策略群内，该策略的多周期年化状态收益估计在扣除风险与不确定性惩罚后形成的相对信号更高，因此 TRIAID 增配。"
+                en="Within the current group, the strategy has a stronger relative signal after penalizing its multi-window annualized state-return estimate for risk and uncertainty, so TRIAID increases the allocation."
             else:
-                zh="该策略当前的风险、不确定性或相对预期回报变差，因此 TRIAID 降低配置。"
-                en="Current risk, uncertainty or relative expected return has deteriorated, so TRIAID reduces the allocation."
+                zh="该策略的多周期年化状态收益估计经风险与不确定性惩罚后的相对信号较弱，因此 TRIAID 降低配置。"
+                en="The strategy has a weaker relative signal after risk and uncertainty penalties are applied to its multi-window annualized state-return estimate, so TRIAID reduces the allocation."
             reasons[strategy_id]=BilingualText(zh=zh,en=en)
 
         return TriaidDecision(
