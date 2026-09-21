@@ -47,6 +47,7 @@ jobs:
           python recovery_wave_smoke.py
           python capital_capacity_smoke.py
           python us_return_max_smoke.py
+          python adaptive_alpha_promotion_smoke.py
           python core_evolution_validation_smoke.py
           python strategy_evolution_validation_smoke.py
           python ui_smoke.py
