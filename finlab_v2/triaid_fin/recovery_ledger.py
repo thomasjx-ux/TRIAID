@@ -46,9 +46,18 @@ class RecoveryWaveLedger:
             rows=[r for r in rows if str(r.get("market_id","")).upper()==key]
         return rows[-limit:]
 
-    def by_snapshot(self,market_id:str,snapshot_id:str)->dict|None:
-        key=f"{market_id.upper()}:{snapshot_id}"
-        decision_id=self.index.get("snapshots",{}).get(key)
+    def by_snapshot(
+        self,
+        market_id:str,
+        snapshot_id:str,
+        core_version:str|None=None,
+    )->dict|None:
+        market=market_id.upper()
+        snapshots=self.index.get("snapshots",{})
+        version_key=f"{market}:{snapshot_id}:{core_version}" if core_version else None
+        decision_id=snapshots.get(version_key) if version_key else None
+        if not decision_id and core_version is None:
+            decision_id=snapshots.get(f"{market}:{snapshot_id}")
         if not decision_id:
             return None
         for row in reversed(self.decisions(market_id,1000)):
@@ -64,7 +73,8 @@ class RecoveryWaveLedger:
         market=str(decision.get("market_id") or "").upper()
         if not market or not snapshot_id:
             raise ValueError("RecoveryWaveLedger requires market_id and snapshot_id.")
-        existing=self.by_snapshot(market,snapshot_id)
+        core_version=str(decision.get("core_version") or "unknown")
+        existing=self.by_snapshot(market,snapshot_id,core_version)
         if existing:
             return existing
 
@@ -80,7 +90,9 @@ class RecoveryWaveLedger:
         row["decision_hash"]=self._hash(body)
         row["decision_id"]=f"RW-{market}-{row.get('source_latest_ts')}-{row['decision_hash'][:10]}"
         self.store.append_jsonl(self.decision_file,row)
-        self.index.setdefault("snapshots",{})[f"{market}:{snapshot_id}"]=row["decision_id"]
+        snapshots=self.index.setdefault("snapshots",{})
+        snapshots[f"{market}:{snapshot_id}:{core_version}"]=row["decision_id"]
+        snapshots[f"{market}:{snapshot_id}"]=row["decision_id"]
         self.index["latest_decision_id"]=row["decision_id"]
         self.index["latest_decision_hash"]=row["decision_hash"]
         self.store.save_json(self.index_file,self.index)
