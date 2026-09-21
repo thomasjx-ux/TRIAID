@@ -74,6 +74,7 @@ expected_paths={
     "/api/experiments/cn/prospective",
     "/api/experiments/cn/prospective/latest",
     "/api/experiments/cn/prospective/{experiment_id}",
+    "/api/us-return-max/status","/api/us-return-max/latest","/api/us-return-max/history",
     "/api/recovery-wave/status","/api/recovery-wave/latest","/api/recovery-wave/history",
     "/api/strategies","/api/strategy-population/rules/{market_id}",
     "/api/population-state/{market_id}","/api/evolution",
@@ -112,6 +113,8 @@ assert status["strategy_registry_count"]==33
 assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.2.0"
 assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.2.0"
 assert status["module_manifest"]["capital_capacity"]=="capital-capacity-layer@0.1.0"
+assert status["module_manifest"]["us_return_max"]=="us-return-max-route@0.1.0"
+assert status["module_manifest"]["us_return_max_ledger"]=="us-return-max-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
 assert storage["backend"]["backend"]=="supabase"
@@ -127,6 +130,21 @@ if prospective_rows:
     assert prospective_latest["design"]["no_future_information"] is True
     prospective_detail=call("GET",f"/api/experiments/cn/prospective/{prospective_latest['experiment_id']}")
     assert prospective_detail["experiment_id"]==prospective_latest["experiment_id"]
+
+us_return_status=call("GET","/api/us-return-max/status")
+assert us_return_status["version"]=="us-return-max-ledger@0.1.0"
+assert us_return_status["integrity"]["passed"] is True
+us_return_history=call("GET","/api/us-return-max/history?limit=5")
+assert isinstance(us_return_history,list)
+if us_return_history:
+    us_return_latest=call("GET","/api/us-return-max/latest")
+    assert us_return_latest["decision_id"]==us_return_history[-1]["decision_id"]
+    assert us_return_latest["route_version"]=="us-return-max-route@0.1.0"
+    assert us_return_latest["objective"].startswith("MAXIMIZE_CURRENT_ROBUST_EXPECTED_NET_RETURN")
+    assert us_return_latest["selection_source"]=="EXISTING_STRATEGY_POPULATION_RETURN_FIRST_RESELECT"
+    assert us_return_latest["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
+    assert len(us_return_latest["capital_capacity"]["sleeves"])==4
+    assert all(x["starting_cash_only"] is True for x in us_return_latest["capital_capacity"]["sleeves"])
 
 recovery_status=call("GET","/api/recovery-wave/status?market_id=CN")
 assert recovery_status["version"]=="recovery-wave-ledger@0.2.0"
@@ -158,6 +176,11 @@ for market in ("US","CN"):
     assert latest["market"]["market_id"]==market
     daily=call("GET",f"/api/daily?market_id={market}")
     assert isinstance(daily,dict)
+    if market=="US":
+        assert daily["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
+        assert daily["us_return_max"]["route_version"]=="us-return-max-route@0.1.0"
+        assert daily["us_return_max"]["integrity"]["passed"] is True
+        assert daily["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     if market=="CN":
         assert daily["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"
         assert str(daily["prospective_experiment"]["protocol_version"]).startswith("cn-prospective-controls@")
