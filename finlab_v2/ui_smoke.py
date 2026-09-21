@@ -37,6 +37,9 @@ assert 'id="recoveryOpinionRows"' in html
 assert 'id="recoveryReviewRows"' in html
 assert 'id="recoveryPreviousMeta"' in html
 assert 'id="rwthSpeed"' in html
+assert 'id="capitalSleeveRows"' in html
+assert 'id="capitalRealizedRows"' in html
+assert "四资金规模容量实验" in html
 assert "renderRecoveryWave" in html
 assert "TRIAID 二阶恢复波段决策" in html
 assert "当前冻结交易意见" in html
@@ -48,7 +51,7 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.9.0"
+assert s["architecture_version"]=="fin-evolution-lab@0.10.0"
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
@@ -63,10 +66,13 @@ assert dcn["prospective_experiment"]["strategy_determination"]
 
 assert "recovery_wave" in dcn
 assert dcn["recovery_wave"]["integrity"]["passed"] is True
-assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.1"
+assert dcn["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.2.0"
 assert dcn["recovery_wave"]["latest_decision"]["data_scope"]["constituent_micro_available"] is False
 assert dcn["recovery_wave"]["latest_decision"]["execution_discipline"]["same_bar_execution_allowed"] is False
 assert dcn["recovery_wave"]["latest_decision"]["trade_opinions"]
+assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["enabled"] is True
+assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
+assert len(dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["sleeves"])==4
 
 cards=strategies("zh","US")
 assert len(cards)==29
