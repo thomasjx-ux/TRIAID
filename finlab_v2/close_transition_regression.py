@@ -59,6 +59,24 @@ class FakeEngine:
         return None
 
 
+class DedupFinalEngine(FakeEngine):
+    def run_live_research(self,market_id):
+        self.live_calls+=1
+        return SimpleNamespace(
+            run_id=f"{market_id}-dedup-final-attempt",
+            status="NO_NEW_DATA",
+            previous_run_id=f"{market_id}-existing-final",
+            market=SimpleNamespace(snapshot_id=f"{market_id}:123:FINAL:fixture"),
+        )
+
+    def get_run(self,run_id):
+        return SimpleNamespace(
+            run_id=run_id,
+            status="DECISION_READY_AWAITING_OUTCOME",
+            market=SimpleNamespace(snapshot_id="CN:123:FINAL:fixture"),
+        )
+
+
 def transition(ts,positive=True,score=0.001):
     return {
         "market_id":"CN",
@@ -200,6 +218,26 @@ try:
     assert final_event["event_type"]=="CLOSE_FINAL"
     assert close_scheduler._market_state("CN")["close_done"] is True
     assert engine.live_calls==2
+
+    dedup_engine=DedupFinalEngine()
+    dedup_scheduler=DecisionScheduler(dedup_engine)
+    dedup_state=dedup_scheduler._market_state("CN")
+    dedup_state["close_done"]=False
+    dedup_state["close_event_id"]=None
+    dedup_state["last_close_signature"]=None
+    dedup_scheduler._save()
+    dedup_scheduler._postclose_settled=lambda market_id: True
+    dedup_final=dedup_scheduler._close(
+        "CN",
+        postclose_snapshot,
+        {"recorded":False,"reason":"DUPLICATE_SNAPSHOT_CONTENT"},
+    )
+    assert dedup_final is not None
+    assert dedup_final["event_type"]=="CLOSE_FINAL"
+    assert dedup_final["run_status"]=="NO_NEW_DATA"
+    assert dedup_final["close_reference_run_id"]=="CN-existing-final"
+    assert dedup_final["close_completion_basis"]=="EXISTING_COMPLETE_FINAL_SNAPSHOT"
+    assert dedup_scheduler._market_state("CN")["close_done"] is True
 
     print("TRIAID_CLOSE_TRANSITION_REGRESSION_PASS")
     print({
