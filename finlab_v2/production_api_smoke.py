@@ -77,6 +77,7 @@ expected_paths={
     "/api/strategy-evolution/promote/{market_id}/{version}",
     "/api/market-data/status","/api/market-data/capabilities",
     "/api/market-data/providers","/api/market-data/products",
+    "/api/market-data/live-indicators/{market_id}","/api/market-data/activity/{market_id}",
     "/api/market-data/trading-calendar",
     "/api/market-data/trading-calendar/{market_id}",
     "/api/market-data/trading-calendar-sync",
@@ -142,6 +143,14 @@ assert decision_status["enabled"] is True
 assert decision_status["broker_execution_enabled"] is False
 decision_events=call("GET","/api/decision-scheduler/events?limit=5")
 assert isinstance(decision_events,list)
+for market in ("US","CN"):
+    live_indicators=call("GET",f"/api/market-data/live-indicators/{market}")
+    assert live_indicators["market_id"]==market
+    assert isinstance(live_indicators.get("instruments") or [],list)
+    activity=call("GET",f"/api/market-data/activity/{market}?limit=20")
+    assert activity["market_id"]==market
+    assert isinstance(activity["refresh_plan"],dict)
+    assert isinstance(activity["events"],list)
 caps=call("GET","/api/market-data/capabilities")
 assert caps["US"]["DAILY"]["supported"] is True
 assert caps["CN"]["DAILY"]["supported"] is True
