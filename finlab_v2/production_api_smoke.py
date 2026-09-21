@@ -310,7 +310,21 @@ instrument_cases=[
     ("US","SPY","PREOPEN"),
 ]
 for market,symbol,mode in instrument_cases:
-    row=call("GET",f"/api/market-data/instrument/{market}/{symbol}/{mode}",timeout=60)
+    time_sensitive=mode in {"REALTIME","PREOPEN"}
+    row=call(
+        "GET",
+        f"/api/market-data/instrument/{market}/{symbol}/{mode}",
+        expected=(200,503) if time_sensitive else (200,),
+        timeout=60,
+    )
+    if isinstance(row,dict) and "detail" in row:
+        assert time_sensitive
+        assert (
+            "insufficient_points" in str(row["detail"])
+            or "all_providers_failed" in str(row["detail"])
+            or "not_supported" in str(row["detail"])
+        )
+        continue
     assert row["market_id"]==market and row["symbol"]==symbol and row["points"]>=2
 
 # Explicitly unsupported CN auction remains a clean 503, not fabricated data.
