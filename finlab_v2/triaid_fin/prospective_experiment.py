@@ -18,24 +18,20 @@ class ProspectiveExperimentProtocol:
     def __init__(self, store: RunStore) -> None:
         self.store = store
         raw = store.load_json(self.state_file, default={})
+        had_persisted_state=bool(raw)
         if not raw:
             raw = {"version": self.version, "experiments": []}
         raw.setdefault("experiments", [])
+        migrated=False
         for experiment in raw["experiments"]:
             if str(experiment.get("protocol_version") or "")!=self.version:
                 experiment["status"]="INVALIDATED"
                 experiment["invalidated_reason"]="LEGACY_PROTOCOL_OUTCOME_DATE_ALIGNMENT_AND_COMPLETE_BAR_GATING"
                 experiment["invalidated_at"]=experiment.get("invalidated_at") or utc_now()
+                migrated=True
         raw["version"] = self.version
         self.state = raw
-        self.migration_pending_persist=(
-            not store.backend.exists(self.state_file)
-            or any(
-                str(experiment.get("status") or "")=="INVALIDATED"
-                and str(experiment.get("invalidated_reason") or "")=="LEGACY_PROTOCOL_OUTCOME_DATE_ALIGNMENT_AND_COMPLETE_BAR_GATING"
-                for experiment in raw["experiments"]
-            )
-        )
+        self.migration_pending_persist=(not had_persisted_state) or migrated
 
     def _save(self) -> None:
         self.store.save_json(self.state_file, self.state)
