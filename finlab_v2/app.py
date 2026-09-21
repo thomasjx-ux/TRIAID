@@ -457,9 +457,9 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
         <th id="thState" class="has-tip">状态</th>
         <th id="thExp" class="has-tip">多周期年化收益估计</th>
         <th id="thRisk" class="has-tip">风险</th>
-        <th id="thBase" class="has-tip">介入前</th>
-        <th id="thTriaid" class="has-tip">TRIAID 后</th>
-        <th id="thDelta" class="has-tip">增减</th>
+        <th id="thBase" class="has-tip">基线权重</th>
+        <th id="thTriaid" class="has-tip">TRIAID 权重</th>
+        <th id="thDelta" class="has-tip">权重变化</th>
         <th id="thWhy" class="has-tip">策略说明与选择原因</th>
       </tr></thead>
       <tbody id="strategyRows"></tbody>
@@ -717,10 +717,10 @@ const T={
   prospective:'A股前瞻对照实验',prospectiveDays:'已观察交易日',prospectiveHold:'最差池累计收益',prospectiveTriaid:'TRIAID冻结配置累计收益',prospectiveGap:'TRIAID相对最差池',
   prospectiveStrategy:'策略确定与冻结排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID冻结综合排序',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
   recoveryWave:'TRIAID 二阶恢复波段研究',recoveryCash:'目标现金权重',recoveryPrevDays:'上一轮后验交易日',recoveryPrevReturn:'上一轮冻结组合后验收益',recoveryPrevGap:'上一轮相对等权差值',
-  recoveryOpinion:'当前冻结研究配置意见',recoveryReview:'上一轮决策真实回顾',product:'产品',action:'研究意见',target:'目标权重',change:'本轮调整',drawdown:'252日回撤',direction:'状态方向',horizon:'首个正向历史窗口',speed:'历史收益优势速度/日',hitEdge:'恢复率优势×样本支持',expected:'历史相似状态平均前向收益',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
-  capitalSleeve:'四档人民币资金规模容量实验',capitalRealized:'上一轮四档资金袖套模拟执行回顾',recoveryReview:'上一轮冻结配置真实市场后验',capital:'起始资金',invested:'目标投入',participation:'最大目标仓位/ADV',days:'最少成交天数',cost:'模型往返成本代理',pnl:'模型波段净损益代理',netReturn:'模型波段净收益率代理',fill:'模拟成交比例',equity:'模拟当前净值',realizedPnl:'模拟净损益',realizedReturn:'模拟净收益率',executionCost:'累计模型执行成本',remaining:'未成交目标',
+  recoveryOpinion:'当前冻结研究配置意见',recoveryReview:'上一轮冻结配置真实市场后验',product:'产品',action:'研究意见',target:'目标权重',change:'本轮调整',drawdown:'252日回撤',direction:'状态方向',horizon:'首个正向历史窗口',speed:'历史收益优势速度/日',hitEdge:'恢复率优势×样本支持',expected:'历史相似状态平均前向收益',samples:'样本',resultDate:'结果日',portfolioDay:'冻结组合当日',equalDay:'等权对照当日',portfolioCum:'冻结组合累计',gapCum:'累计差值',
+  capitalSleeve:'四档人民币资金规模容量实验',capitalRealized:'上一轮四档资金袖套模拟执行回顾',capital:'起始资金',invested:'目标投入',participation:'最大目标仓位/ADV',days:'最少成交天数',cost:'模型往返成本代理',pnl:'模型波段净损益代理',netReturn:'模型波段净收益率代理',fill:'模拟成交比例',equity:'模拟当前净值',realizedPnl:'模拟净损益',realizedReturn:'模拟净收益率',executionCost:'累计模型执行成本',remaining:'未成交目标',
   strategies:'当前策略群与 TRIAID 调整',candidatePool:'查看未入选候选策略池',strategy:'策略',state:'状态',exp:'多周期年化收益估计',risk:'风险',
-  before:'介入前',after:'TRIAID 后',delta:'增减',why:'策略说明与选择原因',
+  before:'基线权重',after:'TRIAID 权重',delta:'权重变化',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已后验评价运行',negative:'负相对收益差比例',next:'下一步',
   noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续后验评价形成候选改进',
   noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即执行',runAll:'执行两个市场',
@@ -739,10 +739,10 @@ const T={
   prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
   prospectiveStrategy:'Strategy Determination and Frozen Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID frozen composite rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
   recoveryWave:'TRIAID Second-Order Recovery Wave Research',recoveryCash:'Target cash weight',recoveryPrevDays:'Prior posterior trading days',recoveryPrevReturn:'Prior frozen-portfolio posterior return',recoveryPrevGap:'Prior gap vs equal-weight control',
-  recoveryOpinion:'Current Frozen Research Allocation Opinion',recoveryReview:'Prior Decision Realized Review',product:'Product',action:'Research opinion',target:'Target weight',change:'This decision change',drawdown:'252-day drawdown',direction:'State direction',horizon:'First positive historical window',speed:'Historical return-edge/day',hitEdge:'Recovery-rate edge × support',expected:'Historical-analogue mean forward return',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
-  capitalSleeve:'Four-Tier CNY Capital Capacity Experiment',capitalRealized:'Prior Four-Sleeve Simulated Execution Review',recoveryReview:'Prior Frozen-Allocation Real-Market Posterior',capital:'Starting capital',invested:'Target invested',participation:'Max target notional / ADV',days:'Minimum execution days',cost:'Modeled round-trip cost proxy',pnl:'Modeled wave net P&L proxy',netReturn:'Modeled wave net-return proxy',fill:'Simulated fill ratio',equity:'Simulated current equity',realizedPnl:'Simulated net P&L',realizedReturn:'Simulated net return',executionCost:'Cumulative modeled execution cost',remaining:'Unfilled target',
+  recoveryOpinion:'Current Frozen Research Allocation Opinion',recoveryReview:'Prior Frozen-Allocation Real-Market Posterior',product:'Product',action:'Research opinion',target:'Target weight',change:'This decision change',drawdown:'252-day drawdown',direction:'State direction',horizon:'First positive historical window',speed:'Historical return-edge/day',hitEdge:'Recovery-rate edge × support',expected:'Historical-analogue mean forward return',samples:'Samples',resultDate:'Outcome date',portfolioDay:'Frozen portfolio day',equalDay:'Equal-weight day',portfolioCum:'Frozen portfolio cumulative',gapCum:'Cumulative gap',
+  capitalSleeve:'Four-Tier CNY Capital Capacity Experiment',capitalRealized:'Prior Four-Sleeve Simulated Execution Review',capital:'Starting capital',invested:'Target invested',participation:'Max target notional / ADV',days:'Minimum execution days',cost:'Modeled round-trip cost proxy',pnl:'Modeled wave net P&L proxy',netReturn:'Modeled wave net-return proxy',fill:'Simulated fill ratio',equity:'Simulated current equity',realizedPnl:'Simulated net P&L',realizedReturn:'Simulated net return',executionCost:'Cumulative modeled execution cost',remaining:'Unfilled target',
   strategies:'Current Strategy Group and TRIAID Adjustments',candidatePool:'View unselected candidate pool',strategy:'Strategy',state:'State',exp:'Multi-window annualized state estimate',risk:'Risk',
-  before:'Before',after:'After TRIAID',delta:'Change',why:'Strategy explanation and selection reason',
+  before:'Baseline weight',after:'TRIAID weight',delta:'Weight change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Posterior-evaluated runs',negative:'Negative relative-return-gap rate',next:'Next step',
   noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuous posterior evaluations',
   noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Now',runAll:'Run Both Markets',
@@ -755,11 +755,11 @@ const TIP={
   strategy:'策略名称和策略编号。当前策略群主表只显示真正获得配置权重的策略。',
   state:'策略生命周期：ACTIVE=正式参与配置；SHADOW=只做真实前瞻验证、不获得生产权重；REDUCED=降级观察；FROZEN=暂停；CANDIDATE=候选阶段。',
   exp:'基于当前时点可见的 21/63/126/252 日策略已实现净收益，分别按日均收益×252年化后加权得到的状态收益估计。它不是标的未来涨跌幅，也不是经过前瞻校准的未来收益预测。',
-  risk:'策略近期收益波动的年化值。数值越大，代表收益越不稳定；这里不是“亏损概率”。',
-  before:'Strategy Population 完成选群以后、TRIAID Core 尚未介入时的基础资金权重。',
-  after:'TRIAID Core 根据当前市场状态、策略风险与不确定性调整后的最终权重。',
-  delta:'TRIAID 后权重 − 介入前权重。正数表示 TRIAID 增配，负数表示减配。',
-  why:'说明这个策略做什么、为什么今天进入当前策略群，以及 TRIAID 为什么增配或减配。',
+  risk:'策略最近63个可用日收益的年化波动率，计算为总体标准差×√252；若不足63日则使用现有可用历史。数值越大表示收益路径越不稳定，不代表亏损概率。',
+  before:'Strategy Population 完成选群后冻结的基线目标权重，用作TRIAID权重调整的同一时点对照。',
+  after:'TRIAID Core 根据当前市场状态、策略风险与不确定性形成的冻结目标权重，不代表券商已成交持仓。',
+  delta:'TRIAID冻结目标权重 − 基线目标权重。正数表示相对基线增配，负数表示减配。',
+  why:'说明这个策略做什么、为什么在当前运行进入策略群，以及TRIAID为什么相对基线增配或减配。',
   candidateWhy:'说明候选策略的核心逻辑和适用市场。未入选策略不会获得当前正式配置权重。',
   active:'ACTIVE：已通过当前准入条件，可以正式参与策略群并获得生产权重。',
   shadow:'SHADOW：只记录真实未来表现进行前瞻验证，暂时不获得任何正式配置权重。',
@@ -773,11 +773,11 @@ const TIP={
   strategy:'Strategy name and ID. The main group table shows only strategies that actually receive allocation weight.',
   state:'Strategy lifecycle: ACTIVE=eligible for live allocation; SHADOW=prospective observation only with no live weight; REDUCED=degraded monitoring; FROZEN=paused; CANDIDATE=pre-admission.',
   exp:'A multi-window annualized state-return estimate built from realized 21/63/126/252-day strategy net returns, with each window annualized as mean daily return × 252 and then weighted. It is not a forecast of the underlying asset price move or a calibrated future-return prediction.',
-  risk:'Annualized volatility of recent strategy returns. Higher means less stable returns; it is not the probability of losing money.',
-  before:'Baseline capital weight assigned by Strategy Population before TRIAID Core intervenes.',
-  after:'Final weight after TRIAID Core adjusts for current market state, risk and uncertainty.',
-  delta:'After-TRIAID weight minus baseline weight. Positive means TRIAID adds allocation; negative means it reduces allocation.',
-  why:'Explains what the strategy does, why it entered the current group, and why TRIAID increased or reduced it.',
+  risk:'Annualized volatility of the latest 63 available strategy-return observations, computed as population standard deviation × √252; shorter available history is used when fewer than 63 observations exist. It is not loss probability.',
+  before:'Frozen baseline target weight assigned by Strategy Population at the same decision time, used as the control for TRIAID reweighting.',
+  after:'Frozen target weight after TRIAID Core adjusts for current market state, risk and uncertainty. It is not an executed broker position.',
+  delta:'Frozen TRIAID target weight minus baseline target weight. Positive means more allocation than baseline; negative means less.',
+  why:'Explains what the strategy does, why it entered the current run’s group, and why TRIAID increased or reduced it relative to baseline.',
   candidateWhy:'Explains the candidate strategy logic and suitable conditions. Unselected strategies receive no current live allocation.',
   active:'ACTIVE: eligible for the live strategy group and production allocation.',
   shadow:'SHADOW: prospectively tracked on real future data but receives no production allocation.',
@@ -1081,8 +1081,8 @@ function strategyMarketTip(strategyId,name){
    const chg=signedPct(a.last_trading_day_change);
    lines.push(
     lang==='zh'
-     ? assetName+' '+a.symbol+' · 持仓 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
-     : assetName+' '+a.symbol+' · weight '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
+     ? assetName+' '+a.symbol+' · 目标敞口 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
+     : assetName+' '+a.symbol+' · target exposure '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
    );
   });
  }
