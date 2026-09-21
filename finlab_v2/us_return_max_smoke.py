@@ -110,11 +110,16 @@ generic=TriaidDecision(
 
 route=USReturnMaxRoute()
 decision=route.decide(panel,group,generic,states,"OPEN")
-assert decision["route_version"]=="us-return-max-route@0.1.0"
+assert decision["route_version"]=="us-return-max-route@0.2.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
-assert decision["objective"].startswith("MAXIMIZE_CURRENT_ROBUST_EXPECTED_NET_RETURN")
-assert decision["selection_source"]=="EXISTING_STRATEGY_POPULATION_RETURN_FIRST_RESELECT"
-assert decision["target_strategy_weights"]==group.weights
+assert decision["objective"].startswith("STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN")
+assert decision["selection_source"]=="ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN"
+assert decision["strategy_selection_mode"]=="STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK"
+assert decision["selected_strategy_id"]=="P18_XMOM20"
+assert decision["max_return_tie_set"]==["P18_XMOM20"]
+assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
+assert decision["return_first_population_control_weights"]==group.weights
+assert abs(decision["return_first_population_projected_annualized_expected_net_return"]-0.2608)<1e-12
 assert decision["generic_core_control_weights"]==generic.weights_after
 assert decision["projected_annualized_expected_net_return"] > decision["generic_core_projected_annualized_expected_net_return"]
 assert set(decision["target_asset_weights"]).issubset(set(spec.assets))
@@ -167,8 +172,8 @@ assert o2["recorded"] is True
 
 review=ledger.review_decision(frozen)
 assert review["observation_days"]==2
-expected_route_day1=0.72*strategy_day1["P18_XMOM20"]+0.28*strategy_day1["P25_BALANCED"]
-expected_route_day2=0.72*strategy_day2["P18_XMOM20"]+0.28*strategy_day2["P25_BALANCED"]
+expected_route_day1=strategy_day1["P18_XMOM20"]
+expected_route_day2=strategy_day2["P18_XMOM20"]
 expected_route=(1.0+expected_route_day1)*(1.0+expected_route_day2)-1.0
 expected_generic_day1=0.40*strategy_day1["P18_XMOM20"]+0.30*strategy_day1["P25_BALANCED"]
 expected_generic_day2=0.40*strategy_day2["P18_XMOM20"]+0.30*strategy_day2["P25_BALANCED"]
@@ -193,7 +198,7 @@ assert small_real["total_execution_cost_usd"] < large_real["total_execution_cost
 integrity=ledger.verify_integrity()
 assert integrity["passed"] is True
 report=ledger.daily_report()
-assert report["route_version"]=="us-return-max-route@0.1.0"
+assert report["route_version"]=="us-return-max-route@0.2.0"
 assert report["integrity"]["passed"] is True
 
 print("TRIAID_US_RETURN_MAX_SMOKE_PASS")
