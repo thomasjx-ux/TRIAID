@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.1.0"
+    version="decision-scheduler@0.2.0"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -16,7 +16,16 @@ class DecisionScheduler:
         self.enabled=os.getenv("TRIAID_DECISION_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.state_name="decision_scheduler_state.json"
         self.events_name="decision_events.jsonl"
-        self.warmup_transitions=20
+        self.warmup_transitions=max(5,int(os.getenv("TRIAID_DECISION_WARMUP_TRANSITIONS","20")))
+        self.mad_multiplier=max(1.0,float(os.getenv("TRIAID_DECISION_MAD_MULTIPLIER","2.0")))
+        self.state_confirmations=max(2,int(os.getenv("TRIAID_DECISION_STATE_CONFIRMATIONS","3")))
+        self.min_recompute_seconds={
+            "REALTIME":max(0,int(os.getenv("TRIAID_DECISION_MIN_REALTIME_SECONDS","300"))),
+            "INTRADAY":max(0,int(os.getenv("TRIAID_DECISION_MIN_INTRADAY_SECONDS","600"))),
+        }
+        self.allocation_action_l1_threshold=max(
+            0.0,float(os.getenv("TRIAID_ALLOCATION_ACTION_L1_THRESHOLD","0.05"))
+        )
         self.state=self.store.load_json(self.state_name,default={}) or {}
         self.state.setdefault("markets",{})
         self._lock=RLock()
@@ -39,12 +48,35 @@ class DecisionScheduler:
                 "baseline_event_id":None,
                 "last_decision_source_ts":None,
                 "last_close_source_ts":None,
+                "last_close_signature":None,
+                "close_wait_signature":None,
                 "close_done":False,
                 "close_event_id":None,
                 "decision_count":0,
+                "allocation_action_count":0,
             }
             self.state["markets"][market]=raw
             self._save()
+        else:
+            defaults={
+                "baseline_done":False,
+                "baseline_event_id":None,
+                "last_decision_source_ts":None,
+                "last_close_source_ts":None,
+                "last_close_signature":None,
+                "close_wait_signature":None,
+                "close_done":False,
+                "close_event_id":None,
+                "decision_count":0,
+                "allocation_action_count":0,
+            }
+            changed=False
+            for key,value in defaults.items():
+                if key not in raw:
+                    raw[key]=value
+                    changed=True
+            if changed:
+                self._save()
         return raw
 
     def _save(self)->None:
@@ -94,6 +126,7 @@ class DecisionScheduler:
         if score<=0:
             return {
                 "trigger":False,
+                "urgent":False,
                 "reason":"NO_PRICE_CHANGE",
                 "score":score,
                 "prior_samples":0,
@@ -107,33 +140,68 @@ class DecisionScheduler:
         prior=rows[-200:]
         prior_scores=[self._score(r) for r in prior if self._score(r)>0]
 
+        current_state=self._transition_state(transition)
+        confirmations=self.state_confirmations
+        recent_states=[
+            self._transition_state(r)
+            for r in prior[-(confirmations-1):]
+        ] if confirmations>1 else []
+        persistent_current=bool(
+            len(recent_states)==confirmations-1
+            and all(s==current_state for s in recent_states)
+        )
+        previous_anchor=(
+            self._transition_state(prior[-confirmations])
+            if len(prior)>=confirmations
+            else None
+        )
+        confirmed_state_change=bool(
+            persistent_current
+            and previous_anchor is not None
+            and previous_anchor!=current_state
+        )
+
         if len(prior_scores)<self.warmup_transitions:
             return {
                 "trigger":True,
-                "reason":"WARMUP_HIGH_SENSITIVITY",
+                "urgent":False,
+                "reason":"WARMUP_CALIBRATION",
                 "score":score,
                 "prior_samples":len(prior_scores),
-                "threshold":0.0,
+                "threshold":None,
+                "state_confirmations":confirmations,
+                "confirmed_state_change":confirmed_state_change,
             }
 
         center=median(prior_scores)
         mad=median([abs(x-center) for x in prior_scores])
-        threshold=center+mad
-        previous=prior[-1] if prior else None
-        state_changed=bool(
-            previous
-            and self._transition_state(previous)!=self._transition_state(transition)
-        )
-        trigger=score>=threshold or state_changed
+        threshold=center+self.mad_multiplier*mad
+        urgent_threshold=center+4.0*mad
+        salient=score>=threshold
+        urgent=score>=urgent_threshold and score>center
+        trigger=salient or confirmed_state_change
         return {
             "trigger":trigger,
-            "reason":"ROBUST_SALIENCE_OR_STATE_CHANGE" if trigger else "BELOW_ADAPTIVE_SALIENCE",
+            "urgent":urgent,
+            "reason":(
+                "ROBUST_SALIENCE"
+                if salient
+                else (
+                    "CONFIRMED_STATE_CHANGE"
+                    if confirmed_state_change
+                    else "BELOW_ADAPTIVE_SALIENCE"
+                )
+            ),
             "score":score,
             "prior_samples":len(prior_scores),
             "median_score":center,
             "mad":mad,
+            "mad_multiplier":self.mad_multiplier,
             "threshold":threshold,
-            "state_changed":state_changed,
+            "urgent_threshold":urgent_threshold,
+            "state_confirmations":confirmations,
+            "confirmed_state_change":confirmed_state_change,
+            "transition_state":list(current_state),
         }
 
     def _ensure_baseline(self,market_id:str,phase:str)->dict|None:
@@ -173,61 +241,117 @@ class DecisionScheduler:
         return row
 
     def _transition_decision(self,market_id:str,mode:str,transition:dict)->dict|None:
-        market=market_id.upper()
+        market=market_id.upper();mode=mode.upper()
         state=self._market_state(market)
         source_ts=transition.get("source_latest_ts")
+        current_ts=None
+        last_ts=None
         try:
             current_ts=int(source_ts)
-            last_ts=state.get("last_decision_source_ts")
-            if last_ts is not None and current_ts<=int(last_ts):
+            last_raw=state.get("last_decision_source_ts")
+            last_ts=int(last_raw) if last_raw is not None else None
+            if last_ts is not None and current_ts<=last_ts:
                 return None
         except Exception:
             if source_ts==state.get("last_decision_source_ts"):
                 return None
 
         assessment=self.assess_transition(market,mode,transition)
+        min_interval=int(self.min_recompute_seconds.get(mode,0))
+        if (
+            assessment.get("trigger")
+            and not assessment.get("urgent")
+            and current_ts is not None
+            and last_ts is not None
+            and current_ts-last_ts<min_interval
+        ):
+            assessment={
+                **assessment,
+                "trigger":False,
+                "reason":"MIN_RECOMPUTE_INTERVAL",
+                "elapsed_since_last_decision_seconds":current_ts-last_ts,
+                "min_recompute_seconds":min_interval,
+            }
+
         if not assessment["trigger"]:
             self._event(market,"TRANSITION_SKIPPED",{
                 "phase":"OPEN",
-                "mode":mode.upper(),
+                "mode":mode,
                 "source_latest_ts":source_ts,
                 "assessment":assessment,
             })
             return None
 
         result=self.engine.recompute_transition_research(market,transition,mode)
+        l1=max(0.0,float(result.get("weight_change_l1_vs_reference") or 0.0))
+        allocation_change_recommended=bool(l1>=self.allocation_action_l1_threshold)
+        result={
+            **result,
+            "decision_layer":(
+                "ALLOCATION_ACTION_CANDIDATE"
+                if allocation_change_recommended
+                else "STATE_ONLY_RECOMPUTE"
+            ),
+            "allocation_change_recommended":allocation_change_recommended,
+            "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
+            "broker_order_generated":False,
+        }
         row=self._event(market,"TRANSITION_RESEARCH_DECISION",{
             "phase":"OPEN",
-            "mode":mode.upper(),
+            "mode":mode,
             "source_latest_ts":source_ts,
             "assessment":assessment,
             "decision":result,
         })
         state["last_decision_source_ts"]=source_ts
         state["decision_count"]=int(state.get("decision_count",0))+1
+        if allocation_change_recommended:
+            state["allocation_action_count"]=int(state.get("allocation_action_count",0))+1
         self._save()
         return row
 
-    def _close(self,market_id:str,snapshot:dict)->dict|None:
+    def _close(self,market_id:str,snapshot:dict,observed:dict)->dict|None:
         market=market_id.upper()
         state=self._market_state(market)
         if state.get("close_done"):
             return None
+
         source_ts=snapshot.get("source_latest_ts")
-        if source_ts==state.get("last_close_source_ts"):
-            return None
+        signature=self.engine.observations.snapshot_signature(snapshot)
+        recorded=bool((observed or {}).get("recorded"))
+        if not recorded:
+            if state.get("close_wait_signature")==signature:
+                return None
+            row=self._event(market,"CLOSE_WAITING_FOR_NEW_DAILY_DATA",{
+                "phase":"POSTCLOSE",
+                "source_latest_ts":source_ts,
+                "snapshot_signature":signature,
+                "observation_reason":(observed or {}).get("reason"),
+            })
+            state["last_close_source_ts"]=source_ts
+            state["close_wait_signature"]=signature
+            self._save()
+            return row
 
         run=self.engine.run_live_research(market)
-        event_type="CLOSE_FINAL" if run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"} else "CLOSE_WAITING_FOR_NEW_DAILY_DATA"
+        event_type=(
+            "CLOSE_FINAL"
+            if run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+            else "CLOSE_WAITING_FOR_NEW_DAILY_DATA"
+        )
         row=self._event(market,event_type,{
             "phase":"POSTCLOSE",
             "source_latest_ts":source_ts,
+            "snapshot_signature":signature,
+            "observation_content_revision":bool((observed or {}).get("content_revision")),
             "run_id":run.run_id,
             "run_status":run.status,
             "snapshot_id":run.market.snapshot_id,
         })
         state["last_close_source_ts"]=source_ts
-        if run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}:
+        state["last_close_signature"]=signature
+        state["close_wait_signature"]=None if event_type=="CLOSE_FINAL" else signature
+        if event_type=="CLOSE_FINAL":
             state["close_done"]=True
             state["close_event_id"]=row["event_id"]
         self._save()
@@ -261,7 +385,7 @@ class DecisionScheduler:
                 }
 
             if phase=="POSTCLOSE" and mode=="DAILY":
-                event=self._close(market,snapshot)
+                event=self._close(market,snapshot,observed)
                 return {
                     "enabled":True,
                     "action":"CLOSE_EVALUATED",
@@ -274,8 +398,12 @@ class DecisionScheduler:
         return {
             "version":self.version,
             "enabled":self.enabled,
-            "discipline":"PREOPEN_BASELINE_THEN_ADAPTIVE_TRANSITION_RESEARCH_THEN_CLOSE_FINAL_NO_BROKER_EXECUTION",
+            "discipline":"OBSERVE_HIGH_FREQUENCY_RECOMPUTE_WITH_HYSTERESIS_ONLY_RECOMMEND_ALLOCATION_ABOVE_THRESHOLD_CLOSE_ON_NEW_FINAL_DAILY_CONTENT_NO_BROKER_EXECUTION",
             "warmup_transitions":self.warmup_transitions,
+            "mad_multiplier":self.mad_multiplier,
+            "state_confirmations":self.state_confirmations,
+            "min_recompute_seconds":dict(self.min_recompute_seconds),
+            "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
             "markets":{
                 market:self._market_state(market)
                 for market in ("US","CN")
