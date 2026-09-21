@@ -83,7 +83,7 @@ class ProviderPanel:
 
 class YahooChartProvider:
     name="yahoo-chart"
-    version="yahoo-chart@0.2.0"
+    version="yahoo-chart@0.3.0"
 
     @staticmethod
     def _finite(x)->bool:
@@ -127,7 +127,9 @@ class YahooChartProvider:
         indicators=result.get("indicators") or {}
         quote=(indicators.get("quote") or [{}])[0]
         adj=(indicators.get("adjclose") or [{}])[0].get("adjclose")
-        close=adj if adj and len(adj)==len(ts) else (quote.get("close") or [])
+        raw_close=quote.get("close") or []
+        use_adjusted=bool(adj and len(adj)==len(ts))
+        close=adj if use_adjusted else raw_close
         volume=quote.get("volume") or []
 
         rows=[]
@@ -136,6 +138,13 @@ class YahooChartProvider:
                 continue
             vol=volume[i] if i<len(volume) else 0.0
             vol=float(vol) if vol is not None and self._finite(vol) and vol>=0 else 0.0
+            # Strategy history uses adjusted prices. Rescale volume so
+            # adjusted_price * adjusted_volume preserves raw traded notional.
+            # This prevents split/dividend adjustment from corrupting ADV/capacity.
+            if use_adjusted and i<len(raw_close):
+                raw_px=raw_close[i]
+                if raw_px is not None and self._finite(raw_px) and raw_px>0:
+                    vol*=float(raw_px)/float(price)
             rows.append((int(stamp),float(price),vol))
 
         if len(rows)<min_points:
