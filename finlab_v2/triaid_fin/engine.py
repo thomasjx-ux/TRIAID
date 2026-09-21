@@ -11,6 +11,7 @@ from .evaluation import EvaluationModule
 from .evolution import EvolutionModule
 from .market_lab import market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data
 from .population_state import PopulationStateTracker
+from .prospective_experiment import ProspectiveExperimentProtocol
 from .observation import MarketObservationStore
 from .review import ReviewModule
 from .store import RunStore
@@ -36,6 +37,7 @@ class EvolutionLabEngine:
         self.evaluation=EvaluationModule()
         self.audit=AuditModule()
         self.review=ReviewModule()
+        self.prospective_experiment=ProspectiveExperimentProtocol(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._recover_stale_runs()
@@ -77,6 +79,7 @@ class EvolutionLabEngine:
             "evaluation":self.evaluation.version if hasattr(self,"evaluation") else "evaluation@0.2.0",
             "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
             "review":self.review.version if hasattr(self,"review") else "review@0.2.0",
+            "prospective_experiment":self.prospective_experiment.version if hasattr(self,"prospective_experiment") else "cn-prospective-controls@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
         }
@@ -121,6 +124,14 @@ class EvolutionLabEngine:
     def execute(self,run_id:str,request:RunRequest)->None:
         try:
             previous_group=self._previous_group_for(request.market.market_id,run_id)
+            previous_state_rows=[
+                r for r in self.all_runs()
+                if r.run_id!=run_id
+                and r.market.market_id.upper()==request.market.market_id.upper()
+                and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
+                and r.strategy_states
+            ]
+            previous_states=previous_state_rows[-1].strategy_states if previous_state_rows else []
             group=self.strategy_population.select(
                 request.market.market_id,
                 request.strategy_states,
@@ -141,6 +152,26 @@ class EvolutionLabEngine:
                 for sid,w in decision.weights_after.items()
                 if sid=="P28_CASH" or sid in state_map
             )
+            prospective=None
+            if (
+                request.market.market_id.upper()=="CN"
+                and str(request.market.metadata.get("experiment_mode") or "").upper()=="CN_WORST_POOL_RESCUE"
+                and bool(group.diagnostics.get("experiment_available",True))
+            ):
+                profile=self.strategy_evolution.active("CN")
+                prospective=self.prospective_experiment.register(
+                    run_id=run_id,
+                    market=request.market,
+                    group=group,
+                    states=request.strategy_states,
+                    decision=decision,
+                    horizons=(
+                        int(profile.exit_confirm_days),
+                        int(profile.entry_confirm_days),
+                        int(profile.cooldown_days),
+                    ),
+                    previous_states=previous_states,
+                )
             with self._lock:
                 run=self._runs[run_id]
                 run.market=request.market
@@ -156,6 +187,12 @@ class EvolutionLabEngine:
                     "projected_triaid_expected_return":projected_after,
                     "projected_excess_expected_return":projected_after-projected_baseline,
                     "realized_outcome_pending":True,
+                    "prospective_experiment_id":prospective.get("experiment_id") if prospective else None,
+                    "prospective_protocol_version":prospective.get("protocol_version") if prospective else None,
+                    "prospective_horizons_trading_days":(
+                        prospective.get("design",{}).get("horizons_trading_days") if prospective else None
+                    ),
+                    "prospective_primary_evidence":"FUTURE_RANKING_ACCURACY_NOT_CASH_REDUCTION" if prospective else None,
                 }
                 run.audit=self.audit.audit(run)
                 run.status="DECISION_READY_AWAITING_OUTCOME" if run.audit.passed else "FAILED"
@@ -242,6 +279,12 @@ class EvolutionLabEngine:
                 prepared["previous_as_of"],
                 prepared["realized_returns_from_previous_period"],
             )
+            prospective_observation=None
+            if market_id=="CN":
+                prospective_observation=self.prospective_experiment.observe_period(
+                    prepared["previous_as_of"],
+                    prepared["realized_returns_from_previous_period"],
+                )
             states=self.population_state.apply(
                 market_id,
                 prepared["strategy_states"],
@@ -263,6 +306,18 @@ class EvolutionLabEngine:
                 run.status="FAILED"
                 run.diagnostic_summary={"error":f"{type(exc).__name__}:{exc}"}
                 self.store.save_run(run)
+
+    def prospective_experiment_status(self)->dict:
+        return self.prospective_experiment.status()
+
+    def prospective_experiments(self,limit:int=100)->list[dict]:
+        return self.prospective_experiment.list(limit)
+
+    def latest_prospective_experiment(self)->dict|None:
+        return self.prospective_experiment.latest()
+
+    def prospective_experiment_detail(self,experiment_id:str)->dict:
+        return self.prospective_experiment.get(experiment_id)
 
     def latest_decision_run(self,market_id:str)->RunRecord|None:
         market_id=market_id.upper()
