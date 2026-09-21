@@ -12,6 +12,7 @@ from .alpha_evidence import AlphaEvidenceLedger
 from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
+from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .population_state import PopulationStateTracker
@@ -142,6 +143,7 @@ class EvolutionLabEngine:
             "us_return_max_ledger":self.us_return_max_ledger.version if hasattr(self,"us_return_max_ledger") else "us-return-max-ledger@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
+            "execution_calibration":ExecutionCalibration.version,
         }
 
     def create_run(self,request:RunRequest,run_id:str|None=None)->RunRecord:
@@ -658,6 +660,9 @@ class EvolutionLabEngine:
 
     def alpha_evidence_rows(self,market_id:str|None=None,limit:int=200)->list[dict]:
         return self.alpha_evidence.rows(market_id,limit)
+
+    def execution_calibration_status(self)->dict:
+        return ExecutionCalibration.status(self.us_return_max_ledger,self.recovery_wave_ledger)
 
     def recovery_wave_status(self,market_id:str|None=None)->dict:
         return self.recovery_wave_ledger.status(market_id)
