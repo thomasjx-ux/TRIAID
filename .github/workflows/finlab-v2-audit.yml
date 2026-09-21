@@ -46,3 +46,4 @@ jobs:
           python core_evolution_validation_smoke.py
           python strategy_evolution_validation_smoke.py
           python ui_smoke.py
+          python production_smoke_contract_static.py
