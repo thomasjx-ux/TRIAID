@@ -70,17 +70,30 @@ class TencentCNMarketDataProvider:
             timeout,
         )
         node=(payload.get("data") or {}).get(code) or {}
-        rows=node.get("qfqday") or node.get("day") or []
+        qfq_rows=node.get("qfqday") or []
+        raw_rows=node.get("day") or []
+        rows=qfq_rows or raw_rows
+        raw_close_by_day={
+            str(x[0]):float(x[2])
+            for x in raw_rows
+            if isinstance(x,list) and len(x)>=3
+            and str(x[2]).strip()
+        }
         parsed=[]
         for raw in rows:
             if not isinstance(raw,list) or len(raw)<6:
                 continue
             try:
                 price=float(raw[2]);vol=float(raw[5] or 0.0)
+                raw_price=float(raw_close_by_day.get(str(raw[0]),price))
                 stamp=self._daily_ts(str(raw[0]))
             except Exception:
                 continue
             if price>0 and math.isfinite(price):
+                # QFQ keeps returns on an adjusted current-price scale. Adjust
+                # volume inversely so price*volume remains raw traded notional.
+                if qfq_rows and raw_price>0 and math.isfinite(raw_price):
+                    vol*=raw_price/price
                 parsed.append((stamp,price,max(0.0,vol)))
         if len(parsed)<min_points:
             raise TencentCNDataError(f"insufficient_daily:{symbol}:{len(parsed)}<{min_points}")
