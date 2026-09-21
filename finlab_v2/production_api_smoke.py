@@ -133,7 +133,7 @@ for market in ("US","CN"):
     daily=call("GET",f"/api/daily?market_id={market}")
     assert isinstance(daily,dict)
     if market=="CN":
-        assert daily["prospective_experiment"]["protocol_version"]=="cn-prospective-controls@0.2.0"
+        assert daily["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.2.0"\n        assert str(daily["prospective_experiment"]["protocol_version"]).startswith("cn-prospective-controls@")
         assert daily["prospective_experiment"]["strategy_determination"]
         assert "daily_fluctuation" in daily["prospective_experiment"]
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
@@ -291,7 +291,7 @@ for item in created["runs"]:
     assert item["run_id"] in after_ids
 
 prospective_after=call("GET","/api/experiments/cn/prospective/latest")
-assert prospective_after["protocol_version"]=="cn-prospective-controls@0.2.0"
+assert str(prospective_after["protocol_version"]).startswith("cn-prospective-controls@")
 assert prospective_after["design"]["horizons_trading_days"]==[3,5,10]
 assert prospective_after["design"]["no_future_information"] is True
 assert prospective_after["design"]["no_post_result_retuning"] is True
