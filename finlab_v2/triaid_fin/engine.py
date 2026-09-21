@@ -298,7 +298,15 @@ class EvolutionLabEngine:
                     )
                 existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
                 if existing_recovery is None:
-                    previous_recovery=self.recovery_wave_ledger.latest(market_id)
+                    if daily_bar_complete:
+                        prior_frozen=[
+                            row for row in self.recovery_wave_ledger.decisions(market_id,1000)
+                            if str(row.get("decision_status") or "")=="DAILY_FROZEN"
+                            and str(row.get("market_as_of") or "")<str(snapshot.as_of)
+                        ]
+                        previous_recovery=prior_frozen[-1] if prior_frozen else None
+                    else:
+                        previous_recovery=self.recovery_wave_ledger.latest(market_id)
                     proposed_recovery=self.recovery_wave_core.decide(
                         prepared["panel"],
                         snapshot.regime,
