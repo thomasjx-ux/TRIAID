@@ -39,6 +39,9 @@ class FakeEngine:
     def record_market_observation(self, snapshot: dict) -> dict:
         return {"recorded": True, "reason": "RECORDED"}
 
+    def market_data_status(self) -> dict:
+        return {"provider": "fake", "ok": True}
+
 
 def main() -> None:
     original_session_phase = market_runtime.session_phase
