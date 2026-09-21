@@ -35,6 +35,12 @@ assert 'id="commandLog"' in html
 assert "refreshLiveWindows" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
+assert "/api/market-data/strategy-context/" in html
+assert "strategyMarketTip" in html
+assert "strategyLabelHtml" in html
+assert "market-tip-icon" in html
+assert "data-strategy-id=" in html
+assert "last trading day" in html
 assert "CN_WORST_POOL_RESCUE" in html
 assert 'id="prospectivePanel"' in html
 assert 'id="prospectiveStrategyRows"' in html
