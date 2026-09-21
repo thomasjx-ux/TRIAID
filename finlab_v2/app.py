@@ -157,6 +157,9 @@ def list_runs(market_id: str | None = None, limit: int = Query(default=100, ge=1
             "status": r.status,
             "core_version": r.triaid_decision.core_version if r.triaid_decision else None,
             "experiment_mode": r.market.metadata.get("experiment_mode"),
+            "run_scope":r.market.metadata.get("run_scope","OFFICIAL_EVIDENCE"),
+            "evidence_eligible":r.market.metadata.get("evidence_eligible") is not False,
+            "persistent_record":engine._evidence_eligible_run(r),
             "diagnostic_summary": r.diagnostic_summary,
             "evaluation": r.evaluation.model_dump() if r.evaluation else None,
         }
