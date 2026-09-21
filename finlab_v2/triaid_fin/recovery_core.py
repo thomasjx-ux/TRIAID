@@ -305,8 +305,12 @@ class RecoveryWaveCore:
             token in str(regime or "").lower()
             for token in ("risk_off","stress","bear","shock","high_vol")
         )
-        risk_budget=float(self.params.risk_off_multiplier) if risk_off else 1.0
-        targets=_normalize_budget_capped(raw_scores,risk_budget,self.per_product_cap)
+        base_risk_budget=float(self.params.risk_off_multiplier) if risk_off else 1.0
+        # Certainty must govern both selection and total capital at risk.
+        # This avoids converting a weak but positive rank signal into a full risk budget.
+        evidence_strength=max(certainty_values.values()) if certainty_values else 0.0
+        effective_risk_budget=base_risk_budget*max(0.0,min(1.0,evidence_strength))
+        targets=_normalize_budget_capped(raw_scores,effective_risk_budget,self.per_product_cap)
         prev_targets={
             str(x.get("symbol")):float(x.get("target_weight") or 0.0)
             for x in (previous_decision or {}).get("trade_opinions",[])
@@ -401,10 +405,14 @@ class RecoveryWaveCore:
                 "horizons_trading_days":list(self.horizons),
                 "analog_count_max":self.analog_count,
                 "analog_min_separation_days":self.analog_min_separation_days,
-                "allocation":"certainty-first normalized recovery evidence; existing TRIAID risk-off multiplier; 28% per-product cap",
+                "allocation":"certainty-first allocation: total capital at risk is scaled by strongest prospective recovery evidence, then distributed by cross-product recovery score; existing TRIAID risk-off multiplier is an upper bound; 28% per-product cap",
             },
             "first_order_states":first_order,
             "second_order":{
+                "capital_discipline":"TOTAL_RISK_BUDGET_SCALED_BY_STRONGEST_PROSPECTIVE_RECOVERY_EVIDENCE",
+                "base_risk_budget":base_risk_budget,
+                "evidence_strength":evidence_strength,
+                "effective_risk_budget":effective_risk_budget,
                 "opportunity_ranking":[
                     {
                         "symbol":s,
@@ -417,7 +425,7 @@ class RecoveryWaveCore:
                     }
                     for s in sorted(risk_assets,key=lambda x:(opportunity_rank[x],x))
                 ],
-                "risk_budget":risk_budget,
+                "risk_budget":effective_risk_budget,
                 "risk_off_detected":risk_off,
             },
             "trade_opinions":opinions,
