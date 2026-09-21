@@ -40,6 +40,19 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     def market_data_providers_api()->dict:
         return engine.market_data_provider_status()
 
+    @router.get("/live-indicators/{market_id}")
+    def market_data_live_indicators_api(market_id:str)->dict:
+        key=_market(market_id)
+        return automation.live_indicators(key)
+
+    @router.get("/activity/{market_id}")
+    def market_data_activity_api(
+        market_id:str,
+        limit:int=Query(default=80,ge=1,le=500),
+    )->dict:
+        key=_market(market_id)
+        return automation.activity(key,limit)
+
     @router.get("/products")
     def market_data_products_api(market_id:str|None=None)->dict:
         key=_market(market_id) if market_id else None
