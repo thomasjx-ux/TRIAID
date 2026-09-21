@@ -126,6 +126,8 @@ assert decision["selected_strategy_id"]=="P18_XMOM20"
 assert decision["fast_challenger"]["shadow_only"] is True
 assert decision["fast_challenger"]["applied_to_weights"] is False
 assert decision["fast_challenger"]["windows_days"]==[1,3,5]
+assert "pilot_execution_check" in decision["fast_challenger"]
+assert decision["fast_challenger"]["pilot_execution_check"]["pilot_max_risk_budget"]==0.10
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
 assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
 assert decision["return_first_population_control_weights"]==group.weights
