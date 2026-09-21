@@ -67,6 +67,12 @@ assert health["decision_automation_enabled"] is True
 assert health["broker_execution_enabled"] is False
 assert health["official_trading_calendar_version"]=="official-trading-calendar@0.2.0"
 assert health["calendar_sync_version"]=="official-trading-calendar-sync@0.1.1"
+expected_revision=(
+    os.getenv("TRIAID_DEPLOY_REVISION","").strip()
+    or os.getenv("TRIAID_DEPLOY_REV","").strip()
+)
+if expected_revision:
+    assert health["deployment"]["source_revision"]==expected_revision
 
 openapi=call("GET","/openapi.json")
 paths=set(openapi.get("paths") or {})
@@ -115,6 +121,9 @@ assert "TRIAID FIN" in home and "TRIAID 相对收益差" in home
 
 status=call("GET","/api/status")
 assert status["architecture_version"].startswith("fin-evolution-lab@")
+if expected_revision:
+    assert status["deployment"]["source_revision"]==expected_revision
+    assert status["deployment"]==health["deployment"]
 assert status["strategy_registry_count"]==33
 assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.3.0"
 assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.2.0"
