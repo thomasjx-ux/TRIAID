@@ -207,7 +207,8 @@ class CapitalCapacityLayer:
             "experiment_design":"Four cash-start sleeves share one frozen signal and target weights; only starting capital differs.",
             "capital_sleeves_cny":[int(x) for x in self.sleeves],
             "execution_discipline":"FUTURE_REALIZED_FILLS_USE_OBSERVED_DAILY_TURNOVER_AND_BECOME_RETURN_ACTIVE_NEXT_COMPLETE_BAR",
-            "expected_model_scope":"EXPECTED COST/CAPACITY ONLY; REALIZED DAILY REVIEW IS SEPARATE",
+            "fill_semantics":"SIMULATED_NOT_BROKER_FILLS; future observed real turnover constrains modeled fill capacity",
+            "expected_model_scope":"HISTORICAL-ANALOGUE RETURN PROXY PLUS MODELED COST/CAPACITY; MULTI-DAY ENTRY TIMING DELAY IS NOT DEDUCTED FROM THE PRE-DECISION PROXY; POSTERIOR DAILY REVIEW IS SEPARATE",
             "model":params,
             "adv20_notional_by_symbol_cny":adv_by_symbol,
             "sleeves":rows,
@@ -339,5 +340,6 @@ class CapitalCapacityLayer:
             "version":cls.version,
             "experiment_version":cls.experiment_version,
             "review_discipline":"FILLS_USE_ONLY_FUTURE_OBSERVED_TURNOVER; FILLS_BECOME RETURN-ACTIVE ON THE FOLLOWING COMPLETE BAR",
+            "fill_semantics":"SIMULATED_NOT_BROKER_FILLS",
             "sleeves":result_sleeves,
         }
