@@ -549,27 +549,29 @@ class MarketDataHub:
                 f"all_providers_failed:{market}:{mode}:{' | '.join(attempt_errors)}"
             )
 
-        # For realtime research, provider success alone is not enough: a recovered
-        # primary may still lag a fresher fallback. Choose the freshest successful
-        # source and never allow the cached source timestamp to move backwards.
-        # For slower modes, preserve route priority unless the primary regresses.
-        if mode=="REALTIME":
-            provider_index,panel=max(
-                candidates,
-                key=lambda item:(int(item[1].source_latest_ts),-int(item[0])),
-            )
-        else:
-            provider_index,panel=candidates[0]
+        def freshness_key(p:ProviderPanel):
+            if mode=="DAILY":
+                tz=ZoneInfo("America/New_York" if market=="US" else "Asia/Shanghai")
+                return datetime.fromtimestamp(int(p.source_latest_ts),tz).date().toordinal()
+            return int(p.source_latest_ts)
 
-        if cached is not None and int(panel.source_latest_ts)<int(cached.source_latest_ts):
+        # Provider success alone is not enough. A recovered primary can lag a
+        # fresher fallback. DAILY compares local trading dates so provider-specific
+        # timestamp conventions on the same session do not create false freshness.
+        best_freshness=max(freshness_key(item[1]) for item in candidates)
+        freshest=[item for item in candidates if freshness_key(item[1])==best_freshness]
+        provider_index,panel=min(freshest,key=lambda item:int(item[0]))
+
+        if cached is not None and freshness_key(panel)<freshness_key(cached):
             fresher=[
                 item for item in candidates
-                if int(item[1].source_latest_ts)>=int(cached.source_latest_ts)
+                if freshness_key(item[1])>=freshness_key(cached)
             ]
             if fresher:
-                provider_index,panel=max(
-                    fresher,
-                    key=lambda item:(int(item[1].source_latest_ts),-int(item[0])),
+                best=max(freshness_key(item[1]) for item in fresher)
+                provider_index,panel=min(
+                    [item for item in fresher if freshness_key(item[1])==best],
+                    key=lambda item:int(item[0]),
                 )
             else:
                 with self._lock:
