@@ -167,7 +167,16 @@ assert o2["recorded"] is True
 
 review=ledger.review_decision(frozen)
 assert review["observation_days"]==2
-assert review["current_return_max_theoretical_return"] > review["current_spy_buy_hold_return"]
+expected_route_day1=0.72*strategy_day1["P18_XMOM20"]+0.28*strategy_day1["P25_BALANCED"]
+expected_route_day2=0.72*strategy_day2["P18_XMOM20"]+0.28*strategy_day2["P25_BALANCED"]
+expected_route=(1.0+expected_route_day1)*(1.0+expected_route_day2)-1.0
+expected_generic_day1=0.40*strategy_day1["P18_XMOM20"]+0.30*strategy_day1["P25_BALANCED"]
+expected_generic_day2=0.40*strategy_day2["P18_XMOM20"]+0.30*strategy_day2["P25_BALANCED"]
+expected_generic=(1.0+expected_generic_day1)*(1.0+expected_generic_day2)-1.0
+expected_spy=(1.0+product_day1["SPY"])*(1.0+product_day2["SPY"])-1.0
+assert abs(review["current_return_max_theoretical_return"]-expected_route)<1e-12
+assert abs(review["current_generic_core_theoretical_return"]-expected_generic)<1e-12
+assert abs(review["current_spy_buy_hold_return"]-expected_spy)<1e-12
 assert review["capital_sleeves"]["review_discipline"].startswith("FILLS_USE_ONLY_FUTURE_OBSERVED_TURNOVER")
 real={x["sleeve_id"]:x for x in review["capital_sleeves"]["sleeves"]}
 small_real=real["USD_100000"]
