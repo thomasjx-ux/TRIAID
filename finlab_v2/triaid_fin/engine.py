@@ -26,7 +26,7 @@ from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.9.0"
+    architecture_version = "fin-evolution-lab@0.10.0"
     market_adapter_version = "market-lab@0.3.0"
 
     def __init__(self) -> None:
@@ -90,6 +90,7 @@ class EvolutionLabEngine:
             "prospective_experiment":self.prospective_experiment.version if hasattr(self,"prospective_experiment") else "cn-prospective-controls@unknown",
             "recovery_wave_core":self.recovery_wave_core.version if hasattr(self,"recovery_wave_core") else "recovery-wave-core@unknown",
             "recovery_wave_ledger":self.recovery_wave_ledger.version if hasattr(self,"recovery_wave_ledger") else "recovery-wave-ledger@unknown",
+            "capital_capacity":self.recovery_wave_core.capital_capacity.version if hasattr(self,"recovery_wave_core") else "capital-capacity-layer@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
         }
@@ -273,6 +274,7 @@ class EvolutionLabEngine:
                     prepared["previous_as_of"],
                     prepared.get("product_realized_returns_from_previous_period") or {},
                     snapshot.snapshot_id,
+                    prepared.get("product_turnover_notional_from_previous_period") or {},
                 )
             existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
             if existing_recovery is None:
