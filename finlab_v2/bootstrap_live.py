@@ -2,13 +2,30 @@ from triaid_fin.engine import EvolutionLabEngine
 
 engine=EvolutionLabEngine()
 for market_id in ("US","CN"):
-    if engine.latest_run(market_id) is None:
+    existing=engine.latest_run(market_id)
+    needs_recovery_bootstrap=(
+        market_id=="CN"
+        and engine.latest_recovery_wave_decision("CN") is None
+    )
+    if existing is None or needs_recovery_bootstrap:
         run=engine.create_pending_live_run(market_id)
         engine.execute_live(run.run_id,market_id)
         result=engine.get_run(run.run_id)
     else:
-        result=engine.latest_run(market_id)
+        result=existing
     print("TRIAID_FIN_V2_BOOTSTRAP",market_id,result.status,result.market.as_of,result.market.snapshot_id)
+    if market_id=="CN":
+        recovery=engine.latest_recovery_wave_decision("CN")
+        print(
+            "TRIAID_RECOVERY_WAVE_BOOTSTRAP",
+            recovery.get("decision_id") if recovery else None,
+            recovery.get("decision_status") if recovery else None,
+            recovery.get("market_as_of") if recovery else None,
+            bool(recovery and recovery.get("decision_hash")),
+        )
+        assert recovery is not None
+        assert recovery.get("decision_hash")
+        assert recovery.get("core_version")=="recovery-wave-core@0.1.0"
     if result.strategy_group:
         state_map={s.strategy_id:s for s in result.strategy_states}
         rows=[]
