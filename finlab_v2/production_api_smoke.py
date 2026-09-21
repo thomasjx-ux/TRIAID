@@ -74,6 +74,7 @@ expected_paths={
     "/api/experiments/cn/prospective",
     "/api/experiments/cn/prospective/latest",
     "/api/experiments/cn/prospective/{experiment_id}",
+    "/api/recovery-wave/status","/api/recovery-wave/latest","/api/recovery-wave/history",
     "/api/strategies","/api/strategy-population/rules/{market_id}",
     "/api/population-state/{market_id}","/api/evolution",
     "/api/evolution/propose","/api/evolution/promote/{version}",
@@ -108,6 +109,8 @@ assert "TRIAID FIN" in home and "TRIAID 增益" in home
 status=call("GET","/api/status")
 assert status["architecture_version"].startswith("fin-evolution-lab@")
 assert status["strategy_registry_count"]==33
+assert status["module_manifest"]["recovery_wave_core"]=="recovery-wave-core@0.1.0"
+assert status["module_manifest"]["recovery_wave_ledger"]=="recovery-wave-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
 assert storage["backend"]["backend"]=="supabase"
@@ -124,6 +127,19 @@ if prospective_rows:
     prospective_detail=call("GET",f"/api/experiments/cn/prospective/{prospective_latest['experiment_id']}")
     assert prospective_detail["experiment_id"]==prospective_latest["experiment_id"]
 
+recovery_status=call("GET","/api/recovery-wave/status?market_id=CN")
+assert recovery_status["version"]=="recovery-wave-ledger@0.1.0"
+assert recovery_status["integrity"]["passed"] is True
+recovery_history=call("GET","/api/recovery-wave/history?market_id=CN&limit=5")
+assert isinstance(recovery_history,list)
+if recovery_history:
+    recovery_latest=call("GET","/api/recovery-wave/latest?market_id=CN")
+    assert recovery_latest["decision_id"]==recovery_history[-1]["decision_id"]
+    assert recovery_latest["core_version"]=="recovery-wave-core@0.1.0"
+    assert recovery_latest["data_scope"]["constituent_micro_available"] is False
+    assert recovery_latest["execution_discipline"]["same_bar_execution_allowed"] is False
+    assert recovery_latest["trade_opinions"]
+
 runs_before=call("GET","/api/runs?limit=20")
 assert isinstance(runs_before,list)
 
@@ -138,6 +154,10 @@ for market in ("US","CN"):
         assert daily["prospective_experiment"]["strategy_determination"]
         assert "daily_fluctuation" in daily["prospective_experiment"]
         assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
+        assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.1.0"
+        assert daily["recovery_wave"]["integrity"]["passed"] is True
+        assert daily["recovery_wave"]["latest_decision"]["core_version"]=="recovery-wave-core@0.1.0"
+        assert daily["recovery_wave"]["latest_decision"]["trade_opinions"]
     curves=call("GET",f"/api/curves?market_id={market}")
     assert isinstance(curves,list)
     cards=call("GET",f"/api/strategies?market_id={market}&lang=zh")
