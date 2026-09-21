@@ -100,6 +100,8 @@ Production uses the Supabase storage backend and persists official runs, observa
 
 Manual previews are deliberately excluded from both production and file persistence so operator clicks cannot contaminate the official research evidence history.
 
+Deployment/bootstrap validation follows the same rule. `bootstrap_live.py` refuses non-file storage by default because bootstrap can create official evidence. Railway deployment preflight runs bootstrap against an isolated temporary file backend; writing bootstrap output to persistent production storage requires an explicit one-time migration override.
+
 
 ## Observation and transition research
 
