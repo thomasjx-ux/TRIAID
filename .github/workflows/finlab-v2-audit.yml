@@ -1,0 +1,48 @@
+name: TRIAID FIN v2 Full Audit CI
+
+on:
+  push:
+    branches:
+      - backend-full-audit-20260921
+    paths:
+      - "finlab_v2/**"
+      - ".github/workflows/finlab-v2-audit.yml"
+  pull_request:
+    paths:
+      - "finlab_v2/**"
+      - ".github/workflows/finlab-v2-audit.yml"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      TRIAID_STORAGE_BACKEND: file
+      TRIAID_DATA_DIR: /tmp/triaid-fin-v2-ci
+      TRIAID_ADMIN_TOKEN: ci-admin-token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r finlab_v2/requirements.txt
+      - name: Compile audited backend
+        working-directory: finlab_v2
+        run: |
+          python -m py_compile app.py triaid_fin/*.py *.py
+      - name: Run deterministic regression suite
+        working-directory: finlab_v2
+        run: |
+          python selftest.py
+          python backend_audit_regression.py
+          python strategy_contract_smoke.py
+          python provider_adjustment_smoke.py
+          python provider_freshness_smoke.py
+          python close_transition_regression.py
+          python prospective_experiment_smoke.py
+          python recovery_wave_smoke.py
+          python capital_capacity_smoke.py
+          python us_return_max_smoke.py
+          python core_evolution_validation_smoke.py
+          python strategy_evolution_validation_smoke.py
+          python ui_smoke.py
