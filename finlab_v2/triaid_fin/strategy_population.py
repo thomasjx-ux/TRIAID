@@ -73,7 +73,7 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.2"
+    version = "strategy-population@0.5.3"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -117,6 +117,9 @@ class StrategyPopulationModule:
         result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive experimental weight; SHADOW receives no exposure"
         result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
         result["empty_group_allowed"] = True
+        if cfg.market_id=="CN":
+            result["active_research_experiment"]="CN_WORST_POOL_RESCUE"
+            result["research_experiment_objective"]="deliberately start from an equal-weight pool of the currently worst eligible risky strategies, then measure how much loss TRIAID can reduce without using future outcomes"
         return result
 
     def register(self, definition: StrategyDefinition) -> None:
@@ -305,6 +308,117 @@ class StrategyPopulationModule:
         }
         return weights,diagnostics
 
+    def _adversarial_loss_group(
+        self,
+        cfg:PopulationConfig,
+        states:List[StrategyState],
+        max_members:int,
+    )->StrategyGroup:
+        state_map={s.strategy_id:s for s in states}
+        feasible=[
+            s for s in states
+            if s.strategy_id!="P28_CASH"
+            and s.eligible
+            and s.lifecycle in {"active","reduced"}
+            and not s.hard_failure
+            and s.liquidity_ok and s.capacity_ok and s.risk_ok and s.concentration_ok
+        ]
+        ranked=sorted(feasible,key=lambda s:self._robust_return(s,cfg))
+        risky_slots=max(1,min(10,max_members-1 if max_members>1 else 1))
+        selected=ranked[:risky_slots]
+        cash=next(
+            (
+                s for s in states
+                if s.strategy_id=="P28_CASH"
+                and s.eligible
+                and s.lifecycle in {"active","reduced"}
+            ),
+            None,
+        )
+
+        if not selected:
+            weights={"P28_CASH":1.0} if cash is not None else {}
+            members=list(weights)
+            reasons={
+                "P28_CASH":BilingualText(
+                    zh="当前没有满足基础可交易约束的风险策略，逆向压力实验无法构造风险池，因此退回现金并标记实验不可用。",
+                    en="No risky strategy satisfies the basic tradability constraints, so the adversarial loss-pool experiment cannot be constructed and falls back to cash.",
+                )
+            } if cash is not None else {}
+            diagnostics={
+                "optimizer":"adversarial-worst-pool-v1",
+                "experiment_mode":"CN_WORST_POOL_RESCUE",
+                "experiment_available":False,
+                "feasible_count":0,
+                "stress_pool_size":0,
+                "baseline_cash_weight":1.0 if cash is not None else 0.0,
+                "selection_mode":"ADVERSARIAL_FALLBACK_CASH",
+            }
+            return StrategyGroup(
+                group_version=self.version,
+                config_version=cfg.config_version,
+                market_id="CN",
+                members=members,
+                weights=weights,
+                reasons=reasons,
+                diagnostics=diagnostics,
+            )
+
+        equal_weight=1.0/len(selected)
+        weights={s.strategy_id:equal_weight for s in selected}
+        members=[s.strategy_id for s in selected]
+        if cash is not None:
+            weights["P28_CASH"]=0.0
+            members.append("P28_CASH")
+
+        reasons:Dict[str,BilingualText]={}
+        for rank,state in enumerate(selected,1):
+            definition=self.definition(state.strategy_id)
+            robust=self._robust_return(state,cfg)
+            reasons[state.strategy_id]=BilingualText(
+                zh=f"逆向压力实验第 {rank} 位：{definition.name.zh if definition else state.strategy_id} 在当前可见数据下的稳健预期净回报为 {robust:.2%}，位于可交易策略的最差端。本次入选不是推荐，而是故意构造不利起点，用于检验 TRIAID 能挽回多少损失。",
+                en=f"Adversarial stress rank {rank}: {definition.name.en if definition else state.strategy_id} has robust expected net return {robust:.2%}, placing it among the weakest currently tradable strategies. Selection is intentionally adverse, not a recommendation, so TRIAID loss-reduction can be measured.",
+            )
+        if cash is not None:
+            reasons["P28_CASH"]=BilingualText(
+                zh="现金在压力池基线中的权重固定为 0，仅作为 TRIAID 介入后可以转移风险敞口的避险出口。",
+                en="Cash starts at zero weight in the stress baseline and exists only as a defensive destination available to TRIAID after intervention.",
+            )
+
+        baseline_projected=sum(equal_weight*self._robust_return(s,cfg) for s in selected)
+        diagnostics={
+            "optimizer":"adversarial-worst-pool-v1",
+            "experiment_mode":"CN_WORST_POOL_RESCUE",
+            "experiment_available":True,
+            "selection_mode":"ADVERSARIAL_WORST_POOL",
+            "feasible_count":len(feasible),
+            "stress_pool_size":len(selected),
+            "baseline_cash_weight":0.0,
+            "baseline_projected_robust_return":baseline_projected,
+            "ranking_metric":"robust_expected_net_return_ascending",
+            "weighting_rule":"equal_weight_no_future_outcome",
+            "ranked_worst":[
+                {
+                    "rank":i+1,
+                    "strategy_id":s.strategy_id,
+                    "robust_expected_net_return":self._robust_return(s,cfg),
+                    "expected_net_return":float(s.expected_net_return),
+                    "risk":float(s.risk),
+                    "uncertainty":float(s.uncertainty),
+                }
+                for i,s in enumerate(selected)
+            ],
+        }
+        return StrategyGroup(
+            group_version=self.version,
+            config_version=cfg.config_version,
+            market_id="CN",
+            members=members,
+            weights=weights,
+            reasons=reasons,
+            diagnostics=diagnostics,
+        )
+
     def _projected_robust_return(
         self,
         weights:Dict[str,float],
@@ -324,9 +438,13 @@ class StrategyPopulationModule:
         max_members: int,
         previous_group: StrategyGroup | None = None,
         base_cost_bps: float = 2.0,
+        experiment_mode: str | None = None,
     ) -> StrategyGroup:
         cfg=self.config_for(market_id)
         states=list(states)
+        mode=str(experiment_mode or "").upper()
+        if market_id.upper()=="CN" and mode=="CN_WORST_POOL_RESCUE":
+            return self._adversarial_loss_group(cfg,states,max_members)
         state_map={s.strategy_id:s for s in states}
         candidate_weights,diagnostics=self._candidate_group(cfg,states,max_members)
 
