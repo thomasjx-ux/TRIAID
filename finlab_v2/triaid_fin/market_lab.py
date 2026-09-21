@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time as dt_time, timezone
 from statistics import mean, pstdev
 from zoneinfo import ZoneInfo
 
 from .contracts import BilingualText, MarketSnapshot, StrategyState
 from .market_data import MarketDataError, get_market_data_hub, session_phase
+from .trading_calendar import trading_day_info
 from .cn_incubator import CN_SHADOW_IDS, positions as cn_shadow_positions
 from .strategy_registry import POLICY_IDS, strategy_ids_for_market
 
@@ -555,8 +557,22 @@ def prepare_live_market(
         json.dumps(final_payload,sort_keys=True,separators=(",",":")).encode("utf-8")
     ).hexdigest()
     local_tz=ZoneInfo("America/New_York" if panel.spec.market_id=="US" else "Asia/Shanghai")
-    local_today=datetime.now(local_tz).date().isoformat()
-    daily_bar_complete=phase in {"POSTCLOSE","CLOSED"} or as_of<local_today
+    local_now=datetime.now(local_tz)
+    local_today=local_now.date().isoformat()
+    settle_seconds=max(0,int(os.getenv("TRIAID_CLOSE_SETTLE_SECONDS","300")))
+    info=trading_day_info(panel.spec.market_id,local_now)
+    if panel.spec.market_id=="US":
+        close_time=dt_time.fromisoformat(info["early_close_time"]) if info.get("early_close") else dt_time(16,0)
+    else:
+        close_time=dt_time(15,0)
+    close_seconds=close_time.hour*3600+close_time.minute*60+close_time.second
+    now_seconds=local_now.hour*3600+local_now.minute*60+local_now.second
+    postclose_settled=phase=="POSTCLOSE" and now_seconds>=close_seconds+settle_seconds
+    daily_bar_complete=(
+        as_of<local_today
+        or phase=="CLOSED"
+        or postclose_settled
+    )
     snapshot_id=f"{panel.spec.market_id}:{latest_ts}"
     if daily_bar_complete:
         # Canonical complete-daily identity is independent of provider timestamp.
@@ -582,6 +598,8 @@ def prepare_live_market(
             "max_participation_adv":panel.spec.max_participation_adv,
             "daily_content_fingerprint":daily_content_fingerprint,
             "daily_bar_complete":daily_bar_complete,
+            "postclose_settled":postclose_settled,
+            "close_settle_seconds":settle_seconds,
         },
     )
     realized={pid:history[pid][-1] for pid in history}
