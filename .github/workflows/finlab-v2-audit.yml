@@ -38,6 +38,7 @@ jobs:
           python backend_audit_regression.py
           python manual_preview_isolation_smoke.py
           python bootstrap_persistence_guard_smoke.py
+          python startup_readonly_contract_smoke.py
           python strategy_contract_smoke.py
           python provider_adjustment_smoke.py
           python provider_freshness_smoke.py

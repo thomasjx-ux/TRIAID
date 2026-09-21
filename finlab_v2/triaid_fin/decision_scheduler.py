@@ -61,7 +61,6 @@ class DecisionScheduler:
                 "allocation_action_count":0,
             }
             self.state["markets"][market]=raw
-            self._save()
         else:
             defaults={
                 "baseline_done":False,
@@ -80,8 +79,9 @@ class DecisionScheduler:
                 if key not in raw:
                     raw[key]=value
                     changed=True
-            if changed:
-                self._save()
+            # Missing legacy fields are upgraded in memory on read. Mutation
+            # paths persist the full state when they actually create an event
+            # or decision; status/read endpoints must never write storage.
         return raw
 
     def _save(self)->None:

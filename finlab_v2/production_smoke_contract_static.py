@@ -22,7 +22,15 @@ assert "TRIAID 增益" not in smoke
 
 smoke_text=Path("production_api_smoke.py").read_text(encoding="utf-8")
 assert 'TRIAID_PRODUCTION_SMOKE_MUTATIONS","0"' in smoke_text
+assert 'TRIAID_PRODUCTION_SMOKE_EXPECTED_STORAGE' in smoke_text
+assert 'startup_maintenance_enabled' in smoke_text
 assert 'read-only production smoke changed persistent run ledger' in smoke_text
 assert 'if MUTATING_SMOKE:' in smoke_text
+
+probe_text=Path("production_storage_readonly_probe.py").read_text(encoding="utf-8")
+assert 'TRIAID_PRODUCTION_STORAGE_READONLY_PROBE_PASS' in probe_text
+assert 'store.list_runs()' in probe_text
+assert 'save_' not in probe_text
+assert 'append_' not in probe_text
 
 print("TRIAID_PRODUCTION_SMOKE_CONTRACT_STATIC_PASS")

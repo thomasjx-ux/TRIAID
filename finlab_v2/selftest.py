@@ -427,6 +427,9 @@ try:
     stale=engine.create_pending_live_run("US")
     reloaded=EvolutionLabEngine()
     assert reloaded.get_run(run.run_id).status=="VERIFIED"
+    assert reloaded.get_run(stale.run_id).status=="FETCHING_DATA"
+    recovery_receipt=reloaded.recover_stale_runs()
+    assert recovery_receipt["recovered_run_ids"]==[stale.run_id]
     assert reloaded.get_run(stale.run_id).status=="FAILED"
     assert reloaded.get_run(stale.run_id).diagnostic_summary["error"]=="STALE_INCOMPLETE_RUN_RECOVERED_AFTER_PROCESS_RESTART"
     assert len(reloaded.all_runs())>=1

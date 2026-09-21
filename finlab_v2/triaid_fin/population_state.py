@@ -34,7 +34,7 @@ class PopulationStateTracker:
             self.state["last_observation_keys"]={}
             self.state["evidence_reset_from_version"]=prior_version or "legacy"
             self.state["version"]=self.version
-            self.store.save_json("population_state.json",self.state)
+            self.state["migration_pending_persist"]=True
 
     def _market(self,market_id:str) -> dict:
         key=market_id.upper()
@@ -177,6 +177,7 @@ class PopulationStateTracker:
 
         if advance and observation_key:
             self.state["last_observation_keys"][market_key]=observation_key
+        self.state.pop("migration_pending_persist",None)
         self.store.save_json("population_state.json",self.state)
         return out
 

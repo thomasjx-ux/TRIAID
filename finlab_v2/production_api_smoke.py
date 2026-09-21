@@ -12,6 +12,11 @@ import urllib.request
 BASE=(sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:18080").rstrip("/")
 ADMIN_TOKEN=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
 MUTATING_SMOKE=os.getenv("TRIAID_PRODUCTION_SMOKE_MUTATIONS","0").strip()=="1"
+EXPECTED_STORAGE=os.getenv("TRIAID_PRODUCTION_SMOKE_EXPECTED_STORAGE","supabase").strip().lower() or "supabase"
+EXPECTED_DURABILITY=os.getenv(
+    "TRIAID_PRODUCTION_SMOKE_EXPECTED_DURABILITY",
+    "PERSISTENT" if EXPECTED_STORAGE=="supabase" else "EPHEMERAL",
+).strip().upper()
 RESULTS=[]
 
 
@@ -60,9 +65,11 @@ while True:
         time.sleep(0.5)
 
 assert health["ok"] is True
-assert health["storage_backend"]=="supabase"
-assert health["storage_durability"]=="PERSISTENT"
-assert health["storage_persistence_confirmed"] is True
+assert health["storage_backend"]==EXPECTED_STORAGE
+assert health["storage_durability"]==EXPECTED_DURABILITY
+if EXPECTED_STORAGE=="supabase":
+    assert health["storage_persistence_confirmed"] is True
+assert health["startup_maintenance_enabled"] is False
 assert health["decision_automation_enabled"] is True
 assert health["broker_execution_enabled"] is False
 assert health["official_trading_calendar_version"]=="official-trading-calendar@0.2.0"
@@ -132,8 +139,8 @@ assert status["module_manifest"]["us_return_max"]=="us-return-max-route@0.3.0"
 assert status["module_manifest"]["us_return_max_ledger"]=="us-return-max-ledger@0.1.0"
 
 storage=call("GET","/api/storage/status")
-assert storage["backend"]["backend"]=="supabase"
-assert storage["durability"]=="PERSISTENT"
+assert storage["backend"]["backend"]==EXPECTED_STORAGE
+assert storage["durability"]==EXPECTED_DURABILITY
 
 prospective_status=call("GET","/api/experiments/cn/prospective/status")
 assert prospective_status["version"]=="cn-prospective-controls@0.3.0"
@@ -308,7 +315,8 @@ if MUTATING_SMOKE:
 obs=call("GET","/api/market-data/observations?limit=5")
 assert isinstance(obs,list)
 obs_status=call("GET","/api/market-data/observation-status")
-assert obs_status["persistent"] is True
+if EXPECTED_STORAGE=="supabase":
+    assert obs_status["persistent"] is True
 transitions=call("GET","/api/market-data/transitions?limit=5")
 assert isinstance(transitions,list)
 
@@ -430,8 +438,8 @@ print("TRIAID_PRODUCTION_API_SMOKE_PASS")
 print({
     "cases":len(RESULTS),
     "max_seconds":round(max(x[3] for x in RESULTS),3),
-    "storage":"supabase",
-    "persistent":True,
+    "storage":EXPECTED_STORAGE,
+    "persistent":EXPECTED_DURABILITY=="PERSISTENT",
     "mutating_smoke":MUTATING_SMOKE,
     "persistent_run_ledger_unchanged":not MUTATING_SMOKE,
     "live_runs":[x["run_id"] for x in created["runs"]],

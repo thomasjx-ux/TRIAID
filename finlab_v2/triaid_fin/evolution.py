@@ -29,10 +29,10 @@ class EvolutionModule:
     def __init__(self, store: RunStore) -> None:
         self.store = store
         raw = store.load_json("core_evolution.json", default={})
+        self.bootstrap_pending=not bool(raw)
         if not raw:
             seed = CoreParameters(version="triaid-core-v2@0.2.0")
             raw = {"active_version": seed.version, "cores": {seed.version: asdict(seed)}, "history": [], "validations": {}}
-            store.save_json("core_evolution.json", raw)
         raw.setdefault("history",[])
         raw.setdefault("validations",{})
         self.state = raw

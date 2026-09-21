@@ -102,6 +102,8 @@ Manual previews are deliberately excluded from both production and file persiste
 
 Deployment/bootstrap validation follows the same rule. `bootstrap_live.py` refuses non-file storage by default because bootstrap can create official evidence. Railway deployment preflight runs bootstrap against an isolated temporary file backend; writing bootstrap output to persistent production storage requires an explicit one-time migration override.
 
+Application construction and read/status endpoints are also storage-neutral. Core/strategy state defaults and schema upgrades are prepared in memory and are not persisted merely because a candidate process imported the application or a user opened a status page. Stale incomplete official runs are recovered only by explicit startup maintenance, which emits an auditable maintenance receipt.
+
 
 ## Observation and transition research
 

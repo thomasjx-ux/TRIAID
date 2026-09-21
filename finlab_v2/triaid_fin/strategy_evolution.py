@@ -95,7 +95,7 @@ class StrategyEvolutionModule:
             else:
                 self._migrate_market(raw["markets"][market_id],market_id)
         self.state=raw
-        self._save()
+        self.bootstrap_pending=not bool(store.load_json("strategy_evolution.json",default={}))
 
     def _defaults(self,market_id:str)->dict:
         return asdict(_seed_profile(market_id))
@@ -125,7 +125,6 @@ class StrategyEvolutionModule:
                 "history":[],
                 "validations":{},
             }
-            self._save()
         self._migrate_market(self.state["markets"][key],key)
         return self.state["markets"][key]
 

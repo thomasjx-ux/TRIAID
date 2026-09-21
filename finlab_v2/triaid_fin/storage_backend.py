@@ -62,7 +62,7 @@ class FileStorageBackend:
             self.root=Path("./runtime_data")
         self.root.mkdir(parents=True,exist_ok=True)
         self._lock=RLock()
-        self._probe=self._update_persistence_probe()
+        self._probe=self._load_persistence_probe()
 
     def _mount_details(self)->dict:
         mounts=_read_mounts()
@@ -105,30 +105,56 @@ class FileStorageBackend:
     def durability(self)->str:
         return "PERSISTENT" if self.persistent else "EPHEMERAL"
 
-    def _update_persistence_probe(self)->dict:
+    def _load_persistence_probe(self)->dict:
         marker=self.root/".triaid_persistence_probe.json"
         deployment_id=os.environ.get("RAILWAY_DEPLOYMENT_ID")
-        instance_id=str(uuid.uuid4())
         previous=None
         try:
             if marker.exists():
                 previous=json.loads(marker.read_text(encoding="utf-8"))
         except Exception:
             previous=None
-
         previous_deployment=(previous or {}).get("deployment_id")
         confirmed=bool(
-            deployment_id
-            and previous_deployment
-            and deployment_id!=previous_deployment
+            (previous or {}).get("confirmed_across_deployments")
+            or (
+                deployment_id
+                and previous_deployment
+                and deployment_id!=previous_deployment
+            )
+        )
+        return {
+            "deployment_id":deployment_id,
+            "previous_deployment_id":previous_deployment,
+            "confirmed_across_deployments":confirmed,
+            "marker_present":marker.exists(),
+            "written_at":(previous or {}).get("written_at"),
+        }
+
+    def refresh_persistence_probe(self)->dict:
+        marker=self.root/".triaid_persistence_probe.json"
+        deployment_id=os.environ.get("RAILWAY_DEPLOYMENT_ID")
+        previous=None
+        try:
+            if marker.exists():
+                previous=json.loads(marker.read_text(encoding="utf-8"))
+        except Exception:
+            previous=None
+        previous_deployment=(previous or {}).get("deployment_id")
+        confirmed=bool(
+            (previous or {}).get("confirmed_across_deployments")
+            or (
+                deployment_id
+                and previous_deployment
+                and deployment_id!=previous_deployment
+            )
         )
         payload={
             "deployment_id":deployment_id,
-            "instance_id":instance_id,
+            "instance_id":str(uuid.uuid4()),
             "written_at":time.time(),
             "previous_deployment_id":previous_deployment,
-            "confirmed_across_deployments":confirmed
-            or bool((previous or {}).get("confirmed_across_deployments")),
+            "confirmed_across_deployments":confirmed,
         }
         try:
             marker.write_text(
@@ -137,7 +163,10 @@ class FileStorageBackend:
             )
         except Exception as exc:
             payload["write_error"]=f"{type(exc).__name__}:{exc}"
-        return payload
+        self._probe=self._load_persistence_probe()
+        if payload.get("write_error"):
+            self._probe["write_error"]=payload["write_error"]
+        return dict(self._probe)
 
     def path(self,name:str)->Path:
         path=self.root/name
@@ -213,6 +242,8 @@ class FileStorageBackend:
                 "confirmed_across_deployments":bool(
                     self._probe.get("confirmed_across_deployments")
                 ),
+                "marker_present":bool(self._probe.get("marker_present")),
+                "written_at":self._probe.get("written_at"),
                 "write_error":self._probe.get("write_error"),
             },
         }

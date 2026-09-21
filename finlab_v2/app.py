@@ -33,6 +33,17 @@ def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->Non
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     tasks=[]
+    startup_maintenance_enabled=os.getenv(
+        "TRIAID_STARTUP_MAINTENANCE","0"
+    ).lower() in {"1","true","on","yes"}
+    if startup_maintenance_enabled:
+        app.state.startup_maintenance_receipt=engine.recover_stale_runs()
+    else:
+        app.state.startup_maintenance_receipt={
+            "event":"STALE_RUN_RECOVERY",
+            "applied":False,
+            "reason":"TRIAID_STARTUP_MAINTENANCE_DISABLED",
+        }
     if calendar_sync.enabled:
         tasks.append(asyncio.create_task(calendar_sync.run()))
     if market_automation.enabled:
@@ -88,6 +99,12 @@ def health()->dict:
         "official_trading_calendar_version":TRADING_CALENDAR_VERSION,
         "calendar_sync_enabled":calendar_sync.enabled,
         "calendar_sync_version":calendar_sync.version,
+        "startup_maintenance_enabled":os.getenv(
+            "TRIAID_STARTUP_MAINTENANCE","0"
+        ).lower() in {"1","true","on","yes"},
+        "startup_maintenance_receipt":getattr(
+            app.state,"startup_maintenance_receipt",None
+        ),
     }
 
 
