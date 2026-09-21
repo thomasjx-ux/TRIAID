@@ -20,9 +20,21 @@ assert "const TABLE_HEADER_TIPS={" in html
 assert "function applyTableHeaderTooltips" in html
 assert "root.querySelectorAll('table th')" in html
 assert "MutationObserver" in html
-assert "预计恢复速度/日" in html
+assert "const UI_TIPS={" in html
+assert "function applyUiTooltips" in html
+assert "tip-mark" in html
+assert "多周期年化收益估计" in html
+assert "首个正向历史窗口" in html
+assert "历史收益优势速度/日" in html
+assert "恢复率优势×样本支持" in html
+assert "历史相似状态平均前向收益" in html
+assert "累计单期超额和" in html
+assert "模拟成交比例" in html
 assert "本轮调整" in html
 assert "Return-Max权重" in html
+assert "预期净回报" not in html
+assert "预计恢复速度/日" not in html
+assert "当前冻结交易意见" not in html
 assert html.count("<table")>=13
 assert html.count("<th")>=70
 assert "SHADOW：只记录真实未来表现进行前瞻验证" in html
@@ -59,10 +71,10 @@ assert 'id="recoveryPreviousMeta"' in html
 assert 'id="rwthSpeed"' in html
 assert 'id="capitalSleeveRows"' in html
 assert 'id="capitalRealizedRows"' in html
-assert "四资金规模容量实验" in html
+assert "四档人民币资金规模容量实验" in html
 assert "renderRecoveryWave" in html
 assert "TRIAID 二阶恢复波段决策" in html
-assert "当前冻结交易意见" in html
+assert "当前冻结研究配置意见" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
 assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')
