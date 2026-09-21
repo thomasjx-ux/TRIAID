@@ -6,6 +6,7 @@ from copy import deepcopy
 from math import prod
 from typing import Any
 
+from .capital_capacity import CapitalCapacityLayer
 from .contracts import utc_now
 from .store import RunStore
 
@@ -13,7 +14,7 @@ from .store import RunStore
 class RecoveryWaveLedger:
     """Append-only decision + outcome ledger for the recovery-wave shadow core."""
 
-    version="recovery-wave-ledger@0.1.0"
+    version="recovery-wave-ledger@0.2.0"
     decision_file="recovery_wave_decisions.jsonl"
     outcome_file="recovery_wave_outcomes.jsonl"
     index_file="recovery_wave_index.json"
@@ -114,6 +115,7 @@ class RecoveryWaveLedger:
         period_start_as_of:str,
         product_returns:dict[str,float],
         source_snapshot_id:str|None=None,
+        product_turnover:dict[str,float]|None=None,
     )->dict:
         market=market_id.upper()
         key=f"{market}:{as_of}"
@@ -127,6 +129,10 @@ class RecoveryWaveLedger:
             "period_start_as_of":period_start_as_of,
             "source_snapshot_id":source_snapshot_id,
             "product_returns":{str(k):float(v) for k,v in product_returns.items()},
+            "product_turnover":{
+                str(k):float(v) for k,v in (product_turnover or {}).items()
+                if float(v)>0
+            },
         }
         self.store.append_jsonl(self.outcome_file,row)
         self.outcome_index[key]=row["outcome_id"]
@@ -199,6 +205,8 @@ class RecoveryWaveLedger:
                 "product_cumulative_returns":sample[-1]["product_cumulative_returns"],
             }
 
+        capital_sleeves=CapitalCapacityLayer.realized_review(decision,future)
+
         return {
             "decision_id":decision.get("decision_id"),
             "decision_hash":decision.get("decision_hash"),
@@ -214,6 +222,7 @@ class RecoveryWaveLedger:
                 self._compound(portfolio_returns)-self._compound(equal_returns)
             ),
             "matured_horizons":horizons,
+            "capital_sleeves":capital_sleeves,
         }
 
     def verify_integrity(self,market_id:str|None=None)->dict:
@@ -270,7 +279,7 @@ class RecoveryWaveLedger:
                 if self.outcomes(market_id,1) else None
             ),
             "integrity":self.verify_integrity(market_id),
-            "interpretation_guard":"Trade opinions are frozen research recommendations, not broker orders. Historical analog statistics are evidence, not guaranteed probabilities. Do not rewrite frozen recommendations after outcomes are known.",
+            "interpretation_guard":"Trade opinions are frozen research recommendations, not broker orders. Historical analog statistics are evidence, not guaranteed probabilities. Capital sleeves are controlled execution simulations using frozen cost parameters plus future observed turnover; modeled impact is not a broker fill. Do not rewrite frozen recommendations after outcomes are known.",
         }
 
     def status(self,market_id:str|None=None)->dict:
