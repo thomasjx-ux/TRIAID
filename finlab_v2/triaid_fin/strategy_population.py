@@ -73,7 +73,7 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.3"
+    version = "strategy-population@0.5.4"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -119,7 +119,12 @@ class StrategyPopulationModule:
         result["empty_group_allowed"] = True
         if cfg.market_id=="CN":
             result["active_research_experiment"]="CN_WORST_POOL_RESCUE"
+            result["market_route"]="CN_RECOVERY_CAPACITY"
             result["research_experiment_objective"]="deliberately start from an equal-weight pool of the currently worst eligible risky strategies, then measure how much loss TRIAID can reduce without using future outcomes"
+        else:
+            result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
+            result["market_route"]="US_RETURN_MAXIMIZATION"
+            result["research_experiment_objective"]="maximize current robust expected net return with return-first reselection, then validate theoretical strategy return and executable return separately under four USD capital sleeves"
         return result
 
     def register(self, definition: StrategyDefinition) -> None:
