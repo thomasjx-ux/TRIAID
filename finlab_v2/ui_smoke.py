@@ -16,6 +16,15 @@ assert 'id="hoverTip"' in html
 assert 'class="has-tip"' in html
 assert "const TIP={" in html
 assert "data-tip=" in html
+assert "const TABLE_HEADER_TIPS={" in html
+assert "function applyTableHeaderTooltips" in html
+assert "root.querySelectorAll('table th')" in html
+assert "MutationObserver" in html
+assert "预计恢复速度/日" in html
+assert "本轮调整" in html
+assert "Return-Max权重" in html
+assert html.count("<table")>=13
+assert html.count("<th")>=70
 assert "SHADOW：只记录真实未来表现进行前瞻验证" in html
 assert 'id="candidatePoolTitle"' in html
 assert 'id="candidateRows"' in html
