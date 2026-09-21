@@ -47,7 +47,11 @@ class EvolutionModule:
         return deepcopy(self.state)
 
     def diagnose(self, runs: Iterable[RunRecord]) -> dict:
-        evaluated=[r for r in runs if r.evaluation and r.evaluation.status=="EVALUATED"]
+        evaluated=[
+            r for r in runs
+            if r.evaluation and r.evaluation.status=="EVALUATED"
+            and (r.market.metadata or {}).get("daily_bar_complete") is not False
+        ]
         if not evaluated:
             return {"evaluated_runs":0,"mean_excess_return":None,"negative_rate":None,"worst_excess_return":None}
         excess=[float(r.evaluation.excess_return or 0.0) for r in evaluated]
