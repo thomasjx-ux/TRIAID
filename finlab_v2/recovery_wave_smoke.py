@@ -70,7 +70,7 @@ panel=MarketPanel(
 
 core=RecoveryWaveCore(CoreParameters(version="selftest",risk_off_multiplier=0.55))
 decision=core.decide(panel,"risk_off",None,"POSTCLOSE")
-assert decision["core_version"]=="recovery-wave-core@0.1.1"
+assert decision["core_version"]=="recovery-wave-core@0.2.0"
 assert decision["research_only"] is True
 assert decision["broker_execution_enabled"] is False
 assert decision["data_scope"]["constituent_micro_available"] is False
@@ -85,6 +85,10 @@ assert 0.0<=decision["second_order"]["evidence_strength"]<=1.0
 assert 0.0<=decision["second_order"]["effective_risk_budget"]<=0.55
 assert allocated<=decision["second_order"]["effective_risk_budget"]+1e-8
 assert abs(decision["cash_residual_weight"]-(1.0-allocated))<1e-8
+assert decision["capital_capacity"]["enabled"] is True
+assert decision["capital_capacity"]["version"]=="capital-capacity-layer@0.1.0"
+assert decision["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
+assert len(decision["capital_capacity"]["sleeves"])==4
 for row in decision["trade_opinions"]:
     assert row["action"] in {"INITIATE","ADD","HOLD","REDUCE","EXIT","WAIT"}
     assert row["analog_samples"]<=20
@@ -94,7 +98,7 @@ for row in decision["trade_opinions"]:
 store=MemoryStore()
 ledger=RecoveryWaveLedger(store)
 legacy_variant=deepcopy(decision)
-legacy_variant["core_version"]="recovery-wave-core@0.1.0"
+legacy_variant["core_version"]="recovery-wave-core@0.1.1"
 legacy_same_snapshot=ledger.freeze(legacy_variant,"CN:SNAP:1","2026-09-21")
 
 first=ledger.freeze(decision,"CN:SNAP:1","2026-09-21")
@@ -104,12 +108,15 @@ assert dup["decision_hash"]==first["decision_hash"]
 assert first["previous_decision_id"]==legacy_same_snapshot["decision_id"]
 assert first["previous_decision_hash"]==legacy_same_snapshot["decision_hash"]
 assert legacy_same_snapshot["decision_id"]!=first["decision_id"]
-assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==first["decision_id"]
-assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.0")["decision_id"]==legacy_same_snapshot["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.2.0")["decision_id"]==first["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==legacy_same_snapshot["decision_id"]
 
 products=[x["symbol"] for x in first["trade_opinions"]]
 full_returns={s:0.01*(i+1) for i,s in enumerate(products)}
-out1=ledger.record_outcome("CN","2026-09-22","2026-09-21",full_returns,"CN:SNAP:2")
+full_turnover={s:100_000_000.0 for s in products}
+out1=ledger.record_outcome(
+    "CN","2026-09-22","2026-09-21",full_returns,"CN:SNAP:2",full_turnover
+)
 assert out1["recorded"] is True
 partial={s:0.02 for s in products[:-1]}
 out2=ledger.record_outcome("CN","2026-09-23","2026-09-22",partial,"CN:SNAP:3")
@@ -118,6 +125,9 @@ review=ledger.review_decision(first)
 assert review["observation_days"]==1
 assert "2026-09-23" in review["incomplete_outcome_dates"]
 assert len(review["daily_path"])==1
+assert review["capital_sleeves"] is not None
+assert len(review["capital_sleeves"]["sleeves"])==4
+assert review["capital_sleeves"]["sleeves"][0]["observation_days"]==1
 
 second_decision=core.decide(panel,"risk_off",first,"POSTCLOSE")
 second=ledger.freeze(second_decision,"CN:SNAP:2","2026-09-22")
