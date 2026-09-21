@@ -115,6 +115,7 @@ class CapitalCapacityLayer:
             invested=0.0
             max_days=0
             max_one_day_participation=0.0
+            missing_liquidity=False
             for op in trade_opinions:
                 symbol=str(op.get("symbol"))
                 weight=max(0.0,float(op.get("target_weight") or 0.0))
@@ -131,6 +132,8 @@ class CapitalCapacityLayer:
                 )
                 if isinstance(min_days,int):
                     max_days=max(max_days,min_days)
+                elif target_notional>0:
+                    missing_liquidity=True
 
                 modeled_participation=(
                     min(one_day_participation,params["max_participation_adv"])
@@ -171,6 +174,8 @@ class CapitalCapacityLayer:
             expected_net=gross_pnl-round_trip_cost_proxy
             if invested<=0:
                 capacity_status="NO_RISK_POSITION"
+            elif missing_liquidity:
+                capacity_status="LIQUIDITY_DATA_UNAVAILABLE"
             elif max_days<=1:
                 capacity_status="ONE_DAY_WITHIN_PARTICIPATION_CAP"
             else:
@@ -185,6 +190,7 @@ class CapitalCapacityLayer:
                 "max_one_day_participation_adv":max_one_day_participation,
                 "minimum_execution_days":max_days,
                 "capacity_status":capacity_status,
+                "liquidity_data_complete":not missing_liquidity,
                 "estimated_entry_cost_cny":one_way_cost,
                 "estimated_round_trip_cost_proxy_cny":round_trip_cost_proxy,
                 "expected_wave_gross_pnl_cny":gross_pnl,
