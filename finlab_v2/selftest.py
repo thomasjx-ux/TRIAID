@@ -432,14 +432,10 @@ try:
 
     before=reloaded.evolution_status()["active_version"]
     proposal=reloaded.propose_core_candidate()
-    assert proposal["created"] is True
-    candidate=proposal["candidate"]["version"]
-    blocked=reloaded.promote_core(candidate,{"replay_pass":True,"holdout_pass":False,"shadow_pass":True,"audit_pass":True})
-    assert blocked["promoted"] is False
-    promoted=reloaded.promote_core(candidate,{"replay_pass":True,"holdout_pass":True,"shadow_pass":True,"audit_pass":True})
-    assert promoted["promoted"] is True
-    assert reloaded.evolution_status()["active_version"]==candidate
-    assert before!=candidate
+    assert proposal["created"] is False
+    assert proposal["reason"]=="INSUFFICIENT_MARKET_STRATIFIED_POSTERIOR_EVALUATIONS"
+    assert proposal["required_per_market"]==10
+    assert reloaded.evolution_status()["active_version"]==before
 
     incubator=state("C29_SIZE_REL20",0.20,0.20,0.03)
     incubator.metrics["latest_return"]=0.01
