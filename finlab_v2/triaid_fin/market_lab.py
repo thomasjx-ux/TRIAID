@@ -488,6 +488,12 @@ def prepare_live_market(
         for asset in panel.assets
         if len(panel.close.get(asset,[]))>=2 and panel.close[asset][-2]
     }
+    product_turnover={
+        asset:(float(panel.close[asset][-1])*float(panel.volume.get(asset,[0.0])[-1]))
+        for asset in panel.assets
+        if panel.close.get(asset) and panel.volume.get(asset)
+        and float(panel.close[asset][-1])>0 and float(panel.volume[asset][-1])>0
+    }
     snapshot.metadata["session_phase"]=session_phase(panel.spec.market_id)
     snapshot.metadata["recovery_wave_input_scope"]="TRACKED_PRODUCT_PRICE_VOLUME_ONLY"
     return {
@@ -495,6 +501,7 @@ def prepare_live_market(
         "strategy_states":states,
         "realized_returns_from_previous_period":realized,
         "product_realized_returns_from_previous_period":product_realized,
+        "product_turnover_notional_from_previous_period":product_turnover,
         "previous_as_of":previous_as_of,
         "latest_as_of":as_of,
         "panel":panel,
