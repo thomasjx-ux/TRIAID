@@ -274,7 +274,7 @@ class EvolutionLabEngine:
                     prepared.get("product_realized_returns_from_previous_period") or {},
                     snapshot.snapshot_id,
                 )
-            existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id)
+            existing_recovery=self.recovery_wave_ledger.by_snapshot(market_id,snapshot.snapshot_id,self.recovery_wave_core.version)
             if existing_recovery is None:
                 previous_recovery=self.recovery_wave_ledger.latest(market_id)
                 proposed_recovery=self.recovery_wave_core.decide(
