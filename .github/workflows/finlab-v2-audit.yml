@@ -42,6 +42,7 @@ jobs:
           python strategy_contract_smoke.py
           python provider_adjustment_smoke.py
           python provider_freshness_smoke.py
+          python tushare_auction_smoke.py
           python close_transition_regression.py
           python prospective_experiment_smoke.py
           python recovery_wave_smoke.py
