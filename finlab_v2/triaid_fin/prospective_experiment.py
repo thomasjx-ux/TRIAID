@@ -28,7 +28,14 @@ class ProspectiveExperimentProtocol:
                 experiment["invalidated_at"]=experiment.get("invalidated_at") or utc_now()
         raw["version"] = self.version
         self.state = raw
-        self._save()
+        self.migration_pending_persist=(
+            not store.backend.exists(self.state_file)
+            or any(
+                str(experiment.get("status") or "")=="INVALIDATED"
+                and str(experiment.get("invalidated_reason") or "")=="LEGACY_PROTOCOL_OUTCOME_DATE_ALIGNMENT_AND_COMPLETE_BAR_GATING"
+                for experiment in raw["experiments"]
+            )
+        )
 
     def _save(self) -> None:
         self.store.save_json(self.state_file, self.state)
