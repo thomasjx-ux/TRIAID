@@ -8,6 +8,7 @@ SERVICE="${SERVICE:-triaid-fin-v2}"
 RUNTIME_SA_NAME="${RUNTIME_SA_NAME:-triaid-fin-runtime}"
 SCHEDULER_JOB="${SCHEDULER_JOB:-triaid-fin-market-tick}"
 SOURCE_DIR="${SOURCE_DIR:-finlab_v2}"
+STORAGE_NAMESPACE="${STORAGE_NAMESPACE:-gcp-shadow}"
 
 if [[ -z "${PROJECT_ID}" ]]; then
   echo "Usage: $0 <google-cloud-project-id>"
@@ -83,7 +84,7 @@ gcloud run deploy "${SERVICE}" \
   --min-instances 0 \
   --max-instances 1 \
   --timeout 300 \
-  --set-env-vars "PYTHONUNBUFFERED=1,TRIAID_STORAGE_BACKEND=supabase,TRIAID_DATA_AUTOMATION=0,TRIAID_CALENDAR_SYNC=0,TRIAID_DECISION_AUTOMATION=1,ALPACA_DATA_FEED=iex,TRIAID_DEPLOY_TARGET=GCP_CLOUD_RUN" \
+  --set-env-vars "PYTHONUNBUFFERED=1,TRIAID_STORAGE_BACKEND=supabase,TRIAID_STORAGE_NAMESPACE=${STORAGE_NAMESPACE},TRIAID_DATA_AUTOMATION=0,TRIAID_CALENDAR_SYNC=0,TRIAID_DECISION_AUTOMATION=1,ALPACA_DATA_FEED=iex,TRIAID_DEPLOY_TARGET=GCP_CLOUD_RUN" \
   --set-secrets "TRIAID_ADMIN_TOKEN=triaid-admin-token:${ADMIN_VERSION},TRIAID_SUPABASE_PERSISTENCE_URL=triaid-supabase-url:${SUPABASE_URL_VERSION},TRIAID_SUPABASE_TOKEN=triaid-supabase-token:${SUPABASE_TOKEN_VERSION}"
 
 SERVICE_URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)')"
