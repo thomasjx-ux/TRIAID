@@ -221,6 +221,15 @@ try:
     assert rejected_stale["recorded"] is False
     assert rejected_stale["reason"]=="STALE_SOURCE_TIMESTAMP"
     assert rejected_stale["max_source_latest_ts"]==1234568490
+    engine.store.save_json(
+        "market_observation_watermarks.json",
+        {"US:INTRADAY":1234568190},
+    )
+    healing_observations=MarketObservationStore(engine.store)
+    duplicate_heal=healing_observations.record(obs3)
+    assert duplicate_heal["recorded"] is False
+    assert duplicate_heal["reason"]=="DUPLICATE_SOURCE_TIMESTAMP"
+    assert healing_observations.watermarks["US:INTRADAY"]==1234568490
     restarted_observations=MarketObservationStore(engine.store)
     assert restarted_observations.watermarks["US:INTRADAY"]==1234568490
     rejected_after_restart=restarted_observations.record(stale_obs)
