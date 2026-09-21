@@ -32,6 +32,11 @@ assert 'id="prospectiveStrategyRows"' in html
 assert 'id="prospectiveDailyRows"' in html
 assert "renderProspective" in html
 assert "TRIAID冻结配置累计收益" in html
+assert 'id="usReturnMaxPanel"' in html
+assert 'id="usrmCapitalRows"' in html
+assert 'id="usrmRealizedRows"' in html
+assert "renderUSReturnMax" in html
+assert "美股 Return-Max 路线" in html
 assert 'id="recoveryWavePanel"' in html
 assert 'id="recoveryOpinionRows"' in html
 assert 'id="recoveryReviewRows"' in html
@@ -51,11 +56,16 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.10.0"
+assert s["architecture_version"]=="fin-evolution-lab@0.11.0"
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
 assert d["date"]
+assert "us_return_max" in d
+assert d["us_return_max"]["report_version"]=="us-return-max-ledger@0.1.0"
+assert d["us_return_max"]["route_version"]=="us-return-max-route@0.1.0"
+assert d["us_return_max"]["integrity"]["passed"] is True
+assert d["us_return_max"]["latest_decision"]["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
 
 dcn=daily("CN")
 assert dcn["date"]
