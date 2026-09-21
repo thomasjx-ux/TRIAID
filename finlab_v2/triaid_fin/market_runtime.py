@@ -82,7 +82,10 @@ class MarketDataAutomation:
                                 snapshot,
                                 observed,
                             )
-                        self.last_refresh[key]=now
+                        if observed.get("reason")=="STALE_SOURCE_TIMESTAMP":
+                            self.last_refresh[key]=0.0
+                        else:
+                            self.last_refresh[key]=now
                         self.errors.pop(key,None)
                         print(
                             "TRIAID_MARKET_DATA_AUTO_REFRESH",
@@ -90,6 +93,7 @@ class MarketDataAutomation:
                             result.get("source_latest_ts"),
                             result.get("points"),
                             observed.get("recorded"),
+                            observed.get("reason"),
                         )
                         if decision_result is not None:
                             print(
