@@ -20,7 +20,7 @@ class USReturnMaxRoute:
     """US return-maximization route with executable capital-capacity sleeves.
 
     The route intentionally differs from the CN recovery-wave route:
-    - primary selection is strict maximum current expected net return across active strategies;
+    - primary selection is the maximum current multi-window annualized historical state-return estimate across admissible active strategies;
     - ties are broken deterministically by lower estimated cost, risk, uncertainty, then ID;
     - no recovery/drawdown thesis is required;
     - the frozen winner is expanded to executable ETF exposures;
@@ -77,6 +77,12 @@ class USReturnMaxRoute:
         eligible=[
             s for s in states
             if str(s.lifecycle or "").lower()=="active"
+            and bool(s.eligible)
+            and not bool(s.hard_failure)
+            and bool(s.liquidity_ok)
+            and bool(s.capacity_ok)
+            and bool(s.risk_ok)
+            and bool(s.concentration_ok)
         ]
         if not eligible:
             raise ValueError("US Return-Max requires at least one active strategy.")
@@ -226,9 +232,9 @@ class USReturnMaxRoute:
             "decision_status":"PROVISIONAL_INTRADAY" if self._is_intraday_phase(input_phase) else "DAILY_FROZEN",
             "research_only":True,
             "broker_execution_enabled":False,
-            "objective":"STRICT_MAXIMIZE_CURRENT_EXPECTED_NET_RETURN_ACROSS_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
-            "selection_source":"ALL_ACTIVE_STRATEGIES_STRICT_MAX_EXPECTED_NET_RETURN",
-            "strategy_selection_mode":"STRICT_MAX_EXPECTED_NET_RETURN_WITH_DETERMINISTIC_TIE_BREAK",
+            "objective":"STRICT_MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
+            "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_STRICT_MAX_STATE_RETURN_ESTIMATE",
+            "strategy_selection_mode":"STRICT_MAX_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK",
             "selected_strategy_id":str(winner.strategy_id),
             "max_return_tie_set":tie_set,
             "tie_break_order":["estimated_cost","risk","uncertainty","strategy_id"],
