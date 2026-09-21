@@ -58,11 +58,20 @@ class RecoveryWaveLedger:
         decision_id=snapshots.get(version_key) if version_key else None
         if not decision_id and core_version is None:
             decision_id=snapshots.get(f"{market}:{snapshot_id}")
-        if not decision_id:
-            return None
-        for row in reversed(self.decisions(market_id,1000)):
-            if row.get("decision_id")==decision_id:
-                return deepcopy(row)
+        rows=self.decisions(market_id,5000)
+        if decision_id:
+            for row in reversed(rows):
+                if row.get("decision_id")==decision_id:
+                    return deepcopy(row)
+        if core_version:
+            # Legacy decisions written before version-aware indexing remain immutable.
+            # Recover them by scanning the append-only stream rather than rewriting indexes/history.
+            for row in reversed(rows):
+                if (
+                    row.get("snapshot_id")==snapshot_id
+                    and row.get("core_version")==core_version
+                ):
+                    return deepcopy(row)
         return None
 
     def latest(self,market_id:str)->dict|None:
