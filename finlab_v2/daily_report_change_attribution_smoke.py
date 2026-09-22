@@ -110,6 +110,8 @@ assert report["date"]=="2026-09-22"
 assert report["report_contract"]["strategy_change_reason_required"] is True
 assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
 assert report["report_contract"]["technical_runtime_report_default"] is False
+assert report["report_contract"]["amount_percent_and_difference_required"] is True
+assert report["report_contract"]["capital_sleeves_required"] is True
 strategy_report=report["investment_strategy_reports"]["US"]
 assert strategy_report["report_type"]=="INVESTMENT_STRATEGY_DAILY"
 assert strategy_report["strategy_thesis"]["objective"].startswith("Maximize realizable net return")
@@ -118,6 +120,19 @@ assert strategy_report["session_review"]["removed"]==["P01_VOL10"]
 assert strategy_report["performance_review"]["conclusion"]=="TRIAID_OUTPERFORMED_BASELINE"
 assert strategy_report["forward_view"]["forecast_discipline"].startswith("Forward view is conditional")
 assert strategy_report["technical_appendix_policy"]["default_visibility"]=="COLLAPSED"
+money=strategy_report["performance_review"]["capitalized"]
+assert money["currency"]=="USD"
+assert money["capital_sleeves"]==[100000.0,1000000.0,10000000.0,100000000.0]
+s100k=money["rows"][0]
+assert s100k["starting_capital"]==100000.0
+assert abs(s100k["baseline_realized_pnl"]-2000.0)<1e-9
+assert abs(s100k["triaid_realized_pnl"]-2100.0)<1e-9
+assert abs(s100k["realized_excess_pnl"]-100.0)<1e-9
+assert abs(s100k["trading_cost_amount"]-10.0)<1e-9
+alloc={row["strategy_id"]:row for row in s100k["strategy_allocations"]}
+assert abs(alloc["P02_VOL15"]["amount_after"]-70000.0)<1e-9
+assert abs(alloc["P02_VOL15"]["amount_delta"]-70000.0)<1e-9
+assert abs(alloc["P01_VOL10"]["amount_delta"]+40000.0)<1e-9
 change=report["strategy_changes"][0]
 assert change["added"]==["P02_VOL15"]
 assert change["removed"]==["P01_VOL10"]
