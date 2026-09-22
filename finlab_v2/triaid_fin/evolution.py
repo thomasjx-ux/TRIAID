@@ -57,6 +57,8 @@ class EvolutionModule:
             and run.evaluation.status=="EVALUATED"
             and metadata.get("daily_bar_complete") is not False
             and str(metadata.get("experiment_mode") or "").upper()==expected
+            and metadata.get("primary_reference_superseded") is not True
+            and run.status!="SUPERSEDED"
         )
 
     def active(self) -> CoreParameters:
