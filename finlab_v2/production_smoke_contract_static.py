@@ -15,11 +15,14 @@ for needle in [
     assert needle in smoke,needle
 
 for needle in [
-    "historical strategy state-return estimate",
+    "PRIMARY_OBJECTIVE",
+    "OBJECTIVE_CONSTITUTION",
     "calibrated future-return forecast",
-    "MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
     "MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS",
     "ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
+    "fixed_strategy_count_target",
+    "risk_used_as_secondary_objective",
+    "uncertainty_used_as_secondary_objective",
 ]:
     assert needle in route,needle
 
