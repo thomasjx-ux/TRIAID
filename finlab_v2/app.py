@@ -445,7 +445,8 @@ def strategies(
         if latest_run.strategy_group is None or latest_run.triaid_decision is None:
             raise HTTPException(status_code=409,detail="run decision is not ready")
     elif market_id:
-        latest_run=engine.latest_decision_run(market_id)
+        market_key=market_id.upper()
+        latest_run=None if market_key=="HK" else engine.latest_decision_run(market_key)
     effective_market=(
         latest_run.market.market_id
         if latest_run
