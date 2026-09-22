@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
 from .contracts import RunRecord
+from .capital_capacity import CAPITAL_SLEEVES_CNY
+from .us_return_max import USD_CAPITAL_SLEEVES
 
 
 class ReviewModule:
-    version="review@0.6.0"
+    version="review@0.7.0"
 
     @staticmethod
     def _evidence_eligible(run:RunRecord)->bool:
@@ -215,6 +217,112 @@ class ReviewModule:
         }
 
 
+
+    @staticmethod
+    def _capital_context(market_id:str)->tuple[str,tuple[float,...]]:
+        market=str(market_id).upper()
+        if market=="US":
+            return "USD",tuple(float(x) for x in USD_CAPITAL_SLEEVES)
+        if market=="CN":
+            return "CNY",tuple(float(x) for x in CAPITAL_SLEEVES_CNY)
+        return "NATIVE",()
+
+    @classmethod
+    def _capitalized_report(
+        cls,
+        current:RunRecord,
+        previous:Optional[RunRecord],
+        change:dict,
+        comparison:dict,
+    )->dict:
+        currency,sleeves=cls._capital_context(current.market.market_id)
+        current_weights=cls._group_weights(current)
+        previous_weights=cls._group_weights(previous) if previous else {}
+        current_return=comparison.get("current_run") or {}
+        latest_realized=comparison.get("latest_evaluated_today") or current_return or {}
+
+        state_before=change.get("selector_state_return_estimate_before")
+        state_after=change.get("selector_state_return_estimate_after")
+        realized_baseline=latest_realized.get("baseline_realized_return")
+        realized_triaid=latest_realized.get("triaid_realized_return")
+        realized_excess=latest_realized.get("realized_excess_return")
+        trading_cost=latest_realized.get("trading_cost")
+
+        rows=[]
+        for capital in sleeves:
+            allocation_rows=[]
+            ids=sorted(set(previous_weights)|set(current_weights))
+            for strategy_id in ids:
+                before_w=float(previous_weights.get(strategy_id,0.0))
+                after_w=float(current_weights.get(strategy_id,0.0))
+                allocation_rows.append({
+                    "strategy_id":strategy_id,
+                    "weight_before":before_w,
+                    "weight_after":after_w,
+                    "weight_delta":after_w-before_w,
+                    "amount_before":capital*before_w,
+                    "amount_after":capital*after_w,
+                    "amount_delta":capital*(after_w-before_w),
+                })
+
+            row={
+                "currency":currency,
+                "starting_capital":capital,
+                "strategy_allocations":allocation_rows,
+                "selector_state_return_estimate_before":state_before,
+                "selector_state_return_estimate_after":state_after,
+                "selector_state_return_estimate_delta":(
+                    state_after-state_before
+                    if state_before is not None and state_after is not None
+                    else None
+                ),
+                "selector_state_return_amount_equivalent_before":(
+                    capital*state_before if state_before is not None else None
+                ),
+                "selector_state_return_amount_equivalent_after":(
+                    capital*state_after if state_after is not None else None
+                ),
+                "selector_state_return_amount_equivalent_delta":(
+                    capital*(state_after-state_before)
+                    if state_before is not None and state_after is not None
+                    else None
+                ),
+                "baseline_realized_return":realized_baseline,
+                "triaid_realized_return":realized_triaid,
+                "realized_excess_return":realized_excess,
+                "baseline_realized_pnl":(
+                    capital*realized_baseline if realized_baseline is not None else None
+                ),
+                "triaid_realized_pnl":(
+                    capital*realized_triaid if realized_triaid is not None else None
+                ),
+                "realized_excess_pnl":(
+                    capital*realized_excess if realized_excess is not None else None
+                ),
+                "trading_cost_rate":trading_cost,
+                "trading_cost_amount":(
+                    capital*trading_cost if trading_cost is not None else None
+                ),
+            }
+            rows.append(row)
+
+        return {
+            "currency":currency,
+            "capital_sleeves":[float(x) for x in sleeves],
+            "rows":rows,
+            "display_requirements":{
+                "show_amount":True,
+                "show_percent":True,
+                "show_absolute_difference":True,
+                "show_weight_difference":True,
+                "show_realized_pnl_difference":True,
+            },
+            "semantics":{
+                "realized":"Realized return and P&L are based only on evaluated outcomes.",
+                "state_amount_equivalent":"Capital multiplied by the historical/model state-return estimate. This is an analytical equivalent, not a calibrated future P&L forecast.",
+            },
+        }
+
     @classmethod
     def _investment_strategy_view(cls,current:RunRecord,previous:Optional[RunRecord],change:dict,comparison:dict)->dict:
         weights=cls._group_weights(current)
@@ -275,6 +383,8 @@ class ReviewModule:
                 "reason":row["reason"],
             })
 
+        capitalized=cls._capitalized_report(current,previous,change,comparison)
+
         return {
             "report_type":"INVESTMENT_STRATEGY_DAILY",
             "market_id":current.market.market_id,
@@ -301,8 +411,12 @@ class ReviewModule:
                 "trading_cost":realized.get("trading_cost"),
                 "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:5],
                 "note":"Realized performance is kept separate from model/state estimates.",
+                "capitalized":capitalized,
             },
-            "forward_view":outlook,
+            "forward_view":{
+                **outlook,
+                "capitalized_state_return_equivalents":capitalized["rows"],
+            },
             "replacement_watch":{
                 "excluded_highest_state_return_candidates":change.get("excluded_strategies",[])[:5],
                 "replace_when":[
@@ -420,6 +534,8 @@ class ReviewModule:
                 "report_type":"INVESTMENT_STRATEGY_DAILY",
                 "body_priority":["strategy_analysis","session_review","change_reason","return_difference","forward_view"],
                 "technical_runtime_report_default":False,
+                "amount_percent_and_difference_required":True,
+                "capital_sleeves_required":True,
                 "strategy_change_reason_required":True,
                 "before_after_weight_required":True,
                 "selected_and_excluded_reason_required":True,
