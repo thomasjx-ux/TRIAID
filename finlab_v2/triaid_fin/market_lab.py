@@ -41,7 +41,7 @@ MARKETS={
         "CNY",50_000_000.0,2.5,60.0,0.02,
     ),
     "HK":MarketSpec(
-        "HK","^HSI",("^HSI","^HSCE","^HSTECH"),("^HSI","^HSCE","^HSTECH"),(),
+        "HK","^HSI",("^HSI","^HSCE","3033.HK"),("^HSI","^HSCE","3033.HK"),(),
         "HKD",50_000_000.0,2.0,55.0,0.02,
     ),
 }
