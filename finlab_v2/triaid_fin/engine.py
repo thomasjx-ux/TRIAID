@@ -15,6 +15,7 @@ from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
+from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -52,6 +53,7 @@ class EvolutionLabEngine:
         self.recovery_wave_core=RecoveryWaveCore(self.evolution.active())
         self.us_return_max=USReturnMaxRoute()
         self.us_return_max_ledger=USReturnMaxLedger(self.store)
+        self.long_cycle_hypothesis=LongCycleHypothesisExperiment(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
@@ -143,6 +145,7 @@ class EvolutionLabEngine:
             "capital_capacity":self.recovery_wave_core.capital_capacity.version if hasattr(self,"recovery_wave_core") else "capital-capacity-layer@unknown",
             "us_return_max":self.us_return_max.version if hasattr(self,"us_return_max") else "us-return-max-route@unknown",
             "us_return_max_ledger":self.us_return_max_ledger.version if hasattr(self,"us_return_max_ledger") else "us-return-max-ledger@unknown",
+            "long_cycle_hypothesis":self.long_cycle_hypothesis.version if hasattr(self,"long_cycle_hypothesis") else "us-long-cycle-hypothesis@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
             "execution_calibration":ExecutionCalibration.version,
@@ -712,6 +715,18 @@ class EvolutionLabEngine:
     def us_return_max_daily_report(self)->dict|None:
         return self.us_return_max_ledger.daily_report()
 
+    def long_cycle_hypothesis_run(self,force:bool=False)->dict:
+        return self.long_cycle_hypothesis.run(force=force)
+
+    def long_cycle_hypothesis_latest(self)->dict|None:
+        return self.long_cycle_hypothesis.latest()
+
+    def long_cycle_hypothesis_history(self,limit:int=100)->list[dict]:
+        return self.long_cycle_hypothesis.history(limit)
+
+    def long_cycle_hypothesis_status(self)->dict:
+        return self.long_cycle_hypothesis.status()
+
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
 
@@ -1087,6 +1102,9 @@ class EvolutionLabEngine:
             us_return=self.us_return_max_ledger.daily_report()
             if us_return:
                 summary["us_return_max"]=us_return
+            long_cycle=self.long_cycle_hypothesis.latest()
+            if long_cycle:
+                summary["long_cycle_hypothesis"]=long_cycle
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
