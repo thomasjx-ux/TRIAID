@@ -65,7 +65,8 @@ assert "strategyLabelHtml" in html
 assert "market-tip-icon" in html
 assert "data-strategy-id=" in html
 assert "last trading day" in html
-assert "CN_WORST_POOL_RESCUE" in html
+assert "CN_RETURN_MAX_CAPACITY" in html
+assert "A股收益最大化主路线" in html
 assert 'id="prospectivePanel"' in html
 assert 'id="prospectiveStrategyRows"' in html
 assert 'id="prospectiveDailyRows"' in html
@@ -100,7 +101,7 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.12.0"
+assert s["architecture_version"]=="fin-evolution-lab@0.13.0"
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
