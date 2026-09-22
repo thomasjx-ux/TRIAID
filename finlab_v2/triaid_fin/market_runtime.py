@@ -206,7 +206,7 @@ class MarketDataAutomation:
                     )
                 except Exception as exc:
                     self.errors["USCNHK:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCN:CRASH_LINKAGE"])
+                    print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCNHK:CRASH_LINKAGE"])
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
