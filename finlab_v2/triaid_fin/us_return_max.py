@@ -28,7 +28,7 @@ class USReturnMaxRoute:
     - four USD sleeves share the same signal and differ only by starting capital.
     """
 
-    version="us-return-max-route@0.4.0"
+    version="us-return-max-route@0.5.0"
     interface_version="us-return-max-contract@1"
     capital_version="us-return-max-capacity@0.1.0"
     sleeves=USD_CAPITAL_SLEEVES
@@ -98,8 +98,6 @@ class USReturnMaxRoute:
             tied,
             key=lambda s:(
                 float(s.estimated_cost or 0.0),
-                float(s.risk or 0.0),
-                float(s.uncertainty or 0.0),
                 str(s.strategy_id),
             ),
         )
@@ -210,8 +208,6 @@ class USReturnMaxRoute:
             tied,
             key=lambda x:(
                 float(x["meta_switch_cost_fraction"]),
-                float(x["state"].risk or 0.0),
-                float(x["state"].uncertainty or 0.0),
                 str(x["strategy_id"]),
             ),
         )
@@ -382,12 +378,15 @@ class USReturnMaxRoute:
             "decision_status":"PROVISIONAL_INTRADAY" if self._is_intraday_phase(input_phase) else "DAILY_FROZEN",
             "research_only":True,
             "broker_execution_enabled":False,
-            "objective":"MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST_ACROSS_ADMISSIBLE_ACTIVE_STRATEGIES_THEN_APPLY_EXECUTION_CAPACITY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective_constitution":"RETURN_IS_THE_ONLY_OPTIMIZATION_OBJECTIVE; RISK_LIQUIDITY_CAPACITY_CONCENTRATION_AND_EXECUTION_ARE_ADMISSION_OR_FEASIBILITY_CONSTRAINTS",
             "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
-            "strategy_selection_mode":"MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK",
+            "strategy_selection_mode":"MAX_REALIZABLE_NET_RETURN_PROXY_WITH_COST_ONLY_THEN_DETERMINISTIC_TIE_BREAK",
             "selected_strategy_id":str(winner.strategy_id),
             "max_return_tie_set":tie_set,
-            "tie_break_order":["meta_switch_cost","risk","uncertainty","strategy_id"],
+            "tie_break_order":["meta_switch_cost","strategy_id"],
+            "risk_used_as_secondary_objective":False,
+            "uncertainty_used_as_secondary_objective":False,
             "selection_holding_horizon_days":holding_days,
             "fast_challenger":fast_challenger,
             "previous_route_decision_id":(previous_decision or {}).get("decision_id"),
@@ -408,7 +407,7 @@ class USReturnMaxRoute:
             "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
-            "selection_metric_semantics":"Primary production selection uses the weighted 21/63/126/252-day annualized historical strategy state-return estimate minus an annualized 21-day proxy for immediate meta-allocation switch cost. A separate 1/3/5-day challenger is recorded shadow-only and does not alter weights until prospectively validated. Neither field is a calibrated future-return forecast.",
+            "selection_metric_semantics":"Primary selection ranks admissible strategies by the weighted 21/63/126/252-day annualized historical state-return estimate minus an annualized 21-day proxy for immediate switching cost. Risk, liquidity, capacity and concentration determine admissibility or execution feasibility and do not subtract a second utility term from return. A separate 1/3/5-day challenger is shadow-only until prospectively validated. These fields are not calibrated future-return forecasts.",
             "projected_field_semantics":"Fields named projected_annualized_expected_net_return preserve the existing API contract but contain weighted state-return estimates under the frozen decision, not guaranteed or calibrated future returns.",
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
