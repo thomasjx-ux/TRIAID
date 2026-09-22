@@ -53,7 +53,20 @@ async def lifespan(app:FastAPI):
         "TRIAID_STARTUP_MAINTENANCE","0"
     ).lower() in {"1","true","on","yes"}
     if startup_maintenance_enabled:
-        app.state.startup_maintenance_receipt=engine.recover_stale_runs()
+        receipt=engine.recover_stale_runs()
+        primary_references={}
+        for market_id in ("US","CN"):
+            try:
+                primary_references[market_id]=engine.ensure_primary_reference(market_id)
+            except Exception as exc:
+                primary_references[market_id]={
+                    "market_id":market_id,
+                    "created":False,
+                    "reason":"PRIMARY_REFERENCE_BOOTSTRAP_ERROR",
+                    "error":f"{type(exc).__name__}:{exc}",
+                }
+        receipt["primary_references"]=primary_references
+        app.state.startup_maintenance_receipt=receipt
     else:
         app.state.startup_maintenance_receipt={
             "event":"STALE_RUN_RECOVERY",
@@ -1541,7 +1554,10 @@ async function refreshAll(){
   }
   strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
   const selected=cards.filter(x=>x.selected);
-  const officialLatest=d.runs_detail&&d.runs_detail.length?d.runs_detail[d.runs_detail.length-1]:null;
+  const detailRuns=d.runs_detail||[];
+  const officialLatest=isCN
+    ? ([...detailRuns].reverse().find(x=>x.experiment_mode==='CN_RETURN_MAX_CAPACITY')||null)
+    : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
   renderComparison(evaluated);
