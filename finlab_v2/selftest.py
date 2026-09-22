@@ -456,7 +456,8 @@ try:
     assert negative_recompute["status"]=="RECOMPUTED"
     assert negative_recompute["transition_regime"]=="intraday_risk_off"
     assert negative_recompute["diagnostics"]["risk_off_detected"] is True
-    assert sum(negative_recompute["weights_after"].values()) < sum(negative_recompute["weights_before"].values())
+    assert negative_recompute["diagnostics"]["regime_policy"]=="RISK_OFF_TOP_3"
+    assert negative_recompute["weights_after"].get("P28_CASH",0.0) > negative_recompute["weights_before"].get("P28_CASH",0.0)
 
     curves=engine.curves("US")
     assert len(curves)>=1
