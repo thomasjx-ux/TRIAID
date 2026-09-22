@@ -7,6 +7,7 @@ import math
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -16,7 +17,7 @@ MONTH_CODE={1:"F",2:"G",3:"H",4:"J",5:"K",6:"M",7:"N",8:"Q",9:"U",10:"V",11:"X",
 
 
 class PolicyExpectationCurve:
-    version="policy-expectation-curve@0.1.0"
+    version="policy-expectation-curve@0.2.0"
     latest_file="policy_expectation_curve_latest.json"
     history_file="policy_expectation_curve_history.jsonl"
 
@@ -44,7 +45,7 @@ class PolicyExpectationCurve:
         return [stem+s for s in suffixes]
 
     @staticmethod
-    def _fetch_chart(symbol:str,timeout:int=12)->dict:
+    def _fetch_chart(symbol:str,timeout:int=6)->dict:
         query=urllib.parse.urlencode({
             "range":"5d",
             "interval":"1d",
@@ -97,14 +98,23 @@ class PolicyExpectationCurve:
 
     @classmethod
     def _curve(cls,root:str,start:date,months:int,suffixes:tuple[str,...],quarterly_only:bool=False)->list[dict]:
-        rows=[]
+        targets=[]
         for delta in range(int(months)):
             y,m=cls._month_add(start.year,start.month,delta)
             if quarterly_only and m not in {3,6,9,12}:
                 continue
-            row=cls._resolve_contract(root,y,m,suffixes)
-            if row:
-                rows.append(row)
+            targets.append((y,m))
+        rows=[]
+        with ThreadPoolExecutor(max_workers=min(8,max(1,len(targets)))) as pool:
+            futures={
+                pool.submit(cls._resolve_contract,root,y,m,suffixes):(y,m)
+                for y,m in targets
+            }
+            for future in as_completed(futures):
+                row=future.result()
+                if row:
+                    rows.append(row)
+        rows.sort(key=lambda x:x["contract_month"])
         return rows
 
     @staticmethod
@@ -130,7 +140,7 @@ class PolicyExpectationCurve:
         if previous and previous.get("as_of")==today.isoformat() and not force:
             return previous
 
-        fedfunds=self._curve("ZQ",today,15,(".CBT",".CME",""),quarterly_only=False)
+        fedfunds=self._curve("ZQ",today,15,("",".CBT",".CME"),quarterly_only=False)
         sofr3=self._curve("SR3",today,24,(".CME",""),quarterly_only=True)
         sofr1=self._curve("SR1",today,15,(".CME",""),quarterly_only=False)
 
