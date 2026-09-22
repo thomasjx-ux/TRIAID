@@ -30,6 +30,7 @@ class MarketDataAutomation:
         self.last_success_utc:dict[str,str]={}
         self.consecutive_failures:dict[str,int]={}
         self.supervisor_restarts:int=0
+        self.refresh_timeout_seconds=max(10,int(os.getenv("TRIAID_REFRESH_TIMEOUT_SECONDS","30")))
 
     def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
@@ -90,9 +91,18 @@ class MarketDataAutomation:
             if now-self.last_refresh.get(key,0.0)<interval_seconds:
                 continue
             try:
-                result=await asyncio.to_thread(self.engine.refresh_market_data,market_id,mode)
-                snapshot=await asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False)
-                observed=await asyncio.to_thread(self.engine.record_market_observation,snapshot)
+                result=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.refresh_market_data,market_id,mode),
+                    timeout=self.refresh_timeout_seconds,
+                )
+                snapshot=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False),
+                    timeout=self.refresh_timeout_seconds,
+                )
+                observed=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.record_market_observation,snapshot),
+                    timeout=self.refresh_timeout_seconds,
+                )
                 decision_result=None
                 if self.decision_scheduler is not None:
                     decision_result=await asyncio.to_thread(
@@ -340,6 +350,7 @@ class MarketDataAutomation:
                 "last_success_utc":dict(self.last_success_utc),
                 "consecutive_failures":dict(self.consecutive_failures),
                 "supervisor_restarts":self.supervisor_restarts,
+                "refresh_timeout_seconds":self.refresh_timeout_seconds,
                 "policy":"MARKET_FAULT_ISOLATION; FAST_RETRY_ON_REFRESH_FAILURE; SUPERVISOR_RESTART_ON_TASK_EXIT",
             },
             "hub":self.engine.market_data_status(),
