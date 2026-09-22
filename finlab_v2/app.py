@@ -69,6 +69,17 @@ async def bootstrap_long_horizon_research()->None:
         )
     except Exception as exc:
         print("TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+    try:
+        latent=await asyncio.to_thread(engine.latent_hazard_run,False)
+        print(
+            "TRIAID_LATENT_HAZARD_BACKGROUND_PASS",
+            latent.get("experiment_id"),
+            latent.get("as_of"),
+            len(latent.get("top_long_lead_candidates") or []),
+            len(latent.get("top_any_lead_candidates") or []),
+        )
+    except Exception as exc:
+        print("TRIAID_LATENT_HAZARD_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -362,6 +373,26 @@ def us_cn_crash_linkage_history(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> list[dict]:
     return engine.cross_market_crash_history(limit)
+
+
+@app.get("/api/experiments/latent-hazard/status")
+def latent_hazard_status() -> dict:
+    return engine.latent_hazard_status()
+
+
+@app.get("/api/experiments/latent-hazard/latest")
+def latent_hazard_latest() -> dict:
+    row=engine.latent_hazard_latest()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no latent hazard experiment")
+    return row
+
+
+@app.get("/api/experiments/latent-hazard/history")
+def latent_hazard_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.latent_hazard_history(limit)
 
 
 @app.get("/api/recovery-wave/status")
