@@ -8,6 +8,7 @@ from math import prod
 from statistics import mean
 from typing import Any
 
+from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import StrategyGroup, StrategyState, TriaidDecision, utc_now
 from .market_lab import policy_positions
 from .adaptive_alpha import PROMOTION_STANDARD, us_fast_challenger
@@ -398,8 +399,8 @@ class USReturnMaxRoute:
             "decision_status":"PROVISIONAL_INTRADAY" if self._is_intraday_phase(input_phase) else "DAILY_FROZEN",
             "research_only":True,
             "broker_execution_enabled":False,
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
-            "objective_constitution":"RETURN_IS_THE_ONLY_OPTIMIZATION_OBJECTIVE; RISK_LIQUIDITY_CAPACITY_CONCENTRATION_AND_EXECUTION_ARE_ADMISSION_OR_FEASIBILITY_CONSTRAINTS",
+            "objective":PRIMARY_OBJECTIVE,
+            "objective_constitution":OBJECTIVE_CONSTITUTION,
             "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
             "strategy_selection_mode":"MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS",
             "selected_strategy_id":str(winner.strategy_id),
