@@ -37,7 +37,7 @@ class DecisionScheduler:
 
     @staticmethod
     def _tz(market_id:str)->ZoneInfo:
-        return ZoneInfo("America/New_York" if market_id.upper()=="US" else "Asia/Shanghai")
+        return ZoneInfo("America/New_York" if market_id.upper()=="US" else "Asia/Hong_Kong" if market_id.upper()=="HK" else "Asia/Shanghai")
 
     def session_date(self,market_id:str)->str:
         return datetime.now(self._tz(market_id)).date().isoformat()
@@ -453,7 +453,7 @@ class DecisionScheduler:
             "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
             "markets":{
                 market:self._market_state(market)
-                for market in ("US","CN")
+                for market in ("US","CN","HK")
             },
             "event_count":len(self.events(limit=10000)),
             "broker_execution_enabled":False,
