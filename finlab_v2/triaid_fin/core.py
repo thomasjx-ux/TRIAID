@@ -4,6 +4,7 @@ import math
 from statistics import median
 from typing import Iterable
 
+from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
 from .evolution import CoreParameters
 
@@ -180,7 +181,8 @@ class TriaidCoreModule:
             diagnostics={
                 "interface_version":self.interface_version,
                 "implementation_version":"triaid-core-return-max@0.3.0",
-                "objective":"MAXIMIZE_REALIZABLE_NET_RETURN_PROXY_SUBJECT_TO_HARD_CONSTRAINTS",
+                "objective":PRIMARY_OBJECTIVE,
+                "objective_constitution":OBJECTIVE_CONSTITUTION,
                 "intervention_strength":self.params.intervention_strength,
                 "legacy_co_objective_parameters_ignored":[
                     "risk_penalty",
