@@ -16,13 +16,21 @@ def make_panel(market_id:str)->MarketPanel:
             ("TLT","GLD"),
             "USD",10_000_000.0,1.5,45.0,0.03,
         )
-    else:
+    elif market_id=="CN":
         spec=MarketSpec(
             "CN","510300.SS",
             ("510300.SS","510500.SS","159915.SZ","512100.SS","511010.SS"),
             ("510300.SS","510500.SS","159915.SZ","512100.SS"),
             ("511010.SS",),
             "CNY",50_000_000.0,2.5,60.0,0.02,
+        )
+    else:
+        spec=MarketSpec(
+            "HK","2800.HK",
+            ("2800.HK","2828.HK","3033.HK","2819.HK"),
+            ("2800.HK","2828.HK","3033.HK"),
+            ("2819.HK",),
+            "HKD",50_000_000.0,2.0,55.0,0.02,
         )
     n=320
     ts=list(range(1_700_000_000,1_700_000_000+n*86400,86400))
@@ -51,9 +59,10 @@ assert len({x.strategy_id for x in defs})==33
 assert len(POLICY_IDS)==29
 assert len(CN_SHADOW_IDS)==4
 assert strategy_ids_for_market("US")==POLICY_IDS
+assert strategy_ids_for_market("HK")==POLICY_IDS
 assert set(strategy_ids_for_market("CN"))==set(POLICY_IDS)|set(CN_SHADOW_IDS)
 
-for market in ("US","CN"):
+for market in ("US","CN","HK"):
     panel=make_panel(market)
     i=len(panel.ts)-1
     positions=policy_positions(panel,i)
@@ -78,10 +87,14 @@ for market in ("US","CN"):
         assert abs(balanced[panel.assets.index("SPY")]-0.60)<1e-12
         assert abs(balanced[panel.assets.index("TLT")]-0.20)<1e-12
         assert abs(balanced[panel.assets.index("GLD")]-0.20)<1e-12
-    else:
+    elif market=="CN":
         balanced=positions["P25_BALANCED"]
         assert abs(balanced[panel.assets.index("510300.SS")]-0.70)<1e-12
         assert abs(balanced[panel.assets.index("511010.SS")]-0.30)<1e-12
+    else:
+        balanced=positions["P25_BALANCED"]
+        assert abs(balanced[panel.assets.index("2800.HK")]-0.60)<1e-12
+        assert abs(balanced[panel.assets.index("2819.HK")]-0.40)<1e-12
 
 by_id={x.strategy_id:x for x in defs}
 assert "-1.5%" in by_id["P16_REV5"].summary.en
@@ -92,4 +105,4 @@ assert "2%" in by_id["C32_VOL_BREAKOUT20"].summary.en
 assert "5%" in by_id["C32_VOL_BREAKOUT20"].summary.en
 
 print("TRIAID_STRATEGY_CONTRACT_SMOKE_PASS")
-print({"US":len(strategy_ids_for_market("US")),"CN":len(strategy_ids_for_market("CN"))})
+print({"US":len(strategy_ids_for_market("US")),"CN":len(strategy_ids_for_market("CN")),"HK":len(strategy_ids_for_market("HK"))})
