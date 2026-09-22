@@ -934,10 +934,20 @@ class EvolutionLabEngine:
         with self._lock:
             return sorted(self._runs.values(),key=lambda r:r.created_at)
 
-    def latest_run(self,market_id:str|None=None)->RunRecord|None:
+    def latest_run(
+        self,
+        market_id:str|None=None,
+        primary_only:bool=True,
+    )->RunRecord|None:
         rows=[r for r in self.all_runs() if self._evidence_eligible_run(r)]
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
+        if primary_only:
+            rows=[
+                r for r in rows
+                if str((r.market.metadata or {}).get("experiment_mode") or "").upper()
+                == self.primary_experiment_mode(str(r.market.market_id).upper())
+            ]
         useful=[r for r in rows if r.market.snapshot_id!="PENDING"]
         return useful[-1] if useful else (rows[-1] if rows else None)
 
