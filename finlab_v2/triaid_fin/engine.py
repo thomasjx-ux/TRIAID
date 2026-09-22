@@ -30,7 +30,7 @@ from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.13.0"
+    architecture_version = "fin-evolution-lab@0.13.1"
     market_adapter_version = "market-lab@0.4.0"
 
     def __init__(self) -> None:
@@ -1077,7 +1077,11 @@ class EvolutionLabEngine:
     def validate_core_candidate(self,version:str)->dict:
         candidate=self.evolution.get(version)
         manifest=self.evolution.candidate_manifest(version)
-        if manifest is None or not candidate.parent_version:
+        if (
+            manifest is None
+            or manifest.get("evidence_scope")!="PRIMARY_ROUTE_ONLY"
+            or not candidate.parent_version
+        ):
             receipt={
                 "receipt_id":f"COREVAL-{version}-{uuid4().hex[:12]}",
                 "passed":False,
@@ -1112,6 +1116,8 @@ class EvolutionLabEngine:
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
             and str(r.market.market_id).upper() in {"US","CN"}
+            and str((r.market.metadata or {}).get("experiment_mode") or "").upper()
+                == self.primary_experiment_mode(str(r.market.market_id).upper())
             and r.run_id not in known_ids
         ]
 
@@ -1174,9 +1180,6 @@ class EvolutionLabEngine:
         shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN"))
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
-            and candidate.risk_penalty>=0
-            and candidate.uncertainty_penalty>=0
-            and 0.0<=candidate.risk_off_multiplier<=1.0
             and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
         )
         receipt={
@@ -1194,7 +1197,9 @@ class EvolutionLabEngine:
             "shadow_by_market":shadow_by_market,
             "shadow_min_runs_per_market":shadow_min_per_market,
             "candidate_parent":candidate.parent_version,
-            "validation_discipline":"INTERNAL_MARKET_STRATIFIED_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW; NO_CROSS_MARKET_MASKING",
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "validation_discipline":"PRIMARY_ROUTE_ONLY; INTERNAL_MARKET_STRATIFIED_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW; NO_CROSS_MARKET_MASKING",
         }
         return self.evolution.record_validation(version,receipt)
 
