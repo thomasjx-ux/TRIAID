@@ -39,7 +39,7 @@ FRED_SERIES={
 
 
 class LongCycleHypothesisExperiment:
-    version="us-long-cycle-hypothesis@0.2.0"
+    version="us-long-cycle-hypothesis@0.2.1"
     protocol_version="secular-hypothesis-protocol@0.1.0"
     latest_file="us_long_cycle_hypothesis_latest.json"
     history_file="us_long_cycle_hypothesis_history.jsonl"
@@ -511,7 +511,12 @@ class LongCycleHypothesisExperiment:
             for label in CORE_EQUITY
             if label in assets
         )
-        if previous and previous.get("as_of")==as_of and not force:
+        if (
+            previous
+            and previous.get("as_of")==as_of
+            and previous.get("version")==self.version
+            and not force
+        ):
             return previous
 
         macro={}
