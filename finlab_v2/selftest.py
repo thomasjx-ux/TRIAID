@@ -37,6 +37,7 @@ try:
 
     assert engine.status()["strategy_registry_count"]==33
     assert engine.status()["architecture_version"]=="fin-evolution-lab@0.13.1"
+    assert engine.module_manifest["objective_constitution"]=="fin-objective-constitution@0.1.0"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -308,7 +309,7 @@ try:
             as_of="2026-09-18",
             snapshot_id="SELFTEST:1",
             regime="risk_on_trend",
-            metadata={"experiment_mode":"US_RETURN_MAX_CAPACITY"},
+            metadata={"experiment_mode":"US_RETURN_MAX_CAPACITY","primary_route_revision":engine.architecture_version},
         ),
         strategy_states=[
             state("P00_BUY_HOLD",0.12,0.18,0.02,recent=[0.001*((i%7)-3) for i in range(80)]),
@@ -347,8 +348,13 @@ try:
         state(sid,-0.02-0.01*i,0.10+0.005*i,0.01)
         for i,sid in enumerate(cn_ids)
     ]+[state("P28_CASH",0.0,0.0,0.0)]
-    assert engine.strategy_population.rules("CN")["active_research_experiment"]=="CN_RETURN_MAX_CAPACITY"
-    assert engine.strategy_population.rules("CN")["market_route"]=="CN_RETURN_MAXIMIZATION"
+    cn_rules=engine.strategy_population.rules("CN")
+    us_rules=engine.strategy_population.rules("US")
+    assert cn_rules["active_research_experiment"]=="CN_RETURN_MAX_CAPACITY"
+    assert cn_rules["market_route"]=="CN_RETURN_MAXIMIZATION"
+    assert cn_rules["global_objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+    assert us_rules["global_objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+    assert cn_rules["objective_constitution"]==us_rules["objective_constitution"]
 
     cn_request=RunRequest(
         market=MarketSnapshot(
@@ -356,7 +362,7 @@ try:
             as_of="2026-09-21",
             snapshot_id="SELFTEST:CN:RETURNMAX",
             regime="risk_on",
-            metadata={"experiment_mode":"CN_RETURN_MAX_CAPACITY"},
+            metadata={"experiment_mode":"CN_RETURN_MAX_CAPACITY","primary_route_revision":engine.architecture_version},
         ),
         strategy_states=cn_states,
         max_group_size=12,
@@ -422,9 +428,11 @@ try:
     cn_primary_receipt=engine.ensure_primary_reference("CN")
     assert cn_primary_receipt["created"] is False
     assert cn_primary_receipt["run_id"]==cn_decision.run_id
+    assert cn_primary_receipt["primary_route_revision"]==engine.architecture_version
     us_primary_receipt=engine.ensure_primary_reference("US")
     assert us_primary_receipt["created"] is False
     assert us_primary_receipt["run_id"]==decision.run_id
+    assert us_primary_receipt["primary_route_revision"]==engine.architecture_version
 
     # Main reports and curves must exclude the explicitly evaluated stress route.
     cn_realized={sid:0.001 for sid in cn_ids}

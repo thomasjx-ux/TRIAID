@@ -80,6 +80,14 @@ states=[
         oos_marginal_value=0.16,
     ),
     StrategyState(
+        strategy_id="P04_TREND50",
+        lifecycle="active",
+        expected_net_return=0.12,
+        risk=0.12,
+        uncertainty=0.01,
+        oos_marginal_value=0.12,
+    ),
+    StrategyState(
         strategy_id="P28_CASH",
         lifecycle="active",
         expected_net_return=0.0,
@@ -99,7 +107,7 @@ group=StrategyGroup(
     members=["P18_XMOM20","P25_BALANCED"],
     weights={"P18_XMOM20":0.72,"P25_BALANCED":0.28},
     reasons=reasons,
-    diagnostics={"selection_mode":"RETURN_FIRST_RESELECT"},
+    diagnostics={"selection_mode":"RETURN_FIRST_RESELECT","max_strategy_weight_constraint":0.28},
 )
 generic=TriaidDecision(
     core_version="triaid-core-smoke",
@@ -117,11 +125,16 @@ assert tie_set==["P00_BUY_HOLD","P09_SHOCK_GUARD"]
 assert tie_winner.strategy_id=="P00_BUY_HOLD"
 
 decision=route.decide(panel,group,generic,states,"OPEN")
-assert decision["route_version"]=="us-return-max-route@0.4.0"
+assert decision["route_version"]=="us-return-max-route@0.5.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
-assert decision["objective"].startswith("MAXIMIZE_CURRENT_MULTI_WINDOW_STATE_RETURN_ESTIMATE_NET_OF_META_SWITCH_COST")
+assert decision["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+assert decision["risk_used_as_secondary_objective"] is False
+assert decision["uncertainty_used_as_secondary_objective"] is False
 assert decision["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST"
-assert decision["strategy_selection_mode"]=="MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
+assert decision["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"
+assert decision["fixed_strategy_count_target"] is False
+assert decision["selected_strategy_count"]==4
+assert decision["max_strategy_weight_constraint"]==0.28
 assert decision["selected_strategy_id"]=="P18_XMOM20"
 assert decision["fast_challenger"]["shadow_only"] is True
 assert decision["fast_challenger"]["applied_to_weights"] is False
@@ -129,7 +142,16 @@ assert decision["fast_challenger"]["windows_days"]==[1,3,5]
 assert "pilot_execution_check" in decision["fast_challenger"]
 assert decision["fast_challenger"]["pilot_execution_check"]["pilot_max_risk_budget"]==0.10
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
-assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
+positive_ranked=[
+    row["strategy_id"]
+    for row in decision["candidate_selection_scores"]
+    if row["strategy_id"]!="P28_CASH" and float(row["net_selection_score"])>0
+]
+expected_selected=positive_ranked[:4]
+assert list(decision["target_strategy_weights"])==expected_selected
+assert all(abs(float(decision["target_strategy_weights"][sid])-0.28)<1e-12 for sid in expected_selected[:3])
+assert abs(float(decision["target_strategy_weights"][expected_selected[3]])-0.16)<1e-12
+assert abs(sum(float(x) for x in decision["target_strategy_weights"].values())-1.0)<1e-12
 assert decision["return_first_population_control_weights"]==group.weights
 assert abs(decision["return_first_population_projected_annualized_expected_net_return"]-0.2608)<1e-12
 assert decision["generic_core_control_weights"]==generic.weights_after
@@ -165,8 +187,8 @@ frozen=ledger.freeze(decision,"US:SNAP:1","2026-09-18")
 dup=ledger.freeze(decision,"US:SNAP:1","2026-09-18")
 assert dup["decision_id"]==frozen["decision_id"]
 
-strategy_day1={"P18_XMOM20":0.10,"P25_BALANCED":0.05,"P00_BUY_HOLD":0.08}
-strategy_day2={"P18_XMOM20":0.02,"P25_BALANCED":0.01,"P00_BUY_HOLD":0.015}
+strategy_day1={"P18_XMOM20":0.10,"P25_BALANCED":0.05,"P04_TREND50":0.06,"P00_BUY_HOLD":0.08}
+strategy_day2={"P18_XMOM20":0.02,"P25_BALANCED":0.01,"P04_TREND50":0.012,"P00_BUY_HOLD":0.015}
 product_day1={a:0.10 for a in spec.assets}
 product_day2={a:0.02 for a in spec.assets}
 turnover={a:10_000_000.0 for a in spec.assets}
@@ -184,8 +206,8 @@ assert o2["recorded"] is True
 
 review=ledger.review_decision(frozen)
 assert review["observation_days"]==2
-expected_route_day1=strategy_day1["P18_XMOM20"]
-expected_route_day2=strategy_day2["P18_XMOM20"]
+expected_route_day1=sum(float(w)*strategy_day1[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
+expected_route_day2=sum(float(w)*strategy_day2[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
 expected_route=(1.0+expected_route_day1)*(1.0+expected_route_day2)-1.0
 expected_generic_day1=0.40*strategy_day1["P18_XMOM20"]+0.30*strategy_day1["P25_BALANCED"]
 expected_generic_day2=0.40*strategy_day2["P18_XMOM20"]+0.30*strategy_day2["P25_BALANCED"]
@@ -210,7 +232,7 @@ assert small_real["total_execution_cost_usd"] < large_real["total_execution_cost
 integrity=ledger.verify_integrity()
 assert integrity["passed"] is True
 report=ledger.daily_report()
-assert report["route_version"]=="us-return-max-route@0.4.0"
+assert report["route_version"]=="us-return-max-route@0.5.0"
 assert report["integrity"]["passed"] is True
 
 print("TRIAID_US_RETURN_MAX_SMOKE_PASS")

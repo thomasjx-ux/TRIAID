@@ -7,6 +7,7 @@ from statistics import mean
 from typing import Iterable
 
 from .contracts import RunRecord
+from .objective import PRIMARY_OBJECTIVE
 from .store import RunStore
 from .strategy_population import StrategyPopulationModule
 
@@ -133,6 +134,8 @@ class StrategyEvolutionModule:
             and run.evaluation.status=="EVALUATED"
             and metadata.get("daily_bar_complete") is not False
             and str(metadata.get("experiment_mode") or "").upper()==expected
+            and metadata.get("primary_reference_superseded") is not True
+            and run.status!="SUPERSEDED"
         )
 
     def _market(self,market_id:str)->dict:
@@ -357,7 +360,7 @@ class StrategyEvolutionModule:
             "diagnosis":diag,
             "hypothesis":candidate.hypothesis,
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective":PRIMARY_OBJECTIVE,
         })
         self._save()
         return {
@@ -367,7 +370,7 @@ class StrategyEvolutionModule:
             "reserved_holdout_runs":len(rows)-len(dev),
             "diagnosis":diag,
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective":PRIMARY_OBJECTIVE,
         }
 
     def candidate_manifest(self,market_id:str,version:str)->dict|None:
@@ -452,7 +455,7 @@ class StrategyEvolutionModule:
             "shadow_min_runs":5,
             "validation_discipline":"PRIMARY_ROUTE_ONLY; INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective":PRIMARY_OBJECTIVE,
         }
         m["validations"][version]=receipt
         m["history"].append({
