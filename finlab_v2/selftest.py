@@ -347,8 +347,13 @@ try:
         state(sid,-0.02-0.01*i,0.10+0.005*i,0.01)
         for i,sid in enumerate(cn_ids)
     ]+[state("P28_CASH",0.0,0.0,0.0)]
-    assert engine.strategy_population.rules("CN")["active_research_experiment"]=="CN_RETURN_MAX_CAPACITY"
-    assert engine.strategy_population.rules("CN")["market_route"]=="CN_RETURN_MAXIMIZATION"
+    cn_rules=engine.strategy_population.rules("CN")
+    us_rules=engine.strategy_population.rules("US")
+    assert cn_rules["active_research_experiment"]=="CN_RETURN_MAX_CAPACITY"
+    assert cn_rules["market_route"]=="CN_RETURN_MAXIMIZATION"
+    assert cn_rules["global_objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+    assert us_rules["global_objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+    assert cn_rules["objective_constitution"]==us_rules["objective_constitution"]
 
     cn_request=RunRequest(
         market=MarketSnapshot(
