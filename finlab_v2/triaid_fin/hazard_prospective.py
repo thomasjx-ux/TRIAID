@@ -12,8 +12,9 @@ HORIZONS=(20,60,120,250)
 
 
 class HazardProspectiveLedger:
-    version="hazard-prospective-ledger@0.1.0"
+    version="hazard-prospective-ledger@0.2.0"
     ledger_file="hazard_prospective_ledger.jsonl"
+    state_file="hazard_prospective_state.json"
     latest_file="hazard_prospective_latest.json"
 
     def __init__(self,store:RunStore)->None:
@@ -28,6 +29,10 @@ class HazardProspectiveLedger:
         return hashlib.sha256(cls._canonical(payload).encode("utf-8")).hexdigest()
 
     def rows(self,limit:int=5000)->list[dict]:
+        state=self.store.load_json(self.state_file,default={}) or {}
+        rows=list(state.get("rows") or [])
+        if rows:
+            return rows[-int(limit):]
         return self.store.read_jsonl(self.ledger_file,limit=limit)
 
     @staticmethod
@@ -83,7 +88,10 @@ class HazardProspectiveLedger:
         }
         digest=self._hash(payload)
         payload["ledger_id"]=f"HAZARD-SHADOW-{as_of}-{digest[:10]}"
-        self.store.append_jsonl(self.ledger_file,payload)
+        rows=self.rows(5000)
+        rows.append(payload)
+        self.store.save_json(self.state_file,{"version":self.version,"rows":rows})
+        self.store.append_jsonl(self.ledger_file,{"event":"FREEZE",**payload})
         self.store.save_json(self.latest_file,payload)
         return payload
 
@@ -129,11 +137,16 @@ class HazardProspectiveLedger:
             out["pending_horizons"]=[h for h in HORIZONS if str(h) not in outcomes]
             new_rows.append(out)
 
-        # Rebuild append-only logical ledger into a latest materialized history file.
         if new_rows!=rows:
-            self.store.save_json("hazard_prospective_materialized.json",{"rows":new_rows})
+            self.store.save_json(self.state_file,{"version":self.version,"rows":new_rows})
             latest=new_rows[-1]
             self.store.save_json(self.latest_file,latest)
+            self.store.append_jsonl(self.ledger_file,{
+                "event":"RESOLVE",
+                "at":datetime.now(timezone.utc).isoformat(),
+                "updated_outcomes":updated,
+                "latest_ledger_id":latest.get("ledger_id"),
+            })
         else:
             latest=rows[-1]
         return {
