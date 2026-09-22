@@ -18,6 +18,8 @@ from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_c
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
 from .latent_hazard import LatentHazardExperiment
+from .policy_curve import PolicyExpectationCurve
+from .hazard_prospective import HazardProspectiveLedger
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -58,6 +60,8 @@ class EvolutionLabEngine:
         self.long_cycle_hypothesis=LongCycleHypothesisExperiment(self.store)
         self.cross_market_crash=CrossMarketCrashExperiment(self.store)
         self.latent_hazard=LatentHazardExperiment(self.store)
+        self.policy_curve=PolicyExpectationCurve(self.store)
+        self.hazard_prospective=HazardProspectiveLedger(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
@@ -153,6 +157,8 @@ class EvolutionLabEngine:
             "long_cycle_hypothesis":self.long_cycle_hypothesis.version if hasattr(self,"long_cycle_hypothesis") else "us-long-cycle-hypothesis@unknown",
             "cross_market_crash":self.cross_market_crash.version if hasattr(self,"cross_market_crash") else "us-cn-hk-crash-linkage@unknown",
             "latent_hazard":self.latent_hazard.version if hasattr(self,"latent_hazard") else "latent-hazard-discovery@unknown",
+            "policy_curve":self.policy_curve.version if hasattr(self,"policy_curve") else "policy-expectation-curve@unknown",
+            "hazard_prospective":self.hazard_prospective.version if hasattr(self,"hazard_prospective") else "hazard-prospective-ledger@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
             "execution_calibration":ExecutionCalibration.version,
@@ -763,6 +769,33 @@ class EvolutionLabEngine:
     def latent_hazard_status(self)->dict:
         return self.latent_hazard.status()
 
+    def policy_curve_run(self,force:bool=False)->dict:
+        return self.policy_curve.run(force=force)
+
+    def policy_curve_latest(self)->dict|None:
+        return self.policy_curve.latest()
+
+    def policy_curve_history(self,limit:int=100)->list[dict]:
+        return self.policy_curve.history(limit)
+
+    def policy_curve_status(self)->dict:
+        return self.policy_curve.status()
+
+    def hazard_prospective_freeze(self,hazard_report:dict,policy_curve:dict|None=None)->dict:
+        return self.hazard_prospective.freeze(hazard_report,policy_curve)
+
+    def hazard_prospective_resolve(self)->dict:
+        return self.hazard_prospective.resolve()
+
+    def hazard_prospective_latest(self)->dict|None:
+        return self.hazard_prospective.latest()
+
+    def hazard_prospective_history(self,limit:int=100)->list[dict]:
+        return self.hazard_prospective.rows(limit)
+
+    def hazard_prospective_status(self)->dict:
+        return self.hazard_prospective.status()
+
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
 
@@ -1149,6 +1182,12 @@ class EvolutionLabEngine:
             latent=self.latent_hazard.latest()
             if latent:
                 summary["latent_hazard"]=latent
+            policy_curve=self.policy_curve.latest()
+            if policy_curve:
+                summary["policy_expectation_curve"]=policy_curve
+            hazard_shadow=self.hazard_prospective.latest()
+            if hazard_shadow:
+                summary["hazard_prospective"]=hazard_shadow
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
