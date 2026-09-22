@@ -70,6 +70,7 @@ async def bootstrap_long_horizon_research()->None:
         )
     except Exception as exc:
         print("TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+    latent=None
     try:
         latent=await asyncio.to_thread(engine.latent_hazard_run,False)
         print(
@@ -100,6 +101,32 @@ async def bootstrap_long_horizon_research()->None:
         )
     except Exception as exc:
         print("TRIAID_LATENT_HAZARD_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+
+    policy_curve=None
+    try:
+        policy_curve=await asyncio.to_thread(engine.policy_curve_run,False)
+        print(
+            "TRIAID_POLICY_CURVE_BACKGROUND_PASS",
+            policy_curve.get("snapshot_id"),
+            policy_curve.get("as_of"),
+            json.dumps(policy_curve.get("data_quality") or {},sort_keys=True),
+        )
+    except Exception as exc:
+        print("TRIAID_POLICY_CURVE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+
+    if latent is not None:
+        try:
+            frozen=await asyncio.to_thread(engine.hazard_prospective_freeze,latent,policy_curve)
+            resolved=await asyncio.to_thread(engine.hazard_prospective_resolve)
+            print(
+                "TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_PASS",
+                frozen.get("ledger_id"),
+                frozen.get("as_of"),
+                frozen.get("current_state",{}).get("state_label"),
+                resolved.get("updated_outcomes"),
+            )
+        except Exception as exc:
+            print("TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -413,6 +440,46 @@ def latent_hazard_history(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> list[dict]:
     return engine.latent_hazard_history(limit)
+
+
+@app.get("/api/experiments/policy-curve/status")
+def policy_curve_status() -> dict:
+    return engine.policy_curve_status()
+
+
+@app.get("/api/experiments/policy-curve/latest")
+def policy_curve_latest() -> dict:
+    row=engine.policy_curve_latest()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no policy expectation curve snapshot")
+    return row
+
+
+@app.get("/api/experiments/policy-curve/history")
+def policy_curve_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.policy_curve_history(limit)
+
+
+@app.get("/api/experiments/latent-hazard/prospective/status")
+def hazard_prospective_status() -> dict:
+    return engine.hazard_prospective_status()
+
+
+@app.get("/api/experiments/latent-hazard/prospective/latest")
+def hazard_prospective_latest() -> dict:
+    row=engine.hazard_prospective_latest()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no prospective hazard shadow record")
+    return row
+
+
+@app.get("/api/experiments/latent-hazard/prospective/history")
+def hazard_prospective_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.hazard_prospective_history(limit)
 
 
 @app.get("/api/recovery-wave/status")
