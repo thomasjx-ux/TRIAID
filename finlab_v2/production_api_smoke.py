@@ -170,17 +170,34 @@ if us_return_history:
     # guard, while deterministic route smoke validates the current selector enums.
     route_version=str(us_return_latest.get("route_version") or "")
     metric_semantics=str(us_return_latest.get("selection_metric_semantics") or "")
-    if metric_semantics:
-        assert "historical strategy state-return estimate" in metric_semantics
+    if route_version=="us-return-max-route@0.5.0":
+        assert us_return_latest["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+        assert us_return_latest["risk_used_as_secondary_objective"] is False
+        assert us_return_latest["uncertainty_used_as_secondary_objective"] is False
+        assert us_return_latest["fixed_strategy_count_target"] is False
+        assert us_return_latest["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"
+        assert "realizable net return" in metric_semantics
         assert "calibrated future-return forecast" in metric_semantics
+        weights=us_return_latest.get("target_strategy_weights") or {}
+        assert weights
+        assert abs(sum(float(v) for v in weights.values())-1.0)<1e-12
+        hard_cap=float(us_return_latest["max_strategy_weight_constraint"])
+        assert all(0.0<=float(v)<=hard_cap+1e-12 for k,v in weights.items() if k!="P28_CASH")
+        assert us_return_latest["selected_strategy_count"]==sum(
+            1 for k,v in weights.items() if k!="P28_CASH" and float(v)>1e-12
+        )
+        assert us_return_latest["selected_strategy_id"] in us_return_latest["selected_strategy_ids"]
     else:
-        # Immutable 0.1/0.2 rows predate the explicit semantics field.
-        assert route_version in {"us-return-max-route@0.1.0","us-return-max-route@0.2.0"}
-    if "target_strategy_weights" in us_return_latest:
-        assert len(us_return_latest["target_strategy_weights"])==1
-        assert abs(sum(us_return_latest["target_strategy_weights"].values())-1.0)<1e-12
-    if "selected_strategy_id" in us_return_latest and "max_return_tie_set" in us_return_latest:
-        assert us_return_latest["selected_strategy_id"] in us_return_latest["max_return_tie_set"]
+        if metric_semantics:
+            # Frozen historical decisions retain the semantics of the route version
+            # that created them; they are not rewritten during deployment.
+            assert "calibrated future-return forecast" in metric_semantics
+        else:
+            assert route_version in {"us-return-max-route@0.1.0","us-return-max-route@0.2.0"}
+        if "target_strategy_weights" in us_return_latest:
+            assert abs(sum(float(v) for v in us_return_latest["target_strategy_weights"].values())-1.0)<1e-12
+        if "selected_strategy_id" in us_return_latest and "max_return_tie_set" in us_return_latest:
+            assert us_return_latest["selected_strategy_id"] in us_return_latest["max_return_tie_set"]
     if "capital_capacity" in us_return_latest:
         assert us_return_latest["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
         assert len(us_return_latest["capital_capacity"]["sleeves"])==4
