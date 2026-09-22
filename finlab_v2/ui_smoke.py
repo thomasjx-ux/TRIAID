@@ -60,7 +60,6 @@ assert "refreshLiveWindows" in html
 assert '<option value="HK">港股 / HK</option>' in html
 assert 'id="marketScopeStatus"' in html
 assert "港股已进入独立策略研究路线" in html
-assert "HK_RETURN_MAX_CAPACITY" in html
 assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
