@@ -73,7 +73,7 @@ CN_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.5.5"
+    version = "strategy-population@0.6.0"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -118,9 +118,12 @@ class StrategyPopulationModule:
         result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
         result["empty_group_allowed"] = True
         if cfg.market_id=="CN":
-            result["active_research_experiment"]="CN_WORST_POOL_RESCUE"
-            result["market_route"]="CN_RECOVERY_CAPACITY"
-            result["research_experiment_objective"]="deliberately start from an equal-weight pool of the currently worst eligible risky strategies, then measure how much loss TRIAID can reduce without using future outcomes"
+            result["active_research_experiment"]="CN_RETURN_MAX_CAPACITY"
+            result["market_route"]="CN_RETURN_MAXIMIZATION"
+            result["research_experiment_objective"]="maximize realizable net return from the full admissible strategy universe; risk, liquidity, capacity, concentration and switching costs are constraints rather than co-equal objectives"
+            result["primary_route_selector"]="RELATIVE_RETURN_FIRST_PORTFOLIO_WITH_CAPACITY_AND_SWITCHING_CONSTRAINTS"
+            result["stress_test_route"]="CN_WORST_POOL_RESCUE"
+            result["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY_NOT_PRIMARY_PORTFOLIO"
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
@@ -264,7 +267,6 @@ class StrategyPopulationModule:
             and s.lifecycle in {"active","reduced"}
             and not s.hard_failure
             and s.liquidity_ok and s.capacity_ok and s.risk_ok and s.concentration_ok
-            and self._robust_return(s,cfg)>0
         ]
         feasible=sorted(feasible,key=lambda s:(-self._robust_return(s,cfg),s.strategy_id))
 
@@ -272,7 +274,6 @@ class StrategyPopulationModule:
         marginal_scores:Dict[str,float]={}
         duplicate_rejections=[]
         family_rejections=[]
-        nonpositive_marginal=[]
 
         for state in feasible:
             if len(selected)>=max_members:
@@ -293,25 +294,43 @@ class StrategyPopulationModule:
 
             robust=self._robust_return(state,cfg)
             marginal=robust-cfg.redundancy_penalty*max_corr*max(0.0,state.risk)
-            if marginal<=0:
-                nonpositive_marginal.append({"strategy_id":state.strategy_id,"marginal":marginal,"max_corr":max_corr})
-                continue
             selected.append(state)
             marginal_scores[state.strategy_id]=marginal
 
-        weights,remaining=self._allocate_scores_with_cap(marginal_scores,cfg.max_weight)
+        allocation_scores:Dict[str,float]={}
+        score_temperature=None
+        if marginal_scores:
+            values=list(marginal_scores.values())
+            hi=max(values)
+            lo=min(values)
+            spread=hi-lo
+            if spread<=1e-12:
+                allocation_scores={sid:1.0 for sid in marginal_scores}
+                score_temperature=0.0
+            else:
+                score_temperature=spread/2.0
+                allocation_scores={
+                    sid:math.exp(max(-50.0,min(0.0,(score-hi)/score_temperature)))
+                    for sid,score in marginal_scores.items()
+                }
+
+        weights,remaining=self._allocate_scores_with_cap(allocation_scores,cfg.max_weight)
         cash=next((s for s in states if s.strategy_id=="P28_CASH" and s.eligible and s.lifecycle in {"active","reduced"}),None)
-        if cash is not None and (remaining>1e-12 or not weights):
+        if cash is not None:
             weights["P28_CASH"]=remaining if weights else 1.0
 
         diagnostics={
-            "optimizer":"marginal-group-value-v1",
+            "optimizer":"relative-return-max-v1",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN_PROXY_SUBJECT_TO_HARD_TRADABILITY_CAPACITY_AND_SWITCHING_CONSTRAINTS",
             "feasible_count":len(feasible),
             "selected_risky_count":len([k for k in weights if k!="P28_CASH"]),
             "duplicate_rejections":duplicate_rejections,
             "family_rejections":family_rejections,
-            "nonpositive_marginal":nonpositive_marginal,
             "marginal_scores":marginal_scores,
+            "allocation_scores":allocation_scores,
+            "score_temperature":score_temperature,
+            "absolute_sign_used_as_cash_gate":False,
+            "cash_semantics":"RESIDUAL_ONLY_WHEN_RISK_CAPACITY_OR_MEMBER_LIMITS_PREVENT_FULL_ALLOCATION",
         }
         return weights,diagnostics
 
@@ -507,7 +526,10 @@ class StrategyPopulationModule:
         else:
             diagnostics["selection_mode"]="INITIAL_GROUP"
 
-        members=[sid for sid,w in candidate_weights.items() if w>1e-12]
+        members=[
+            sid for sid,w in candidate_weights.items()
+            if w>1e-12 or sid=="P28_CASH"
+        ]
         reasons:Dict[str,BilingualText]={}
         for sid in members:
             if sid=="P28_CASH":
