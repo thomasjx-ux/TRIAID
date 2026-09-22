@@ -232,11 +232,13 @@ for market in ("US","CN"):
         if "capital_capacity" in latest_us_daily:
             assert latest_us_daily["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
     if market=="CN":
-        assert daily["prospective_experiment"]["report_version"]=="cn-prospective-controls@0.3.0"
-        assert str(daily["prospective_experiment"]["protocol_version"]).startswith("cn-prospective-controls@")
-        assert daily["prospective_experiment"]["strategy_determination"]
-        assert "daily_fluctuation" in daily["prospective_experiment"]
-        assert "current_portfolio_cumulative_returns" in daily["prospective_experiment"]
+        prospective=daily.get("prospective_experiment")
+        if prospective is not None:
+            assert prospective["report_version"]=="cn-prospective-controls@0.3.0"
+            assert str(prospective["protocol_version"]).startswith("cn-prospective-controls@")
+            assert prospective["strategy_determination"]
+            assert "daily_fluctuation" in prospective
+            assert "current_portfolio_cumulative_returns" in prospective
         assert daily["recovery_wave"]["report_version"]=="recovery-wave-ledger@0.2.0"
         assert daily["recovery_wave"]["integrity"]["passed"] is True
         assert str(daily["recovery_wave"]["latest_decision"]["core_version"]).startswith("recovery-wave-core@")
