@@ -254,7 +254,7 @@ class MarketDataAutomation:
             "HK":{
                 "^HSI":"恒生指数 · HSI",
                 "^HSCE":"恒生中国企业指数 · HSCEI",
-                "^HSTECH":"恒生科技指数 · HSTECH",
+                "3033.HK":"恒生科技ETF · 3033.HK",
             },
         }
         return labels.get(market_id.upper(),{}).get(symbol,symbol)
