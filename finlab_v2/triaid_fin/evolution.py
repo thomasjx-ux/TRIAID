@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from .contracts import RunRecord
+from .objective import PRIMARY_OBJECTIVE
 from .store import RunStore
 
 
@@ -157,7 +158,7 @@ class EvolutionModule:
             "market_diagnosis":market_diagnosis,
             "hypothesis":cand.hypothesis,
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective":PRIMARY_OBJECTIVE,
         })
         self.store.save_json("core_evolution.json",self.state)
         return {
@@ -170,7 +171,7 @@ class EvolutionModule:
             "diagnosis":diag,
             "market_diagnosis":market_diagnosis,
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
-            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "objective":PRIMARY_OBJECTIVE,
         }
 
     def candidate_manifest(self,version:str)->dict|None:
