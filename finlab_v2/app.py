@@ -315,6 +315,26 @@ def us_long_cycle_history(
     return engine.long_cycle_hypothesis_history(limit)
 
 
+@app.get("/api/experiments/us-cn/crash-linkage/status")
+def us_cn_crash_linkage_status() -> dict:
+    return engine.cross_market_crash_status()
+
+
+@app.get("/api/experiments/us-cn/crash-linkage/latest")
+def us_cn_crash_linkage_latest() -> dict:
+    row=engine.cross_market_crash_latest()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no US-CN crash linkage experiment")
+    return row
+
+
+@app.get("/api/experiments/us-cn/crash-linkage/history")
+def us_cn_crash_linkage_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.cross_market_crash_history(limit)
+
+
 @app.get("/api/recovery-wave/status")
 def recovery_wave_status(market_id: str = "CN") -> dict:
     return engine.recovery_wave_status(market_id)
