@@ -44,7 +44,7 @@ def add_verified(engine,market,day_index,experiment_mode=None):
             metadata={
                 "daily_bar_complete":True,
                 "base_cost_bps":0.0,
-                "experiment_mode":experiment_mode or ("CN_RETURN_MAX_CAPACITY" if market=="CN" else "US_RETURN_MAX_CAPACITY"),
+                "experiment_mode":experiment_mode or ("CN_RETURN_MAX_CAPACITY" if market=="CN" else "HK_RETURN_MAX_CAPACITY" if market=="HK" else "US_RETURN_MAX_CAPACITY"),
             },
         ),
         strategy_states=states(),
@@ -69,18 +69,19 @@ def add_verified(engine,market,day_index,experiment_mode=None):
 
 try:
     engine=EvolutionLabEngine()
-    for market in ("US","CN"):
+    for market in ("US","CN","HK"):
         for i in range(10):
             add_verified(engine,market,i)
 
     # Deliberate stress evidence must not count toward the primary Core evolution set.
     add_verified(engine,"CN",40,experiment_mode="CN_WORST_POOL_RESCUE")
     add_verified(engine,"US",40,experiment_mode="US_STRESS_ONLY")
+    add_verified(engine,"HK",40,experiment_mode="HK_STRESS_ONLY")
 
     proposal=engine.propose_core_candidate()
     assert proposal["created"] is True,proposal
-    assert proposal["development_runs_by_market"]=={"US":7,"CN":7}
-    assert proposal["reserved_holdout_runs_by_market"]=={"US":3,"CN":3}
+    assert proposal["development_runs_by_market"]=={"US":7,"CN":7,"HK":7}
+    assert proposal["reserved_holdout_runs_by_market"]=={"US":3,"CN":3,"HK":3}
     assert proposal["evidence_scope"]=="PRIMARY_ROUTE_ONLY"
     assert proposal["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
     version=proposal["candidate"]["version"]
@@ -93,6 +94,7 @@ try:
     assert receipt["shadow_pass"] is False
     assert receipt["shadow_by_market"]["US"]["count"]==0
     assert receipt["shadow_by_market"]["CN"]["count"]==0
+    assert receipt["shadow_by_market"]["HK"]["count"]==0
 
     for market in ("US","CN"):
         for i in range(10,15):
@@ -105,6 +107,7 @@ try:
     assert stored["passed"] is True
     assert stored["shadow_by_market"]["US"]["count"]>=5
     assert stored["shadow_by_market"]["CN"]["count"]>=5
+    assert stored["shadow_by_market"]["HK"]["count"]>=5
     assert stored["validation_discipline"].endswith("NO_CROSS_MARKET_MASKING")
 
     print("TRIAID_CORE_EVOLUTION_VALIDATION_SMOKE_PASS")
@@ -115,6 +118,7 @@ try:
         "shadow":{
             "US":stored["shadow_by_market"]["US"]["count"],
             "CN":stored["shadow_by_market"]["CN"]["count"],
+            "HK":stored["shadow_by_market"]["HK"]["count"],
         },
     })
 finally:
