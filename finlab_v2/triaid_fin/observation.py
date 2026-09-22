@@ -10,7 +10,7 @@ from .store import RunStore
 
 
 class MarketObservationStore:
-    version="market-observation@0.5.0"
+    version="market-observation@0.5.1"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
@@ -30,7 +30,8 @@ class MarketObservationStore:
         except Exception:
             return None
         if str(mode).upper()=="DAILY":
-            tz=ZoneInfo("America/New_York" if str(market).upper()=="US" else "Asia/Shanghai")
+            key=str(market).upper()
+            tz=ZoneInfo("America/New_York" if key=="US" else "Asia/Hong_Kong" if key=="HK" else "Asia/Shanghai")
             return datetime.fromtimestamp(stamp,tz).date().toordinal()
         return stamp
 
