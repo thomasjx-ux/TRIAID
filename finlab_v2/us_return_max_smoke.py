@@ -80,6 +80,14 @@ states=[
         oos_marginal_value=0.16,
     ),
     StrategyState(
+        strategy_id="P04_TREND50",
+        lifecycle="active",
+        expected_net_return=0.12,
+        risk=0.12,
+        uncertainty=0.01,
+        oos_marginal_value=0.12,
+    ),
+    StrategyState(
         strategy_id="P28_CASH",
         lifecycle="active",
         expected_net_return=0.0,
@@ -99,7 +107,7 @@ group=StrategyGroup(
     members=["P18_XMOM20","P25_BALANCED"],
     weights={"P18_XMOM20":0.72,"P25_BALANCED":0.28},
     reasons=reasons,
-    diagnostics={"selection_mode":"RETURN_FIRST_RESELECT"},
+    diagnostics={"selection_mode":"RETURN_FIRST_RESELECT","max_strategy_weight_constraint":0.28},
 )
 generic=TriaidDecision(
     core_version="triaid-core-smoke",
@@ -121,7 +129,7 @@ assert decision["route_version"]=="us-return-max-route@0.5.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
 assert decision["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"\nassert decision["risk_used_as_secondary_objective"] is False\nassert decision["uncertainty_used_as_secondary_objective"] is False
 assert decision["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST"
-assert decision["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_PROXY_WITH_COST_ONLY_THEN_DETERMINISTIC_TIE_BREAK"
+assert decision["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"\nassert decision["fixed_strategy_count_target"] is False\nassert decision["selected_strategy_count"]==4\nassert decision["max_strategy_weight_constraint"]==0.28
 assert decision["selected_strategy_id"]=="P18_XMOM20"
 assert decision["fast_challenger"]["shadow_only"] is True
 assert decision["fast_challenger"]["applied_to_weights"] is False
@@ -129,7 +137,7 @@ assert decision["fast_challenger"]["windows_days"]==[1,3,5]
 assert "pilot_execution_check" in decision["fast_challenger"]
 assert decision["fast_challenger"]["pilot_execution_check"]["pilot_max_risk_budget"]==0.10
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
-assert decision["target_strategy_weights"]=={"P18_XMOM20":1.0}
+assert decision["target_strategy_weights"]=={"P18_XMOM20":0.28,"P25_BALANCED":0.28,"P04_TREND50":0.28,"P00_BUY_HOLD":0.16}
 assert decision["return_first_population_control_weights"]==group.weights
 assert abs(decision["return_first_population_projected_annualized_expected_net_return"]-0.2608)<1e-12
 assert decision["generic_core_control_weights"]==generic.weights_after
