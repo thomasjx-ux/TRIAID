@@ -79,14 +79,6 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     @router.get("/strategy-context/{market_id}")
     def market_data_strategy_context_api(market_id:str)->dict:
         key=_market(market_id)
-        if key=="HK":
-            return {
-                "market_id":"HK",
-                "role":"MARKET_OBSERVATION_AND_CROSS_MARKET_RESEARCH",
-                "strategy_route_enabled":False,
-                "broker_execution_enabled":False,
-                "note":"Hong Kong is live for market data and cross-market research; a dedicated HK strategy selector has not yet been promoted.",
-            }
         try:
             return engine.strategy_market_context(key)
         except Exception as exc:
