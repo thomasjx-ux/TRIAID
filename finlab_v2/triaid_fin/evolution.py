@@ -22,7 +22,7 @@ class CoreParameters:
 
 
 class EvolutionModule:
-    version = "core-evolution@0.2.0"
+    version = "core-evolution@0.2.1"
     min_verified_runs = 20
     min_verified_runs_per_market = 10
 
@@ -37,6 +37,28 @@ class EvolutionModule:
         raw.setdefault("validations",{})
         self.state = raw
 
+    @staticmethod
+    def _primary_mode(market_id:str)->str:
+        market_id=str(market_id).upper()
+        if market_id=="CN":
+            return "CN_RETURN_MAX_CAPACITY"
+        if market_id=="US":
+            return "US_RETURN_MAX_CAPACITY"
+        return ""
+
+    @classmethod
+    def _primary_evidence(cls,run:RunRecord)->bool:
+        market_id=str(run.market.market_id).upper()
+        expected=cls._primary_mode(market_id)
+        metadata=run.market.metadata or {}
+        return bool(
+            expected
+            and run.evaluation
+            and run.evaluation.status=="EVALUATED"
+            and metadata.get("daily_bar_complete") is not False
+            and str(metadata.get("experiment_mode") or "").upper()==expected
+        )
+
     def active(self) -> CoreParameters:
         version = self.state["active_version"]
         return CoreParameters(**self.state["cores"][version])
@@ -48,11 +70,7 @@ class EvolutionModule:
         return deepcopy(self.state)
 
     def diagnose(self, runs: Iterable[RunRecord]) -> dict:
-        evaluated=[
-            r for r in runs
-            if r.evaluation and r.evaluation.status=="EVALUATED"
-            and (r.market.metadata or {}).get("daily_bar_complete") is not False
-        ]
+        evaluated=[r for r in runs if self._primary_evidence(r)]
         if not evaluated:
             return {"evaluated_runs":0,"mean_excess_return":None,"negative_rate":None,"worst_excess_return":None}
         excess=[float(r.evaluation.excess_return or 0.0) for r in evaluated]
@@ -65,12 +83,7 @@ class EvolutionModule:
         }
 
     def propose_candidate(self, runs: Iterable[RunRecord]) -> dict:
-        eligible=[
-            r for r in runs
-            if r.evaluation and r.evaluation.status=="EVALUATED"
-            and (r.market.metadata or {}).get("daily_bar_complete") is not False
-            and str(r.market.market_id).upper() in {"US","CN"}
-        ]
+        eligible=[r for r in runs if self._primary_evidence(r)]
         eligible=sorted(eligible,key=lambda r:(r.market.as_of,r.created_at,r.run_id))
         by_market={
             market:[r for r in eligible if str(r.market.market_id).upper()==market]
@@ -122,11 +135,10 @@ class EvolutionModule:
         )
         if weak_market:
             cand.intervention_strength=max(0.10,parent.intervention_strength*0.85)
-            cand.uncertainty_penalty=min(3.0,parent.uncertainty_penalty*1.10)
-            cand.hypothesis="Reduce intervention strength and demand more evidence because at least one market's development-period interventions show weak relative-return evidence."
+            cand.hypothesis="Reduce intervention strength because at least one market's primary-route development-period interventions show weak realizable net-return evidence."
         else:
             cand.intervention_strength=min(0.90,parent.intervention_strength*1.05)
-            cand.hypothesis="Slightly increase intervention strength because both US and CN development-period interventions show non-negative relative-return evidence."
+            cand.hypothesis="Slightly increase intervention strength because both US and CN primary-route development periods show non-negative relative-return evidence."
 
         created_at=datetime.now(timezone.utc).isoformat()
         self.state["cores"][version]=asdict(cand)
@@ -142,6 +154,8 @@ class EvolutionModule:
             "diagnosis":diag,
             "market_diagnosis":market_diagnosis,
             "hypothesis":cand.hypothesis,
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
         })
         self.store.save_json("core_evolution.json",self.state)
         return {
@@ -153,6 +167,8 @@ class EvolutionModule:
             "reserved_holdout_runs_by_market":{m:len(reserved_holdout_run_ids_by_market[m]) for m in ("US","CN")},
             "diagnosis":diag,
             "market_diagnosis":market_diagnosis,
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
         }
 
     def candidate_manifest(self,version:str)->dict|None:
