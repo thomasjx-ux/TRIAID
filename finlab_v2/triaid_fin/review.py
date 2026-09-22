@@ -7,7 +7,7 @@ from .contracts import RunRecord
 
 
 class ReviewModule:
-    version="review@0.5.0"
+    version="review@0.6.0"
 
     @staticmethod
     def _evidence_eligible(run:RunRecord)->bool:
@@ -214,6 +214,110 @@ class ReviewModule:
             },
         }
 
+
+    @classmethod
+    def _investment_strategy_view(cls,current:RunRecord,previous:Optional[RunRecord],change:dict,comparison:dict)->dict:
+        weights=cls._group_weights(current)
+        states=cls._state_map(current)
+        ranked=[
+            {
+                "strategy_id":sid,
+                "weight":float(weight),
+                "state_return_estimate":float(states[sid].expected_net_return) if sid in states else None,
+                "risk":float(states[sid].risk) if sid in states else None,
+                "uncertainty":float(states[sid].uncertainty) if sid in states else None,
+                "reason":cls._reason(current,sid),
+            }
+            for sid,weight in weights.items()
+            if float(weight)>1e-12
+        ]
+        ranked.sort(key=lambda row:row["weight"],reverse=True)
+        leaders=ranked[:5]
+
+        realized=comparison.get("latest_evaluated_today") or comparison.get("current_run") or {}
+        realized_gap=realized.get("realized_excess_return")
+        if realized_gap is None:
+            performance_conclusion="REALIZED_OUTCOME_PENDING"
+        elif realized_gap>0:
+            performance_conclusion="TRIAID_OUTPERFORMED_BASELINE"
+        elif realized_gap<0:
+            performance_conclusion="TRIAID_UNDERPERFORMED_BASELINE"
+        else:
+            performance_conclusion="TRIAID_MATCHED_BASELINE"
+
+        state_delta=change.get("selector_state_return_estimate_delta")
+        if state_delta is None:
+            selector_direction="NO_PRIOR_COMPARISON"
+        elif state_delta>0:
+            selector_direction="HIGHER_STATE_RETURN_ESTIMATE"
+        elif state_delta<0:
+            selector_direction="LOWER_STATE_RETURN_ESTIMATE"
+        else:
+            selector_direction="UNCHANGED_STATE_RETURN_ESTIMATE"
+
+        market_regime=current.market.regime
+        outlook={
+            "regime":market_regime,
+            "base_case":"Maintain the current return-maximizing mix while the leading strategies retain positive net state-return advantage after modeled switching cost.",
+            "upside_condition":"Increase exposure only if higher-ranked strategies preserve their advantage across subsequent observations and the improvement remains larger than switching and execution cost.",
+            "downside_condition":"Reduce or replace strategies whose net state-return advantage deteriorates, whose hard feasibility constraints fail, or whose realized contribution turns persistently negative.",
+            "forecast_discipline":"Forward view is conditional and scenario-based. Historical/model state-return estimates are not calibrated future-return forecasts.",
+        }
+
+        review_points=[]
+        for row in change.get("top_weight_movements",[])[:5]:
+            review_points.append({
+                "strategy_id":row["strategy_id"],
+                "change_type":row["change_type"],
+                "weight_before":row["weight_before"],
+                "weight_after":row["weight_after"],
+                "weight_delta":row["weight_delta"],
+                "reason":row["reason"],
+            })
+
+        return {
+            "report_type":"INVESTMENT_STRATEGY_DAILY",
+            "market_id":current.market.market_id,
+            "as_of":current.market.as_of,
+            "strategy_thesis":{
+                "objective":"Maximize realizable net return subject to hard feasibility constraints.",
+                "current_leaders":leaders,
+                "portfolio_shape":"Concentrated or diversified only as justified by net-return ranking and hard constraints; diversification is not an independent objective.",
+            },
+            "session_review":{
+                "strategy_changes":review_points,
+                "added":change.get("added",[]),
+                "removed":change.get("removed",[]),
+                "selector_direction":selector_direction,
+                "selector_state_return_estimate_before":change.get("selector_state_return_estimate_before"),
+                "selector_state_return_estimate_after":change.get("selector_state_return_estimate_after"),
+                "selector_state_return_estimate_delta":state_delta,
+            },
+            "performance_review":{
+                "conclusion":performance_conclusion,
+                "baseline_realized_return":realized.get("baseline_realized_return"),
+                "triaid_realized_return":realized.get("triaid_realized_return"),
+                "realized_excess_return":realized_gap,
+                "trading_cost":realized.get("trading_cost"),
+                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:5],
+                "note":"Realized performance is kept separate from model/state estimates.",
+            },
+            "forward_view":outlook,
+            "replacement_watch":{
+                "excluded_highest_state_return_candidates":change.get("excluded_strategies",[])[:5],
+                "replace_when":[
+                    "A challenger has a higher realizable net-return estimate after switching cost.",
+                    "The incumbent loses its net-return advantage across repeated observations.",
+                    "Liquidity, capacity, concentration or other hard feasibility constraints fail.",
+                    "Prospective realized contribution persistently underperforms the current alternative.",
+                ],
+            },
+            "technical_appendix_policy":{
+                "default_visibility":"COLLAPSED",
+                "show_when":"Only when data quality, audit, deployment or market-data integrity is abnormal.",
+            },
+        }
+
     def daily_summary(self,runs:Iterable[RunRecord])->dict:
         rows=sorted(
             [
@@ -240,6 +344,7 @@ class ReviewModule:
 
         strategy_changes=[]
         return_comparisons={}
+        investment_strategy_reports={}
         for market_id,current in latest_by_market.items():
             prior=[
                 run for run in rows
@@ -261,6 +366,12 @@ class ReviewModule:
                     if evaluated_today else None
                 ),
             }
+            investment_strategy_reports[market_id]=self._investment_strategy_view(
+                current,
+                previous,
+                strategy_changes[-1],
+                return_comparisons[market_id],
+            )
 
         analysis=[]
         analysis_zh=[]
@@ -306,6 +417,9 @@ class ReviewModule:
             "analysis_zh":analysis_zh,
             "latest_market_regime":latest.market.regime if latest else None,
             "report_contract":{
+                "report_type":"INVESTMENT_STRATEGY_DAILY",
+                "body_priority":["strategy_analysis","session_review","change_reason","return_difference","forward_view"],
+                "technical_runtime_report_default":False,
                 "strategy_change_reason_required":True,
                 "before_after_weight_required":True,
                 "selected_and_excluded_reason_required":True,
@@ -315,6 +429,7 @@ class ReviewModule:
             },
             "strategy_changes":strategy_changes,
             "return_comparisons":return_comparisons,
+            "investment_strategy_reports":investment_strategy_reports,
             "runs_detail":[self._detail(r) for r in day],
         }
 
