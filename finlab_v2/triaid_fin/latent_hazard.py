@@ -63,8 +63,8 @@ COMPOSITE_RULES={
 
 
 class LatentHazardExperiment:
-    version="latent-hazard-discovery@0.3.0"
-    protocol_version="point-in-time-hazard-protocol@0.3.0"
+    version="latent-hazard-discovery@0.4.0"
+    protocol_version="point-in-time-hazard-protocol@0.4.0"
     latest_file="latent_hazard_latest.json"
     history_file="latent_hazard_history.jsonl"
 
@@ -92,6 +92,60 @@ class LatentHazardExperiment:
                     time.sleep(1.5*(attempt+1))
         raise RuntimeError(f"fred_retry_exhausted:{series_id}:{' | '.join(errors)}")
 
+
+
+    @staticmethod
+    def _fisher_right(event_hits:int,event_misses:int,control_hits:int,control_misses:int)->float|None:
+        a=int(event_hits);b=int(event_misses);c=int(control_hits);d=int(control_misses)
+        n1=a+b;n2=c+d;success=a+c;total=n1+n2
+        if n1<=0 or n2<=0:
+            return None
+        denominator=math.comb(total,n1)
+        if denominator<=0:
+            return None
+        p=0.0
+        for x in range(a,min(n1,success)+1):
+            failures_selected=n1-x
+            if failures_selected<0 or failures_selected>(total-success):
+                continue
+            p+=(
+                math.comb(success,x)
+                *math.comb(total-success,failures_selected)
+                /denominator
+            )
+        return min(1.0,max(0.0,p))
+
+    @staticmethod
+    def _bh_adjust(rows:list[dict],p_key:str="fisher_p_value",q_key:str="bh_q_value")->None:
+        indexed=[
+            (i,float(row[p_key]))
+            for i,row in enumerate(rows)
+            if row.get(p_key) is not None
+        ]
+        if not indexed:
+            return
+        ordered=sorted(indexed,key=lambda x:x[1])
+        m=len(ordered)
+        adjusted=[None]*len(rows)
+        running=1.0
+        for rank in range(m,0,-1):
+            idx,p=ordered[rank-1]
+            q=min(running,p*m/rank)
+            running=q
+            adjusted[idx]=min(1.0,max(0.0,q))
+        for i,q in enumerate(adjusted):
+            if q is not None:
+                rows[i][q_key]=q
+
+    @staticmethod
+    def _leave_one_out_min_hit_rate(values:list[bool])->float|None:
+        if len(values)<2:
+            return None
+        rates=[]
+        for i in range(len(values)):
+            subset=values[:i]+values[i+1:]
+            rates.append(sum(1 for x in subset if x)/len(subset))
+        return min(rates) if rates else None
 
     @staticmethod
     def _yahoo_observations(symbol:str,transform:str="identity")->list[tuple[date,float]]:
@@ -615,25 +669,54 @@ class LatentHazardExperiment:
                 fpr=controls.get("false_positive_rate_at_80pct")
                 if not event_pct or fpr is None:
                     continue
-                hit=sum(1 for p in event_pct if p>=FACTOR_ALERT_PERCENTILE)/len(event_pct)
-                lift=hit-float(fpr)
+                event_flags=[p>=FACTOR_ALERT_PERCENTILE for p in event_pct]
+                control_pct=[
+                    row["percentiles"].get(factor)
+                    for row in control_evaluations
+                    if row["percentiles"].get(factor) is not None
+                ]
+                control_flags=[float(p)>=FACTOR_ALERT_PERCENTILE for p in control_pct]
+                event_hits=sum(1 for x in event_flags if x)
+                control_hits=sum(1 for x in control_flags if x)
+                hit=event_hits/len(event_flags)
+                fpr_exact=control_hits/len(control_flags) if control_flags else float(fpr)
+                lift=hit-fpr_exact
+                fisher=self._fisher_right(
+                    event_hits,len(event_flags)-event_hits,
+                    control_hits,len(control_flags)-control_hits,
+                )
                 row={
                     "factor":factor,
                     "lead_trading_days":lead,
                     "event_samples":len(event_pct),
+                    "control_samples":len(control_flags),
+                    "event_hits":event_hits,
+                    "control_hits":control_hits,
                     "event_hit_rate":hit,
-                    "control_false_positive_rate":fpr,
+                    "control_false_positive_rate":fpr_exact,
                     "hit_rate_lift":lift,
                     "mean_event_percentile":mean(event_pct),
+                    "leave_one_event_out_min_hit_rate":self._leave_one_out_min_hit_rate(event_flags),
+                    "fisher_p_value":fisher,
                     "candidate":(
                         len(event_pct)>=3
                         and hit>=0.50
-                        and float(fpr)<=0.30
+                        and fpr_exact<=0.30
                         and lift>=0.20
                     ),
                 }
                 candidates.append(row)
                 by_factor.setdefault(factor,[]).append(row)
+
+        self._bh_adjust(candidates)
+        for row in candidates:
+            q=row.get("bh_q_value")
+            row["statistically_supported"]=bool(
+                row.get("candidate")
+                and q is not None
+                and float(q)<=0.10
+                and (row.get("leave_one_event_out_min_hit_rate") or 0.0)>=0.50
+            )
 
         factor_summary=[]
         for factor,rows in by_factor.items():
@@ -647,6 +730,9 @@ class LatentHazardExperiment:
                 "best_lead_trading_days":max(rows,key=lambda r:r["hit_rate_lift"])["lead_trading_days"],
                 "mean_event_percentile":mean(r["mean_event_percentile"] for r in rows),
                 "passes_any_lead":bool(selected),
+                "statistically_supported_leads":[
+                    r["lead_trading_days"] for r in rows if r.get("statistically_supported")
+                ],
             })
         factor_summary.sort(
             key=lambda r:(r["long_lead_candidate"],r["passes_any_lead"],r["best_lift"],r["mean_event_percentile"]),
@@ -669,17 +755,27 @@ class LatentHazardExperiment:
                         control_rows.append(bool(comp.get("triggered")))
                 if not event_rows or not control_rows:
                     continue
-                hit=sum(1 for x in event_rows if x)/len(event_rows)
-                fpr=sum(1 for x in control_rows if x)/len(control_rows)
+                event_hits=sum(1 for x in event_rows if x)
+                control_hits=sum(1 for x in control_rows if x)
+                hit=event_hits/len(event_rows)
+                fpr=control_hits/len(control_rows)
                 lift=hit-fpr
+                fisher=self._fisher_right(
+                    event_hits,len(event_rows)-event_hits,
+                    control_hits,len(control_rows)-control_hits,
+                )
                 composite_lead_results.append({
                     "composite":name,
                     "lead_trading_days":lead,
                     "event_samples":len(event_rows),
                     "control_samples":len(control_rows),
+                    "event_hits":event_hits,
+                    "control_hits":control_hits,
                     "event_hit_rate":hit,
                     "control_false_positive_rate":fpr,
                     "hit_rate_lift":lift,
+                    "leave_one_event_out_min_hit_rate":self._leave_one_out_min_hit_rate(event_rows),
+                    "fisher_p_value":fisher,
                     "candidate":(
                         len(event_rows)>=3
                         and hit>=0.50
@@ -692,6 +788,16 @@ class LatentHazardExperiment:
                         "factor_alert_percentile":FACTOR_ALERT_PERCENTILE,
                     },
                 })
+        self._bh_adjust(composite_lead_results)
+        for row in composite_lead_results:
+            q=row.get("bh_q_value")
+            row["statistically_supported"]=bool(
+                row.get("candidate")
+                and q is not None
+                and float(q)<=0.10
+                and (row.get("leave_one_event_out_min_hit_rate") or 0.0)>=0.50
+            )
+
         composite_summary=[]
         for name in COMPOSITE_RULES:
             rows=[r for r in composite_lead_results if r["composite"]==name]
@@ -708,6 +814,9 @@ class LatentHazardExperiment:
                 "best_lift":best["hit_rate_lift"],
                 "best_lead_trading_days":best["lead_trading_days"],
                 "rule":best["rule"],
+                "statistically_supported_leads":[
+                    r["lead_trading_days"] for r in rows if r.get("statistically_supported")
+                ],
             })
         composite_summary.sort(
             key=lambda r:(r["long_lead_candidate"],r["passes_any_lead"],r["best_lift"]),
@@ -745,6 +854,8 @@ class LatentHazardExperiment:
             "composite_summary":composite_summary,
             "top_long_lead_composites":[x for x in composite_summary if x["long_lead_candidate"]][:10],
             "top_any_lead_composites":[x for x in composite_summary if x["passes_any_lead"]][:10],
+            "statistically_supported_factor_rows":[x for x in candidates if x.get("statistically_supported")],
+            "statistically_supported_composite_rows":[x for x in composite_lead_results if x.get("statistically_supported")],
             "data_completeness":{
                 "primary_markets":len(primary),
                 "common_sessions":len(dates),
@@ -769,6 +880,12 @@ class LatentHazardExperiment:
                     "FED_POLICY_EASING_90D",
                     "FED_BALANCE_SHEET_CONTRACTION_180D"
                 ],
+            },
+            "statistical_guard":{
+                "fisher_exact":"One-sided Fisher exact test compares crash-cutoff alert frequency with ordinary-control alert frequency.",
+                "multiple_testing":"Benjamini-Hochberg q-values are computed separately across single-factor lead tests and composite lead tests.",
+                "support_threshold":"q <= 0.10 plus leave-one-event-out minimum hit rate >= 0.50.",
+                "small_sample_warning":"Only a small number of historical crash clusters have complete long-history inputs. Statistical support is screening evidence, not a calibrated crash probability.",
             },
             "interpretation_guard":"Historical recurrence identifies candidate latent hazards, not causal proof or calibrated crash probability. Rates, policy, MOVE and nearby futures variables are evaluated point-in-time and may change sign by regime. Continuous futures can contain roll effects and are treated as research proxies. Composite signals require multiple independent stress dimensions and remain shadow-only.",
         }
