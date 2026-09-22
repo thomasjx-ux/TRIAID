@@ -59,9 +59,9 @@ assert 'id="commandLog"' in html
 assert "refreshLiveWindows" in html
 assert '<option value="HK">港股 / HK</option>' in html
 assert 'id="marketScopeStatus"' in html
-assert "MARKET_DATA_RESEARCH_ONLY" in html
-assert "专用港股策略选择器" in html
-assert "预览美股 + A股" in html
+assert "港股已进入独立策略研究路线" in html
+assert "HK_RETURN_MAX_CAPACITY" in html
+assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
 assert "/api/market-data/strategy-context/" in html
@@ -106,7 +106,7 @@ assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
 assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.13.1"
+assert s["architecture_version"]=="fin-evolution-lab@0.14.0"
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
@@ -136,7 +136,9 @@ if "recovery_wave" in dcn:
     assert len(dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["sleeves"])==4
 
 hk_cards=strategies("zh","HK")
-assert hk_cards==[]
+assert len(hk_cards)==29
+assert all(x["name"] for x in hk_cards)
+assert all("selected" in x for x in hk_cards)
 
 cards=strategies("zh","US")
 assert len(cards)==29
@@ -150,6 +152,8 @@ e=evolution_status()
 assert e["active_version"]
 assert s["active_strategy_rules"]["US"]["version"].startswith("strategy-rules-us@")
 assert s["active_strategy_rules"]["CN"]["version"].startswith("strategy-rules-cn@")
+assert s["active_strategy_rules"]["HK"]["version"].startswith("strategy-rules-hk@")
+assert s["markets"]==["US","CN","HK"]
 
 print("TRIAID_FIN_V2_UI_SMOKE_PASS")
 print({
