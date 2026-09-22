@@ -36,7 +36,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.12.0"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.13.0"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -327,7 +327,7 @@ try:
     assert decision.audit and decision.audit.passed
     assert decision.strategy_group
     assert "P16_REV5" not in decision.strategy_group.members
-    assert decision.strategy_group.diagnostics["optimizer"]=="marginal-group-value-v1"
+    assert decision.strategy_group.diagnostics["optimizer"]=="relative-return-max-v1"
     assert engine.strategy_population.config_for("US").redundancy_penalty==0.0
     assert engine.strategy_population.config_for("US").near_duplicate_corr>1.0
     assert all(w>=0 for w in decision.strategy_group.weights.values())
@@ -346,13 +346,16 @@ try:
         state(sid,-0.02-0.01*i,0.10+0.005*i,0.01)
         for i,sid in enumerate(cn_ids)
     ]+[state("P28_CASH",0.0,0.0,0.0)]
+    assert engine.strategy_population.rules("CN")["active_research_experiment"]=="CN_RETURN_MAX_CAPACITY"
+    assert engine.strategy_population.rules("CN")["market_route"]=="CN_RETURN_MAXIMIZATION"
+
     cn_request=RunRequest(
         market=MarketSnapshot(
             market_id="CN",
             as_of="2026-09-21",
-            snapshot_id="SELFTEST:CN:WORST",
-            regime="risk_off",
-            metadata={"experiment_mode":"CN_WORST_POOL_RESCUE"},
+            snapshot_id="SELFTEST:CN:RETURNMAX",
+            regime="risk_on",
+            metadata={"experiment_mode":"CN_RETURN_MAX_CAPACITY"},
         ),
         strategy_states=cn_states,
         max_group_size=12,
@@ -362,16 +365,48 @@ try:
     cn_decision=engine.get_run(cn_run.run_id)
     assert cn_decision.status=="DECISION_READY_AWAITING_OUTCOME"
     assert cn_decision.strategy_group
-    assert cn_decision.strategy_group.diagnostics["optimizer"]=="adversarial-worst-pool-v1"
-    assert cn_decision.strategy_group.diagnostics["experiment_mode"]=="CN_WORST_POOL_RESCUE"
+    assert cn_decision.strategy_group.diagnostics["optimizer"]=="relative-return-max-v1"
+    assert cn_decision.strategy_group.diagnostics["absolute_sign_used_as_cash_gate"] is False
     risky_members=[x for x in cn_decision.strategy_group.members if x!="P28_CASH"]
-    assert len(risky_members)==10
+    assert len(risky_members)==12
     assert "P28_CASH" in cn_decision.strategy_group.members
-    assert cn_decision.strategy_group.weights["P28_CASH"]==0.0
-    assert abs(sum(cn_decision.strategy_group.weights[x] for x in risky_members)-1.0)<1e-12
-    assert cn_decision.triaid_decision.weights_after["P28_CASH"]>0.5
-    assert cn_decision.diagnostic_summary["projected_excess_expected_return"]>0
-    assert cn_decision.diagnostic_summary["realized_outcome_pending"] is True
+    assert abs(cn_decision.strategy_group.weights.get("P28_CASH",0.0))<1e-12
+    assert abs(sum(cn_decision.strategy_group.weights.values())-1.0)<1e-9
+    assert cn_decision.triaid_decision
+    assert cn_decision.triaid_decision.diagnostics["cash_is_fixed_template"] is False
+    assert cn_decision.triaid_decision.diagnostics["regime_policy"]=="RISK_ON_FULL_ADMISSIBLE_GROUP"
+    assert cn_decision.triaid_decision.weights_after.get("P28_CASH",0.0)<1e-12
+
+    risk_off_market=cn_request.market.model_copy(deep=True)
+    risk_off_market.regime="intraday_risk_off"
+    risk_off=engine.core.decide(risk_off_market,cn_decision.strategy_group,cn_states)
+    assert risk_off.diagnostics["regime_policy"]=="RISK_OFF_TOP_3"
+    assert 0.0<risk_off.weights_after.get("P28_CASH",0.0)<0.5
+    assert risk_off.weights_after!=cn_decision.triaid_decision.weights_after
+
+    severe_market=cn_request.market.model_copy(deep=True)
+    severe_market.regime="shock_high_vol"
+    severe=engine.core.decide(severe_market,cn_decision.strategy_group,cn_states)
+    assert severe.diagnostics["regime_policy"]=="SEVERE_RISK_TOP_2"
+    assert severe.weights_after.get("P28_CASH",0.0)>risk_off.weights_after.get("P28_CASH",0.0)
+
+    # The former worst-pool rescue remains available only as an explicit stress test.
+    cn_stress_request=RunRequest(
+        market=MarketSnapshot(
+            market_id="CN",
+            as_of="2026-09-21",
+            snapshot_id="SELFTEST:CN:STRESS",
+            regime="risk_off",
+            metadata={"experiment_mode":"CN_WORST_POOL_RESCUE"},
+        ),
+        strategy_states=cn_states,
+        max_group_size=12,
+    )
+    cn_stress_run=engine.create_run(cn_stress_request)
+    engine.execute(cn_stress_run.run_id,cn_stress_request)
+    cn_stress=engine.get_run(cn_stress_run.run_id)
+    assert cn_stress.strategy_group.diagnostics["optimizer"]=="adversarial-worst-pool-v1"
+    assert cn_stress.strategy_group.diagnostics["experiment_mode"]=="CN_WORST_POOL_RESCUE"
 
     verified=engine.submit_outcome(
         run.run_id,
