@@ -26,9 +26,12 @@ class ReviewModule:
     @classmethod
     def _primary_route(cls,run:RunRecord)->bool:
         expected=cls._primary_mode(run.market.market_id)
+        metadata=run.market.metadata or {}
         return bool(
             expected
-            and str((run.market.metadata or {}).get("experiment_mode") or "").upper()==expected
+            and str(metadata.get("experiment_mode") or "").upper()==expected
+            and metadata.get("primary_reference_superseded") is not True
+            and run.status!="SUPERSEDED"
         )
 
     def daily_summary(self,runs:Iterable[RunRecord])->dict:
