@@ -79,9 +79,30 @@ assert stretch["available_weight"]>0
 assert 0.0<=stretch["support_ratio"]<=1.0
 assert "not by itself a bearish trading signal" in stretch["claim"]
 
+
+macro_snapshot={
+    "TREASURY_2Y":{"latest_value":4.2,"change_calendar_days":{"30":0.3,"90":0.5,"180":0.7},"pct_change_calendar_days":{}},
+    "TREASURY_5Y":{"latest_value":4.0,"change_calendar_days":{},"pct_change_calendar_days":{}},
+    "TREASURY_10Y":{"latest_value":4.3,"change_calendar_days":{"90":0.4},"pct_change_calendar_days":{}},
+    "TREASURY_30Y":{"latest_value":4.7,"change_calendar_days":{},"pct_change_calendar_days":{}},
+    "REAL_YIELD_10Y":{"latest_value":2.1,"change_calendar_days":{"90":0.35},"pct_change_calendar_days":{},"percentiles":{"20":{"percentile":0.85}}},
+    "FED_FUNDS_DAILY":{"latest_value":5.25,"change_calendar_days":{"90":0.25},"pct_change_calendar_days":{}},
+    "FED_BALANCE_SHEET":{"latest_value":7000000.0,"change_calendar_days":{},"pct_change_calendar_days":{"180":-0.05}},
+    "YIELD_CURVE_10Y2Y":{"latest_value":0.1,"change_calendar_days":{"180":0.8},"pct_change_calendar_days":{}},
+    "YIELD_CURVE_10Y3M":{"latest_value":-0.2,"change_calendar_days":{"180":0.6},"pct_change_calendar_days":{}},
+}
+rp=LongCycleHypothesisExperiment._rates_policy_snapshot(macro_snapshot)
+assert rp["treasury_curve"]["2y"]==4.2
+assert rp["real_rates"]["10y_real_yield_20y_percentile"]==0.85
+assert abs(rp["policy"]["2y_policy_repricing_proxy_abs_30d"]-0.3)<1e-9
+assert rp["curve_state"]["10y2y_inverted"] is False
+assert rp["curve_state"]["10y3m_inverted"] is True
+assert abs(rp["balance_sheet"]["walcl_pct_change_180d"]+0.05)<1e-9
+
 print("TRIAID_LONG_CYCLE_HYPOTHESIS_SMOKE_PASS",{
     "horizons":list(HORIZON_YEARS),
     "30y_available":m30["available"],
     "downturn_state":down["state"],
     "stretch_state":stretch["state"],
+    "rates_policy_snapshot":True,
 })
