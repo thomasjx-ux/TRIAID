@@ -202,6 +202,10 @@ class USReturnMaxRoute:
                 "net_selection_score":state_estimate-annualized_switch_cost,
                 "target_asset_weights":assets,
             })
+        ranked_candidates=sorted(
+            candidate_rows,
+            key=lambda x:(-float(x["net_selection_score"]),float(x["meta_switch_cost_fraction"]),str(x["strategy_id"])),
+        )
         best=max(float(x["net_selection_score"]) for x in candidate_rows)
         tied=[x for x in candidate_rows if abs(float(x["net_selection_score"])-best)<=1e-12]
         winner_row=min(
@@ -213,7 +217,23 @@ class USReturnMaxRoute:
         )
         winner=winner_row["state"]
         tie_set=sorted(str(x["strategy_id"]) for x in tied)
-        route_weights={str(winner.strategy_id):1.0}
+
+        hard_cap=float((group.diagnostics or {}).get("max_strategy_weight_constraint") or 1.0)
+        hard_cap=max(1e-12,min(1.0,hard_cap))
+        route_weights={}
+        remaining=1.0
+        for row in ranked_candidates:
+            sid=str(row["strategy_id"])
+            if sid=="P28_CASH":
+                continue
+            score=float(row["net_selection_score"])
+            if score<=0.0 or remaining<=1e-12:
+                break
+            weight=min(hard_cap,remaining)
+            route_weights[sid]=weight
+            remaining-=weight
+        if remaining>1e-12:
+            route_weights["P28_CASH"]=remaining
         population_weights={str(k):float(v) for k,v in group.weights.items()}
         generic_weights={str(k):float(v) for k,v in generic_decision.weights_after.items()}
         route_expected=self._weighted_expected(route_weights,state_map)
@@ -381,8 +401,12 @@ class USReturnMaxRoute:
             "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
             "objective_constitution":"RETURN_IS_THE_ONLY_OPTIMIZATION_OBJECTIVE; RISK_LIQUIDITY_CAPACITY_CONCENTRATION_AND_EXECUTION_ARE_ADMISSION_OR_FEASIBILITY_CONSTRAINTS",
             "selection_source":"ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST",
-            "strategy_selection_mode":"MAX_REALIZABLE_NET_RETURN_PROXY_WITH_COST_ONLY_THEN_DETERMINISTIC_TIE_BREAK",
+            "strategy_selection_mode":"MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS",
             "selected_strategy_id":str(winner.strategy_id),
+            "selected_strategy_ids":[sid for sid,w in route_weights.items() if sid!="P28_CASH" and float(w)>1e-12],
+            "selected_strategy_count":sum(1 for sid,w in route_weights.items() if sid!="P28_CASH" and float(w)>1e-12),
+            "fixed_strategy_count_target":False,
+            "max_strategy_weight_constraint":hard_cap,
             "max_return_tie_set":tie_set,
             "tie_break_order":["meta_switch_cost","strategy_id"],
             "risk_used_as_secondary_objective":False,
@@ -407,7 +431,7 @@ class USReturnMaxRoute:
             "return_first_population_projected_annualized_expected_net_return":population_expected,
             "generic_core_projected_annualized_expected_net_return":generic_expected,
             "buy_hold_projected_annualized_expected_net_return":buy_hold_expected,
-            "selection_metric_semantics":"Primary selection ranks admissible strategies by the weighted 21/63/126/252-day annualized historical state-return estimate minus an annualized 21-day proxy for immediate switching cost. Risk, liquidity, capacity and concentration determine admissibility or execution feasibility and do not subtract a second utility term from return. A separate 1/3/5-day challenger is shadow-only until prospectively validated. These fields are not calibrated future-return forecasts.",
+            "selection_metric_semantics":"Primary selection ranks admissible strategies by the weighted 21/63/126/252-day annualized historical state-return estimate minus an annualized 21-day proxy for immediate switching cost, then fills the risk budget from highest to lowest net score subject to the hard per-strategy concentration cap. Portfolio member count is therefore emergent rather than fixed. Risk, liquidity, capacity and concentration determine admissibility or feasibility and do not subtract a second utility term from return. A separate 1/3/5-day challenger is shadow-only until prospectively validated. These fields are not calibrated future-return forecasts.",
             "projected_field_semantics":"Fields named projected_annualized_expected_net_return preserve the existing API contract but contain weighted state-return estimates under the frozen decision, not guaranteed or calibrated future returns.",
             "target_asset_weights":target_assets,
             "cash_residual_weight":max(0.0,1.0-target_risk_weight),
