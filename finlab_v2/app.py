@@ -632,13 +632,14 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <div class="muted" id="subtitle">真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化</div>
     </div>
     <div class="toolbar">
-      <select id="market" onchange="onMarketChange()"><option value="US">US</option><option value="CN">A股 / CN</option></select>
+      <select id="market" onchange="onMarketChange()"><option value="US">美股 / US</option><option value="CN">A股 / CN</option><option value="HK">港股 / HK</option></select>
       <button class="primary" onclick="runNow()" id="runBtn">立即执行</button>
       <button onclick="runAll()" id="runAllBtn">执行两个市场</button>
       <button onclick="toggleLang()">中文 / English</button>
     </div>
   </div>
   <div class="statusline" id="runStatus">Ready</div>
+  <div class="statusline" id="marketScopeStatus" style="display:none"></div>
 
   <h2 id="resultTitle">TRIAID 结果比较</h2>
   <div class="compare">
@@ -932,8 +933,8 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 <script>
 let lang='zh';
 let strategyMarketContext={};
-let strategyNameIndex={US:{},CN:{}};
-let previewRunIds={US:null,CN:null};
+let strategyNameIndex={US:{},CN:{},HK:{}};
+let previewRunIds={US:null,CN:null,HK:null};
 const el=id=>document.getElementById(id);
 const T={
  zh:{
@@ -954,7 +955,7 @@ const T={
   before:'基线权重',after:'TRIAID 权重',delta:'权重变化',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已后验评价运行',negative:'负相对收益差比例',next:'下一步',
   noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续后验评价形成候选改进',
-  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即运行（预览）',runAll:'预览两个市场',
+  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即运行（预览）',runAll:'预览美股 + A股',
   running:'已创建即时预览，后台正在读取真实市场数据；该运行不进入正式证据链。',pending:'当前决策已生成，等待下一交易日结果。',
   preview:'即时预览，仅展示当前策略状态和TRIAID权重，不写入正式证据、后验、进化或前瞻实验。',
   positive:'TRIAID 本期后验收益高于基线',negativeResult:'TRIAID 本期后验收益低于基线，需要回看权重调整归因',flat:'TRIAID 本期后验收益与基线基本一致'
@@ -977,7 +978,7 @@ const T={
   before:'Baseline weight',after:'TRIAID weight',delta:'Weight change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Posterior-evaluated runs',negative:'Negative relative-return-gap rate',next:'Next step',
   noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuous posterior evaluations',
-  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Preview',runAll:'Preview Both Markets',
+  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Preview',runAll:'Preview US + CN',
   running:'Manual preview created. Real market data is being processed; this run does not enter the official evidence chain.',pending:'Current decision is ready and awaiting the next market outcome.',
   preview:'Manual preview only. It displays current strategy state and TRIAID weights without entering official evidence, posterior, evolution or prospective experiments.',
   positive:'TRIAID posterior return was above baseline in the latest evaluated run',negativeResult:'TRIAID posterior return was below baseline; weight-adjustment attribution should be reviewed',flat:'TRIAID posterior return was approximately in line with baseline'
@@ -1419,9 +1420,26 @@ async function refreshLiveWindows(){
   el('scheduleMeta').textContent='Activity error: '+e.message;
  }
 }
-function onMarketChange(){refreshAll();refreshLiveWindows()}
+function applyMarketScope(){
+ const m=el('market').value;
+ const hk=m==='HK';
+ el('runBtn').disabled=hk;
+ el('marketScopeStatus').style.display=hk?'block':'none';
+ el('marketScopeStatus').textContent=hk
+  ? (lang==='zh'
+     ? '港股已接入真实市场数据、交易日历、自动刷新与美股/A股/港股跨市场研究。当前专用港股策略选择器尚未通过晋升验证，因此不生成虚构策略权重，也不允许人工策略预览。'
+     : 'Hong Kong is live for real market data, calendar-aware refresh and US/CN/HK cross-market research. A dedicated HK strategy selector has not passed promotion validation, so no synthetic strategy weights or manual strategy previews are produced.')
+  : '';
+}
+function onMarketChange(){applyMarketScope();refreshAll();refreshLiveWindows()}
 async function runNow(){
- const m=el('market').value;const x=await json('/api/live/run/'+m,{method:'POST'});
+ const m=el('market').value;
+ if(m==='HK'){
+  applyMarketScope();
+  el('runStatus').textContent=lang==='zh'?'港股数据研究模式：自动刷新已启用，策略预览暂不开放。':'HK market-data research mode: automatic refresh is enabled; strategy preview is not enabled yet.';
+  return;
+ }
+ const x=await json('/api/live/run/'+m,{method:'POST'});
  el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id,m);
 }
 async function runAll(){
@@ -1644,6 +1662,7 @@ async function refreshAll(){
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
   const isCN=m==='CN';
+  const isHK=m==='HK';
   const evaluated=[...runs].reverse().find(x=>
    x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCN||x.experiment_mode==='CN_RETURN_MAX_CAPACITY')
   )||null;
@@ -1678,11 +1697,20 @@ async function refreshAll(){
   el('selectedCount').textContent=selected.length;
   const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
   el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
-  el('runState').textContent=previewRun
-    ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
-    : (latest?.status||'-');
-  el('selectedNames').innerHTML=selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-';
-  if(previewRun){
+  el('runState').textContent=isHK
+    ? (lang==='zh'?'MARKET_DATA_RESEARCH_ONLY · 自动刷新中':'MARKET_DATA_RESEARCH_ONLY · automatic refresh')
+    : (previewRun
+       ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
+       : (latest?.status||'-'));
+  el('selectedNames').innerHTML=isHK
+    ? (lang==='zh'?'尚未启用专用港股策略选择器':'Dedicated HK strategy selector not enabled yet')
+    : (selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-');
+  if(isHK){
+   el('dailyAnalysis').textContent=lang==='zh'
+    ? '当前港股链路只使用真实港股市场数据参与状态观测和跨市场风险研究。策略层在独立验证通过前保持关闭。'
+    : 'The HK path currently uses real Hong Kong market data for state observation and cross-market risk research only. The strategy layer remains closed until separately validated.';
+   el('dailyAnalysis').className='';
+  }else if(previewRun){
    el('dailyAnalysis').textContent=T[lang].preview;
    el('dailyAnalysis').className='';
   }else if(evaluated){
@@ -1714,7 +1742,11 @@ async function refreshAll(){
     '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
     '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
     '<td class="reason">'+esc(explanation)+'</td></tr>';
-  }).join('');
+  }).join('') || (isHK
+    ? '<tr><td colspan="8" class="reason">'+esc(lang==='zh'
+       ? '港股市场数据链路已接通，但专用港股策略群尚未晋升。这里不从美股或A股策略硬套权重。'
+       : 'HK market data is live, but a dedicated HK strategy group has not been promoted. US or CN strategy weights are not reused here.')+'</td></tr>'
+    : '');
   el('candidateRows').innerHTML=candidateCards.map(x=>{
    return '<tr>'+
     '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
@@ -1722,7 +1754,11 @@ async function refreshAll(){
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
-  }).join('');
+  }).join('') || (isHK
+    ? '<tr><td colspan="5" class="reason">'+esc(lang==='zh'
+       ? '港股候选策略层等待独立规则、回测、前瞻验证和审计通过后再开放。'
+       : 'The HK candidate strategy layer will open only after independent rules, backtests, prospective validation and audit pass.')+'</td></tr>'
+    : '');
   const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
   el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
     (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
@@ -1766,8 +1802,8 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();refreshAll();refreshLiveWindows()}
-applyText();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows()}
+applyText();applyMarketScope();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
 </script>
 </body>
 </html>
