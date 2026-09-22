@@ -308,7 +308,7 @@ try:
             as_of="2026-09-18",
             snapshot_id="SELFTEST:1",
             regime="risk_on_trend",
-            metadata={"experiment_mode":"US_RETURN_MAX_CAPACITY"},
+            metadata={"experiment_mode":"US_RETURN_MAX_CAPACITY","primary_route_revision":engine.architecture_version},
         ),
         strategy_states=[
             state("P00_BUY_HOLD",0.12,0.18,0.02,recent=[0.001*((i%7)-3) for i in range(80)]),
@@ -356,7 +356,7 @@ try:
             as_of="2026-09-21",
             snapshot_id="SELFTEST:CN:RETURNMAX",
             regime="risk_on",
-            metadata={"experiment_mode":"CN_RETURN_MAX_CAPACITY"},
+            metadata={"experiment_mode":"CN_RETURN_MAX_CAPACITY","primary_route_revision":engine.architecture_version},
         ),
         strategy_states=cn_states,
         max_group_size=12,
@@ -422,9 +422,11 @@ try:
     cn_primary_receipt=engine.ensure_primary_reference("CN")
     assert cn_primary_receipt["created"] is False
     assert cn_primary_receipt["run_id"]==cn_decision.run_id
+    assert cn_primary_receipt["primary_route_revision"]==engine.architecture_version
     us_primary_receipt=engine.ensure_primary_reference("US")
     assert us_primary_receipt["created"] is False
     assert us_primary_receipt["run_id"]==decision.run_id
+    assert us_primary_receipt["primary_route_revision"]==engine.architecture_version
 
     # Main reports and curves must exclude the explicitly evaluated stress route.
     cn_realized={sid:0.001 for sid in cn_ids}
