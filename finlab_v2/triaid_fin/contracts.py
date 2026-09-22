@@ -164,6 +164,7 @@ class RunRecord(BaseModel):
         "PREVIEW_READY",
         "VERIFIED",
         "NO_NEW_DATA",
+        "SUPERSEDED",
         "FAILED",
     ] = "CREATED"
     module_manifest: Dict[str, str]
