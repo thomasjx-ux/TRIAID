@@ -4,11 +4,12 @@ from datetime import date, datetime, time as dt_time
 from zoneinfo import ZoneInfo
 
 
-VERSION="official-trading-calendar@0.2.0"
+VERSION="official-trading-calendar@0.3.0"
 
 MARKET_TZ={
     "US":"America/New_York",
     "CN":"Asia/Shanghai",
+    "HK":"Asia/Hong_Kong",
 }
 
 OFFICIAL_SOURCES={
@@ -23,6 +24,11 @@ OFFICIAL_SOURCES={
             "https://www.sse.com.cn/disclosure/dealinstruc/closed/list/",
             "https://www.szse.cn/disclosure/notice/general/",
         ],
+        "built_in_coverage_years":[2026],
+    },
+    "HK":{
+        "name":"HKEX Hong Kong Securities Market Holiday Schedule",
+        "url":"https://www.hkex.com.hk/News/HKEX-Calendar?sc_lang=en",
         "built_in_coverage_years":[2026],
     },
 }
@@ -67,7 +73,29 @@ CN_CLOSED={
     },
 }
 
-_SYNCED={"US":{},"CN":{}}
+
+HK_CLOSED={
+    2026:{
+        date(2026,1,1),
+        date(2026,2,17),date(2026,2,18),date(2026,2,19),
+        date(2026,4,3),date(2026,4,6),date(2026,4,7),
+        date(2026,5,1),date(2026,5,25),
+        date(2026,6,19),
+        date(2026,7,1),
+        date(2026,10,1),date(2026,10,19),
+        date(2026,12,25),
+    },
+}
+
+HK_EARLY_CLOSE={
+    2026:{
+        date(2026,2,16):dt_time(12,0),
+        date(2026,12,24):dt_time(12,0),
+        date(2026,12,31):dt_time(12,0),
+    },
+}
+
+_SYNCED={"US":{},"CN":{},"HK":{}}
 _SYNC_METADATA={}
 
 
@@ -80,7 +108,7 @@ def _market(value:str)->str:
 
 def install_synced_calendar(payload:dict|None)->None:
     global _SYNCED,_SYNC_METADATA
-    synced={"US":{},"CN":{}}
+    synced={"US":{},"CN":{},"HK":{}}
     metadata={}
     if isinstance(payload,dict):
         metadata={
@@ -89,7 +117,7 @@ def install_synced_calendar(payload:dict|None)->None:
             "last_success_at":payload.get("last_success_at"),
             "last_error":payload.get("last_error"),
         }
-        for market in ("US","CN"):
+        for market in ("US","CN","HK"):
             years=(
                 payload.get("markets",{})
                 .get(market,{})
@@ -122,7 +150,8 @@ def install_synced_calendar(payload:dict|None)->None:
 
 def built_in_years(market_id:str)->list[int]:
     market=_market(market_id)
-    return sorted((US_CLOSED if market=="US" else CN_CLOSED).keys())
+    source=US_CLOSED if market=="US" else CN_CLOSED if market=="CN" else HK_CLOSED
+    return sorted(source.keys())
 
 
 def synced_years(market_id:str)->list[int]:
@@ -168,6 +197,13 @@ def _calendar_for_year(market_id:str,year:int)->dict|None:
             "closed":CN_CLOSED[year],
             "early_close":{},
             "source":OFFICIAL_SOURCES["CN"],
+            "origin":"BUILT_IN_VERIFIED",
+        }
+    if market=="HK" and year in HK_CLOSED:
+        return {
+            "closed":HK_CLOSED[year],
+            "early_close":HK_EARLY_CLOSE.get(year,{}),
+            "source":OFFICIAL_SOURCES["HK"],
             "origin":"BUILT_IN_VERIFIED",
         }
     return None
@@ -269,19 +305,37 @@ def official_session_phase(
             return "POSTCLOSE"
         return "CLOSED"
 
-    if dt_time(9,15)<=t<dt_time(9,30):
+    if market=="CN":
+        if dt_time(9,15)<=t<dt_time(9,30):
+            return "PREOPEN"
+        if dt_time(9,30)<=t<dt_time(11,30) or dt_time(13,0)<=t<dt_time(15,0):
+            return "OPEN"
+        if dt_time(11,30)<=t<dt_time(13,0):
+            return "BREAK"
+        if dt_time(15,0)<=t<dt_time(18,0):
+            return "POSTCLOSE"
+        return "CLOSED"
+
+    close=dt_time.fromisoformat(info["early_close_time"]) if info["early_close"] else dt_time(16,10)
+    if dt_time(9,0)<=t<dt_time(9,30):
         return "PREOPEN"
-    if dt_time(9,30)<=t<dt_time(11,30) or dt_time(13,0)<=t<dt_time(15,0):
+    if info["early_close"]:
+        if dt_time(9,30)<=t<dt_time(12,0):
+            return "OPEN"
+        if dt_time(12,0)<=t<dt_time(15,0):
+            return "POSTCLOSE"
+        return "CLOSED"
+    if dt_time(9,30)<=t<dt_time(12,0) or dt_time(13,0)<=t<close:
         return "OPEN"
-    if dt_time(11,30)<=t<dt_time(13,0):
+    if dt_time(12,0)<=t<dt_time(13,0):
         return "BREAK"
-    if dt_time(15,0)<=t<dt_time(18,0):
+    if close<=t<dt_time(19,0):
         return "POSTCLOSE"
     return "CLOSED"
 
 
 def calendar_status(market_id:str|None=None)->dict:
-    markets=[_market(market_id)] if market_id else ["US","CN"]
+    markets=[_market(market_id)] if market_id else ["US","CN","HK"]
     return {
         "version":VERSION,
         "policy":"OFFICIAL_EXCHANGE_CALENDAR; AUTO_SYNCED_OFFICIAL_OVERRIDES_BUILT_IN; FAIL_CLOSED_WHEN_YEAR_UNAVAILABLE",
