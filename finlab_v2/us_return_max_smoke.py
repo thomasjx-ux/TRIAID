@@ -127,9 +127,14 @@ assert tie_winner.strategy_id=="P00_BUY_HOLD"
 decision=route.decide(panel,group,generic,states,"OPEN")
 assert decision["route_version"]=="us-return-max-route@0.5.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
-assert decision["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"\nassert decision["risk_used_as_secondary_objective"] is False\nassert decision["uncertainty_used_as_secondary_objective"] is False
+assert decision["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+assert decision["risk_used_as_secondary_objective"] is False
+assert decision["uncertainty_used_as_secondary_objective"] is False
 assert decision["selection_source"]=="ALL_ADMISSIBLE_ACTIVE_STRATEGIES_NET_OF_META_SWITCH_COST"
-assert decision["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"\nassert decision["fixed_strategy_count_target"] is False\nassert decision["selected_strategy_count"]==4\nassert decision["max_strategy_weight_constraint"]==0.28
+assert decision["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"
+assert decision["fixed_strategy_count_target"] is False
+assert decision["selected_strategy_count"]==4
+assert decision["max_strategy_weight_constraint"]==0.28
 assert decision["selected_strategy_id"]=="P18_XMOM20"
 assert decision["fast_challenger"]["shadow_only"] is True
 assert decision["fast_challenger"]["applied_to_weights"] is False
