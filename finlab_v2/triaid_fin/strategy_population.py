@@ -72,6 +72,23 @@ CN_CONFIG = PopulationConfig(
     switch_guard_enabled=True,
 )
 
+HK_CONFIG = PopulationConfig(
+    config_version="population-hk@0.1.0",
+    market_id="HK",
+    review_windows=(21, 63, 126, 252),
+    entry_confirm_days=3,
+    exit_confirm_days=3,
+    cooldown_days=5,
+    max_weight=0.28,
+    near_duplicate_corr=0.995,
+    family_cap=3,
+    redundancy_penalty=0.0,
+    uncertainty_penalty=0.0,
+    switch_hurdle_bps=0.0,
+    switch_uncertainty_fraction=0.0,
+    switch_guard_enabled=True,
+)
+
 
 class StrategyPopulationModule:
     version = "strategy-population@0.6.0"
@@ -107,7 +124,7 @@ class StrategyPopulationModule:
             key="CN"
         if key in self._config_overrides:
             return self._config_overrides[key]
-        return CN_CONFIG if key=="CN" else US_CONFIG
+        return CN_CONFIG if key=="CN" else HK_CONFIG if key=="HK" else US_CONFIG
 
     def rules(self, market_id: str) -> dict:
         cfg = self.config_for(market_id)
@@ -127,6 +144,12 @@ class StrategyPopulationModule:
             result["primary_route_selector"]="RELATIVE_RETURN_FIRST_PORTFOLIO_WITH_CAPACITY_AND_SWITCHING_CONSTRAINTS"
             result["stress_test_route"]="CN_WORST_POOL_RESCUE"
             result["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY_NOT_PRIMARY_PORTFOLIO"
+        elif cfg.market_id=="HK":
+            result["active_research_experiment"]="HK_RETURN_MAX_CAPACITY"
+            result["market_route"]="HK_RETURN_MAXIMIZATION"
+            result["research_experiment_objective"]=PRIMARY_OBJECTIVE
+            result["primary_route_selector"]="MAX_REALIZABLE_NET_RETURN_OVER_TRADABLE_HK_ETF_UNIVERSE"
+            result["execution_scope"]="RESEARCH_ONLY_NO_BROKER_EXECUTION"
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
