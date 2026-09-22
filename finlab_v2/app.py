@@ -315,11 +315,13 @@ def us_long_cycle_history(
     return engine.long_cycle_hypothesis_history(limit)
 
 
+@app.get("/api/experiments/us-cn-hk/crash-linkage/status")
 @app.get("/api/experiments/us-cn/crash-linkage/status")
 def us_cn_crash_linkage_status() -> dict:
     return engine.cross_market_crash_status()
 
 
+@app.get("/api/experiments/us-cn-hk/crash-linkage/latest")
 @app.get("/api/experiments/us-cn/crash-linkage/latest")
 def us_cn_crash_linkage_latest() -> dict:
     row=engine.cross_market_crash_latest()
@@ -328,6 +330,7 @@ def us_cn_crash_linkage_latest() -> dict:
     return row
 
 
+@app.get("/api/experiments/us-cn-hk/crash-linkage/history")
 @app.get("/api/experiments/us-cn/crash-linkage/history")
 def us_cn_crash_linkage_history(
     limit: int = Query(default=100, ge=1, le=1000),
