@@ -133,6 +133,8 @@ class StrategyEvolutionModule:
             and run.evaluation.status=="EVALUATED"
             and metadata.get("daily_bar_complete") is not False
             and str(metadata.get("experiment_mode") or "").upper()==expected
+            and metadata.get("primary_reference_superseded") is not True
+            and run.status!="SUPERSEDED"
         )
 
     def _market(self,market_id:str)->dict:
