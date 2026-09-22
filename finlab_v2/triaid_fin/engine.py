@@ -921,6 +921,8 @@ class EvolutionLabEngine:
     def submit_outcome(self,run_id:str,outcome:OutcomeRequest)->RunRecord:
         with self._lock:
             run=self._runs.get(run_id) or self.store.load_run(run_id)
+            if run.status=="SUPERSEDED" or (run.market.metadata or {}).get("primary_reference_superseded") is True:
+                raise ValueError("superseded_primary_reference_is_not_outcome_eligible")
             if not self._evidence_eligible_run(run):
                 raise ValueError("manual_preview_is_not_evidence_eligible")
             if run.strategy_group is None or run.triaid_decision is None:
