@@ -325,6 +325,7 @@ class StrategyPopulationModule:
             "objective":"MAXIMIZE_REALIZABLE_NET_RETURN_PROXY_SUBJECT_TO_HARD_TRADABILITY_CAPACITY_AND_SWITCHING_CONSTRAINTS",
             "feasible_count":len(feasible),
             "selected_risky_count":len([k for k in weights if k!="P28_CASH"]),
+            "max_strategy_weight_constraint":cfg.max_weight,
             "duplicate_rejections":duplicate_rejections,
             "family_rejections":family_rejections,
             "marginal_scores":marginal_scores,
