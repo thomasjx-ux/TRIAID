@@ -79,6 +79,9 @@ try:
     m=evo._market("US")
     m["profiles"][candidate.version]=asdict(candidate)
     all_runs=[run(i) for i in range(25)]
+    stress_run=run(25)
+    stress_run.market.metadata["experiment_mode"]="US_STRESS_ONLY"
+    all_runs.append(stress_run)
     dev=all_runs[:14]
     holdout=all_runs[14:20]
     shadow=all_runs[20:]
