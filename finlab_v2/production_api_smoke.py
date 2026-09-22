@@ -176,8 +176,9 @@ if us_return_history:
         assert us_return_latest["uncertainty_used_as_secondary_objective"] is False
         assert us_return_latest["fixed_strategy_count_target"] is False
         assert us_return_latest["strategy_selection_mode"]=="MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"
-        assert "realizable net return" in metric_semantics
-        assert "calibrated future-return forecast" in metric_semantics
+        assert "historical state-return estimate" in metric_semantics
+        assert "immediate switching cost" in metric_semantics
+        assert "not calibrated future-return forecasts" in metric_semantics
         weights=us_return_latest.get("target_strategy_weights") or {}
         assert weights
         assert abs(sum(float(v) for v in weights.values())-1.0)<1e-12
