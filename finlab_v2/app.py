@@ -30,6 +30,22 @@ def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->Non
     if not x_triaid_admin_token or not secrets.compare_digest(x_triaid_admin_token,expected):
         raise HTTPException(status_code=403,detail="admin authorization required")
 
+async def supervise_market_automation()->None:
+    while True:
+        try:
+            await market_automation.run()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            market_automation.supervisor_restarts+=1
+            market_automation.errors["SUPERVISOR"]=f"{type(exc).__name__}:{exc}"
+            print(
+                "TRIAID_MARKET_AUTOMATION_SUPERVISOR_RESTART",
+                market_automation.supervisor_restarts,
+                market_automation.errors["SUPERVISOR"],
+            )
+            await asyncio.sleep(5)
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     tasks=[]
@@ -47,7 +63,7 @@ async def lifespan(app:FastAPI):
     if calendar_sync.enabled:
         tasks.append(asyncio.create_task(calendar_sync.run()))
     if market_automation.enabled:
-        tasks.append(asyncio.create_task(market_automation.run()))
+        tasks.append(asyncio.create_task(supervise_market_automation()))
     try:
         yield
     finally:
