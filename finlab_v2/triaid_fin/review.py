@@ -244,7 +244,6 @@ class ReviewModule:
             prior=[
                 run for run in rows
                 if run.market.market_id==market_id
-                and (run.created_at,current.run_id)!=(current.created_at,current.run_id)
                 and (run.market.as_of,run.created_at,run.run_id)
                     <(current.market.as_of,current.created_at,current.run_id)
             ]
