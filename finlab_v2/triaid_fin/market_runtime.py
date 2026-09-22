@@ -4,6 +4,7 @@ import asyncio
 import os
 import time
 from datetime import datetime, time as dt_time, timezone
+from zoneinfo import ZoneInfo
 
 from .market_data import session_phase
 from .frequency_policy import FrequencyPolicy
