@@ -30,7 +30,7 @@ from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.12.0"
+    architecture_version = "fin-evolution-lab@0.13.0"
     market_adapter_version = "market-lab@0.4.0"
 
     def __init__(self) -> None:
@@ -218,7 +218,13 @@ class EvolutionLabEngine:
         ]
         return rows[-1] if rows else None
 
-    def _previous_group_for(self,market_id:str,exclude_run_id:str|None=None):
+    def _previous_group_for(
+        self,
+        market_id:str,
+        exclude_run_id:str|None=None,
+        experiment_mode:str|None=None,
+    ):
+        mode=str(experiment_mode or "").upper()
         rows=[
             r for r in self.all_runs()
             if r.run_id!=exclude_run_id
@@ -226,13 +232,21 @@ class EvolutionLabEngine:
             and r.strategy_group is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
             and self._complete_daily_evidence_run(r)
+            and (
+                not mode
+                or str((r.market.metadata or {}).get("experiment_mode") or "").upper()==mode
+            )
         ]
         return rows[-1].strategy_group if rows else None
 
     def execute(self,run_id:str,request:RunRequest)->None:
         try:
-            previous_group=self._previous_group_for(request.market.market_id,run_id)
             current_mode=str(request.market.metadata.get("experiment_mode") or "")
+            previous_group=self._previous_group_for(
+                request.market.market_id,
+                run_id,
+                current_mode,
+            )
             previous_state_rows=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
@@ -446,9 +460,11 @@ class EvolutionLabEngine:
                 snapshot.metadata["recovery_wave_decision_id"]=recovery_decision.get("decision_id") if recovery_decision else None
                 snapshot.metadata["recovery_wave_decision_hash"]=recovery_decision.get("decision_hash") if recovery_decision else None
                 snapshot.metadata["recovery_wave_daily_bar_complete"]=daily_bar_complete
-                snapshot.metadata["experiment_mode"]="CN_WORST_POOL_RESCUE"
-                snapshot.metadata["experiment_design"]="Freeze the adverse risky pool using only information available at the decision time, preregister established control rankings, and test future recovery ordering over the existing 3/5/10-day CN decision horizons. Cash defense is reported separately from recovery-selection evidence."
-                snapshot.metadata["market_route"]="CN_RECOVERY_CAPACITY"
+                snapshot.metadata["experiment_mode"]="CN_RETURN_MAX_CAPACITY"
+                snapshot.metadata["experiment_design"]="Select from the full admissible A-share strategy universe with realizable net return as the sole optimization objective. Risk, liquidity, capacity, concentration and switching costs are constraints. Cash is residual rather than a fixed defensive target."
+                snapshot.metadata["market_route"]="CN_RETURN_MAXIMIZATION"
+                snapshot.metadata["stress_test_route"]="CN_WORST_POOL_RESCUE"
+                snapshot.metadata["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY"
             else:
                 if evidence_eligible and daily_bar_complete:
                     us_return_outcome=self.us_return_max_ledger.record_outcome(
@@ -483,7 +499,11 @@ class EvolutionLabEngine:
             if existing_decisions:
                 existing=existing_decisions[-1]
                 prospective_bootstrap=None
-                if market_id=="CN" and self._complete_daily_evidence_run(existing):
+                if (
+                    market_id=="CN"
+                    and str(current_experiment or "").upper()=="CN_WORST_POOL_RESCUE"
+                    and self._complete_daily_evidence_run(existing)
+                ):
                     prior_rows=[
                         r for r in self.all_runs()
                         if r.run_id!=existing.run_id
