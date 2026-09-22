@@ -34,8 +34,8 @@ from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.13.1"
-    market_adapter_version = "market-lab@0.4.0"
+    architecture_version = "fin-evolution-lab@0.14.0"
+    market_adapter_version = "market-lab@0.5.0"
 
     def __init__(self) -> None:
         self.store=RunStore()
@@ -76,7 +76,7 @@ class EvolutionLabEngine:
             self.store.save_run(run)
 
     def _prune_manual_previews(self,max_per_market:int=5)->None:
-        for market_id in ("US","CN"):
+        for market_id in ("US","CN","HK"):
             previews=sorted(
                 [
                     r for r in self._runs.values()
@@ -115,7 +115,7 @@ class EvolutionLabEngine:
         return receipt
 
     def _apply_strategy_profiles(self)->None:
-        for market_id in ("US","CN"):
+        for market_id in ("US","CN","HK"):
             self.strategy_population.configure_market(self.strategy_evolution.active(market_id))
 
     def refresh_core(self)->None:
@@ -138,6 +138,7 @@ class EvolutionLabEngine:
             "strategy_evolution":self.strategy_evolution.version,
             "strategy_rules_US":self.strategy_evolution.active("US").version,
             "strategy_rules_CN":self.strategy_evolution.active("CN").version,
+            "strategy_rules_HK":self.strategy_evolution.active("HK").version,
             "triaid_core":self.core.version if hasattr(self,"core") else self.evolution.active().version,
             "evaluation":self.evaluation.version if hasattr(self,"evaluation") else "evaluation@0.2.0",
             "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
@@ -476,7 +477,7 @@ class EvolutionLabEngine:
                 snapshot.metadata["market_route"]="CN_RETURN_MAXIMIZATION"
                 snapshot.metadata["stress_test_route"]="CN_WORST_POOL_RESCUE"
                 snapshot.metadata["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY"
-            else:
+            elif market_id=="US":
                 if evidence_eligible and daily_bar_complete:
                     us_return_outcome=self.us_return_max_ledger.record_outcome(
                         prepared["latest_as_of"],
@@ -494,6 +495,11 @@ class EvolutionLabEngine:
                 snapshot.metadata["experiment_mode"]="US_RETURN_MAX_CAPACITY"
                 snapshot.metadata["experiment_design"]="Use the existing return-first reselect strategy population as the primary US route, expand the frozen strategy mix to executable ETF exposures, and validate realized return versus SPY buy-and-hold and the generic TRIAID Core under four USD capital sleeves."
                 snapshot.metadata["market_route"]="US_RETURN_MAXIMIZATION"
+            else:
+                snapshot.metadata["experiment_mode"]="HK_RETURN_MAX_CAPACITY"
+                snapshot.metadata["experiment_design"]="Select from the full generic strategy population over a tradable Hong Kong ETF universe, maximizing realizable net return after modeled trading costs while treating risk, liquidity, capacity and concentration as constraints. The route remains research-only and produces no broker orders."
+                snapshot.metadata["market_route"]="HK_RETURN_MAXIMIZATION"
+                snapshot.metadata["hk_tradable_universe"]=list(MARKETS["HK"].assets)
             snapshot.metadata["primary_route_revision"]=self.architecture_version
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
@@ -776,6 +782,8 @@ class EvolutionLabEngine:
             return "CN_RETURN_MAX_CAPACITY"
         if market_id=="US":
             return "US_RETURN_MAX_CAPACITY"
+        if market_id=="HK":
+            return "HK_RETURN_MAX_CAPACITY"
         raise ValueError(f"unsupported market_id: {market_id}")
 
     def latest_decision_run(
@@ -1052,10 +1060,10 @@ class EvolutionLabEngine:
             "active_core":self.evolution.active().__dict__,
             "active_strategy_rules":{
                 market_id:self.strategy_evolution.active(market_id).__dict__
-                for market_id in ("US","CN")
+                for market_id in ("US","CN","HK")
             },
             "strategy_registry_count":len(self.strategy_population.definitions()),
-            "markets":["US","CN"],
+            "markets":["US","CN","HK"],
             "run_counts":counts,
             "run_scope_counts":{
                 "official_evidence":sum(1 for r in self.all_runs() if self._evidence_eligible_run(r)),
@@ -1224,7 +1232,7 @@ class EvolutionLabEngine:
             if created_at and r.created_at>created_at
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
-            and str(r.market.market_id).upper() in {"US","CN"}
+            and str(r.market.market_id).upper() in {"US","CN","HK"}
             and str((r.market.metadata or {}).get("experiment_mode") or "").upper()
                 == self.primary_experiment_mode(str(r.market.market_id).upper())
             and r.run_id not in known_ids
@@ -1265,7 +1273,7 @@ class EvolutionLabEngine:
         def replay_by_market(rows:list[RunRecord])->dict:
             return {
                 market:replay([r for r in rows if str(r.market.market_id).upper()==market])
-                for market in ("US","CN")
+                for market in ("US","CN","HK")
             }
 
         dev_result=replay(dev)
@@ -1283,10 +1291,10 @@ class EvolutionLabEngine:
                 and result["candidate_mean"]>=result["parent_mean"]-1e-12
             )
 
-        replay_pass=all(nondegrading(dev_by_market[m],1) for m in ("US","CN"))
-        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in ("US","CN"))
+        replay_pass=all(nondegrading(dev_by_market[m],1) for m in ("US","CN","HK"))
+        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in ("US","CN","HK"))
         shadow_min_per_market=5
-        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN"))
+        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN","HK"))
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
             and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
@@ -1330,7 +1338,7 @@ class EvolutionLabEngine:
             }
         return {
             market_id:self.strategy_evolution_status(market_id)
-            for market_id in ("US","CN")
+            for market_id in ("US","CN","HK")
         }
 
     def propose_strategy_candidate(self,market_id:str)->dict:
