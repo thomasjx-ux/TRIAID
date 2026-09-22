@@ -24,7 +24,7 @@ class CoreParameters:
 
 class EvolutionModule:
     version = "core-evolution@0.2.1"
-    min_verified_runs = 20
+    min_verified_runs = 30
     min_verified_runs_per_market = 10
 
     def __init__(self, store: RunStore) -> None:
@@ -45,6 +45,8 @@ class EvolutionModule:
             return "CN_RETURN_MAX_CAPACITY"
         if market_id=="US":
             return "US_RETURN_MAX_CAPACITY"
+        if market_id=="HK":
+            return "HK_RETURN_MAX_CAPACITY"
         return ""
 
     @classmethod
@@ -90,11 +92,11 @@ class EvolutionModule:
         eligible=sorted(eligible,key=lambda r:(r.market.as_of,r.created_at,r.run_id))
         by_market={
             market:[r for r in eligible if str(r.market.market_id).upper()==market]
-            for market in ("US","CN")
+            for market in ("US","CN","HK")
         }
         if (
             len(eligible)<self.min_verified_runs
-            or any(len(by_market[m])<self.min_verified_runs_per_market for m in ("US","CN"))
+            or any(len(by_market[m])<self.min_verified_runs_per_market for m in ("US","CN","HK"))
         ):
             return {
                 "created":False,
@@ -134,14 +136,14 @@ class EvolutionModule:
         weak_market=any(
             (market_diagnosis[m]["mean_excess_return"] or 0.0)<0
             or (market_diagnosis[m]["negative_rate"] or 0.0)>0.55
-            for m in ("US","CN")
+            for m in ("US","CN","HK")
         )
         if weak_market:
             cand.intervention_strength=max(0.10,parent.intervention_strength*0.85)
             cand.hypothesis="Reduce intervention strength because at least one market's primary-route development-period interventions show weak realizable net-return evidence."
         else:
             cand.intervention_strength=min(0.90,parent.intervention_strength*1.05)
-            cand.hypothesis="Slightly increase intervention strength because both US and CN primary-route development periods show non-negative relative-return evidence."
+            cand.hypothesis="Slightly increase intervention strength because all three primary-route development periods show non-negative relative-return evidence."
 
         created_at=datetime.now(timezone.utc).isoformat()
         self.state["cores"][version]=asdict(cand)
@@ -166,8 +168,8 @@ class EvolutionModule:
             "candidate":asdict(cand),
             "development_runs":len(dev),
             "reserved_holdout_runs":len(holdout),
-            "development_runs_by_market":{m:len(development_run_ids_by_market[m]) for m in ("US","CN")},
-            "reserved_holdout_runs_by_market":{m:len(reserved_holdout_run_ids_by_market[m]) for m in ("US","CN")},
+            "development_runs_by_market":{m:len(development_run_ids_by_market[m]) for m in ("US","CN","HK")},
+            "reserved_holdout_runs_by_market":{m:len(reserved_holdout_run_ids_by_market[m]) for m in ("US","CN","HK")},
             "diagnosis":diag,
             "market_diagnosis":market_diagnosis,
             "evidence_scope":"PRIMARY_ROUTE_ONLY",
