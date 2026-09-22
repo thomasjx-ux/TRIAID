@@ -142,12 +142,16 @@ assert decision["fast_challenger"]["windows_days"]==[1,3,5]
 assert "pilot_execution_check" in decision["fast_challenger"]
 assert decision["fast_challenger"]["pilot_execution_check"]["pilot_max_risk_budget"]==0.10
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
-expected_route_weights={"P18_XMOM20":0.28,"P25_BALANCED":0.28,"P04_TREND50":0.28,"P00_BUY_HOLD":0.16}
-assert set(decision["target_strategy_weights"])==set(expected_route_weights)
-assert all(
-    abs(float(decision["target_strategy_weights"][sid])-weight)<1e-12
-    for sid,weight in expected_route_weights.items()
-)
+positive_ranked=[
+    row["strategy_id"]
+    for row in decision["candidate_selection_scores"]
+    if row["strategy_id"]!="P28_CASH" and float(row["net_selection_score"])>0
+]
+expected_selected=positive_ranked[:4]
+assert list(decision["target_strategy_weights"])==expected_selected
+assert all(abs(float(decision["target_strategy_weights"][sid])-0.28)<1e-12 for sid in expected_selected[:3])
+assert abs(float(decision["target_strategy_weights"][expected_selected[3]])-0.16)<1e-12
+assert abs(sum(float(x) for x in decision["target_strategy_weights"].values())-1.0)<1e-12
 assert decision["return_first_population_control_weights"]==group.weights
 assert abs(decision["return_first_population_projected_annualized_expected_net_return"]-0.2608)<1e-12
 assert decision["generic_core_control_weights"]==generic.weights_after
@@ -183,8 +187,8 @@ frozen=ledger.freeze(decision,"US:SNAP:1","2026-09-18")
 dup=ledger.freeze(decision,"US:SNAP:1","2026-09-18")
 assert dup["decision_id"]==frozen["decision_id"]
 
-strategy_day1={"P18_XMOM20":0.10,"P25_BALANCED":0.05,"P00_BUY_HOLD":0.08}
-strategy_day2={"P18_XMOM20":0.02,"P25_BALANCED":0.01,"P00_BUY_HOLD":0.015}
+strategy_day1={"P18_XMOM20":0.10,"P25_BALANCED":0.05,"P04_TREND50":0.06,"P00_BUY_HOLD":0.08}
+strategy_day2={"P18_XMOM20":0.02,"P25_BALANCED":0.01,"P04_TREND50":0.012,"P00_BUY_HOLD":0.015}
 product_day1={a:0.10 for a in spec.assets}
 product_day2={a:0.02 for a in spec.assets}
 turnover={a:10_000_000.0 for a in spec.assets}
@@ -202,8 +206,8 @@ assert o2["recorded"] is True
 
 review=ledger.review_decision(frozen)
 assert review["observation_days"]==2
-expected_route_day1=strategy_day1["P18_XMOM20"]
-expected_route_day2=strategy_day2["P18_XMOM20"]
+expected_route_day1=sum(float(w)*strategy_day1[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
+expected_route_day2=sum(float(w)*strategy_day2[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
 expected_route=(1.0+expected_route_day1)*(1.0+expected_route_day2)-1.0
 expected_generic_day1=0.40*strategy_day1["P18_XMOM20"]+0.30*strategy_day1["P25_BALANCED"]
 expected_generic_day2=0.40*strategy_day2["P18_XMOM20"]+0.30*strategy_day2["P25_BALANCED"]
