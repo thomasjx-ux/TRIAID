@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -77,6 +78,13 @@ async def bootstrap_long_horizon_research()->None:
             latent.get("as_of"),
             len(latent.get("top_long_lead_candidates") or []),
             len(latent.get("top_any_lead_candidates") or []),
+            json.dumps({
+                "top_long_lead_candidates":latent.get("top_long_lead_candidates") or [],
+                "top_any_lead_candidates":latent.get("top_any_lead_candidates") or [],
+                "event_count":latent.get("event_count"),
+                "control_count":latent.get("control_count"),
+                "data_completeness":latent.get("data_completeness"),
+            },ensure_ascii=False,sort_keys=True),
         )
     except Exception as exc:
         print("TRIAID_LATENT_HAZARD_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
