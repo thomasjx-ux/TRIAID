@@ -382,15 +382,19 @@ try:
     risk_off_market=cn_request.market.model_copy(deep=True)
     risk_off_market.regime="intraday_risk_off"
     risk_off=engine.core.decide(risk_off_market,cn_decision.strategy_group,cn_states)
-    assert risk_off.diagnostics["regime_policy"]=="RISK_OFF_TOP_3"
+    assert risk_off.diagnostics["regime_policy"]=="RISK_OFF_ADAPTIVE_RETURN_THRESHOLD"
+    assert risk_off.diagnostics["fixed_strategy_count_target"] is False
+    assert 0<risk_off.diagnostics["selection_count"]<len(risky_members)
     assert 0.0<risk_off.weights_after.get("P28_CASH",0.0)<0.5
     assert risk_off.weights_after!=cn_decision.triaid_decision.weights_after
 
     severe_market=cn_request.market.model_copy(deep=True)
     severe_market.regime="shock_high_vol"
     severe=engine.core.decide(severe_market,cn_decision.strategy_group,cn_states)
-    assert severe.diagnostics["regime_policy"]=="SEVERE_RISK_TOP_2"
-    assert severe.weights_after.get("P28_CASH",0.0)>risk_off.weights_after.get("P28_CASH",0.0)
+    assert severe.diagnostics["regime_policy"]=="SEVERE_RISK_ADAPTIVE_RETURN_THRESHOLD"
+    assert severe.diagnostics["fixed_strategy_count_target"] is False
+    assert severe.diagnostics["selection_count"]<=risk_off.diagnostics["selection_count"]
+    assert severe.weights_after.get("P28_CASH",0.0)>=risk_off.weights_after.get("P28_CASH",0.0)
 
     # The former worst-pool rescue remains available only as an explicit stress test.
     cn_stress_request=RunRequest(
@@ -492,7 +496,8 @@ try:
     assert negative_recompute["status"]=="RECOMPUTED"
     assert negative_recompute["transition_regime"]=="intraday_risk_off"
     assert negative_recompute["diagnostics"]["risk_off_detected"] is True
-    assert negative_recompute["diagnostics"]["regime_policy"]=="RISK_OFF_TOP_3"
+    assert negative_recompute["diagnostics"]["regime_policy"]=="RISK_OFF_ADAPTIVE_RETURN_THRESHOLD"
+    assert negative_recompute["diagnostics"]["fixed_strategy_count_target"] is False
     assert negative_recompute["weights_after"].get("P28_CASH",0.0) > negative_recompute["weights_before"].get("P28_CASH",0.0)
 
     curves=engine.curves("US")
