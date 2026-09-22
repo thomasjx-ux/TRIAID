@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from statistics import mean
 from typing import Dict, Iterable, List
 
+from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import BilingualText, StrategyDefinition, StrategyGroup, StrategyState
 from .strategy_registry import FAMILIES, build_definitions
 
@@ -111,8 +112,8 @@ class StrategyPopulationModule:
     def rules(self, market_id: str) -> dict:
         cfg = self.config_for(market_id)
         result = asdict(cfg)
-        result["global_objective"] = "MAXIMIZE_REALIZABLE_NET_RETURN"
-        result["objective_constitution"] = "RETURN_IS_THE_ONLY_OPTIMIZATION_OBJECTIVE; RISK_LIQUIDITY_CAPACITY_CONCENTRATION_AND_EXECUTION_COST_ARE_CONSTRAINTS_OR_REAL_COSTS, NOT CO_EQUAL_OBJECTIVES"
+        result["global_objective"] = PRIMARY_OBJECTIVE
+        result["objective_constitution"] = OBJECTIVE_CONSTITUTION
         result["selection_objective"] = "maximize realizable net return from the full admissible strategy universe after modeled switching and execution costs"
         result["group_optimizer"] = "return-first group construction with hard admissibility, capacity and concentration constraints; diversification and uncertainty are not independent utility objectives"
         result["switch_rule"] = "replace the current group only when the estimated realizable net-return improvement exceeds the modeled switching cost and operational hurdle"
@@ -122,7 +123,7 @@ class StrategyPopulationModule:
         if cfg.market_id=="CN":
             result["active_research_experiment"]="CN_RETURN_MAX_CAPACITY"
             result["market_route"]="CN_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="MAXIMIZE_REALIZABLE_NET_RETURN"
+            result["research_experiment_objective"]=PRIMARY_OBJECTIVE
             result["primary_route_selector"]="RELATIVE_RETURN_FIRST_PORTFOLIO_WITH_CAPACITY_AND_SWITCHING_CONSTRAINTS"
             result["stress_test_route"]="CN_WORST_POOL_RESCUE"
             result["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY_NOT_PRIMARY_PORTFOLIO"
@@ -333,7 +334,7 @@ class StrategyPopulationModule:
             "score_temperature":score_temperature,
             "absolute_sign_used_as_cash_gate":False,
             "uncertainty_used_as_additive_penalty":False,
-            "primary_objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            "primary_objective":PRIMARY_OBJECTIVE,
             "cash_semantics":"RESIDUAL_ONLY_WHEN_RISK_CAPACITY_OR_MEMBER_LIMITS_PREVENT_FULL_ALLOCATION",
         }
         return weights,diagnostics
