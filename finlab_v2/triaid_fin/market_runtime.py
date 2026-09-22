@@ -12,7 +12,7 @@ from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.4.1"
+    version="market-data-automation@0.5.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
@@ -108,7 +108,7 @@ class MarketDataAutomation:
                     timeout=self.refresh_timeout_seconds,
                 )
                 decision_result=None
-                if self.decision_scheduler is not None:
+                if self.decision_scheduler is not None and market_id in {"US","CN"}:
                     decision_result=await asyncio.to_thread(
                         self.decision_scheduler.after_refresh,
                         market_id,
@@ -197,23 +197,23 @@ class MarketDataAutomation:
                         },
                     }
                     self.cross_market_crash_day=day
-                    self.errors.pop("USCN:CRASH_LINKAGE",None)
+                    self.errors.pop("USCNHK:CRASH_LINKAGE",None)
                     print(
-                        "TRIAID_US_CN_CRASH_LINKAGE_DAILY",
+                        "TRIAID_US_CN_HK_CRASH_LINKAGE_DAILY",
                         report.get("experiment_id"),
                         report.get("as_of"),
                         self.cross_market_crash_latest.get("paired_event_rows"),
                     )
                 except Exception as exc:
-                    self.errors["USCN:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_US_CN_CRASH_LINKAGE_RECOVERY",self.errors["USCN:CRASH_LINKAGE"])
+                    self.errors["USCNHK:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCN:CRASH_LINKAGE"])
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
         while True:
             now=time.monotonic()
             self.last_loop_heartbeat_utc=datetime.now(timezone.utc).isoformat()
-            for market_id in ("US","CN"):
+            for market_id in ("US","CN","HK"):
                 try:
                     await self._run_market_cycle(market_id,now)
                     self.last_market_cycle_utc[market_id]=datetime.now(timezone.utc).isoformat()
@@ -250,6 +250,11 @@ class MarketDataAutomation:
                 "159915.SZ":"创业板ETF · 159915",
                 "512100.SS":"中证1000ETF · 512100",
                 "511010.SS":"国债ETF · 511010",
+            },
+            "HK":{
+                "^HSI":"恒生指数 · HSI",
+                "^HSCE":"恒生中国企业指数 · HSCEI",
+                "^HSTECH":"恒生科技指数 · HSTECH",
             },
         }
         return labels.get(market_id.upper(),{}).get(symbol,symbol)
@@ -392,10 +397,10 @@ class MarketDataAutomation:
             "version":self.version,
             "automation_enabled":self.enabled,
             "discipline":"OFFICIAL_TRADING_CALENDAR_GATED_REFRESH; DATA_REFRESH_DOES_NOT_TRIGGER_TRADING",
-            "session_phase":{m:session_phase(m) for m in ("US","CN")},
+            "session_phase":{m:session_phase(m) for m in ("US","CN","HK")},
             "official_trading_calendar":calendar_status(),
             "last_phase":dict(self.last_phase),
-            "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN")},
+            "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN","HK")},
             "last_refresh_monotonic":dict(self.last_refresh),
             "automation_errors":dict(self.errors),
             "frequency_policy":self.frequency_policy.status(),
