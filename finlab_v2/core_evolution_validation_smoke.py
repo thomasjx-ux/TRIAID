@@ -41,7 +41,11 @@ def add_verified(engine,market,day_index):
             as_of=d,
             snapshot_id=f"EVOSMOKE:{market}:{day_index}",
             regime="risk_on_trend",
-            metadata={"daily_bar_complete":True,"base_cost_bps":0.0},
+            metadata={
+                "daily_bar_complete":True,
+                "base_cost_bps":0.0,
+                "experiment_mode":"CN_RETURN_MAX_CAPACITY" if market=="CN" else "US_RETURN_MAX_CAPACITY",
+            },
         ),
         strategy_states=states(),
         max_group_size=3,
@@ -73,6 +77,8 @@ try:
     assert proposal["created"] is True,proposal
     assert proposal["development_runs_by_market"]=={"US":7,"CN":7}
     assert proposal["reserved_holdout_runs_by_market"]=={"US":3,"CN":3}
+    assert proposal["evidence_scope"]=="PRIMARY_ROUTE_ONLY"
+    assert proposal["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
     version=proposal["candidate"]["version"]
 
     before_shadow=engine.promote_core(version)
