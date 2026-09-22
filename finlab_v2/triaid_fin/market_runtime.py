@@ -108,7 +108,7 @@ class MarketDataAutomation:
                     timeout=self.refresh_timeout_seconds,
                 )
                 decision_result=None
-                if self.decision_scheduler is not None and market_id in {"US","CN"}:
+                if self.decision_scheduler is not None and market_id in {"US","CN","HK"}:
                     decision_result=await asyncio.to_thread(
                         self.decision_scheduler.after_refresh,
                         market_id,
@@ -252,9 +252,10 @@ class MarketDataAutomation:
                 "511010.SS":"国债ETF · 511010",
             },
             "HK":{
-                "^HSI":"恒生指数 · HSI",
-                "^HSCE":"恒生中国企业指数 · HSCEI",
+                "2800.HK":"盈富基金 · 2800.HK",
+                "2828.HK":"恒生国企ETF · 2828.HK",
                 "3033.HK":"恒生科技ETF · 3033.HK",
+                "2819.HK":"香港债券ETF · 2819.HK",
             },
         }
         return labels.get(market_id.upper(),{}).get(symbol,symbol)
