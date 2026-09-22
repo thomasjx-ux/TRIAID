@@ -6,6 +6,8 @@ engine=EvolutionLabEngine()
 result=engine.refresh_market_data("HK","DAILY")
 snapshot=engine.market_data_snapshot("HK","DAILY",False)
 observed=engine.record_market_observation(snapshot)
+assert set(snapshot.get("symbols") or [])=={"2800.HK","2828.HK","3033.HK","2819.HK"}
+assert result.get("points",0)>=250
 print("TRIAID_HK_MARKET_LIVE_PASS",{
     "provider":result.get("provider"),
     "points":result.get("points"),
