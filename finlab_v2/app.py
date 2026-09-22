@@ -897,7 +897,7 @@ const TIP={
   exp:'A multi-window annualized state-return estimate built from realized 21/63/126/252-day strategy net returns, with each window annualized as mean daily return × 252 and then weighted. It is not a forecast of the underlying asset price move or a calibrated future-return prediction.',
   risk:'Annualized volatility of the latest 63 available strategy-return observations, computed as population standard deviation × √252; shorter available history is used when fewer than 63 observations exist. It is not loss probability.',
   before:'Frozen baseline target weight assigned by Strategy Population at the same decision time, used as the control for TRIAID reweighting.',
-  after:'Frozen target weight after TRIAID Core adjusts for current market state, risk and uncertainty. It is not an executed broker position.',
+  after:'Frozen target weight after TRIAID Core maximizes the current realizable net-return proxy within market-state, liquidity, capacity and concentration constraints. It is not an executed broker position.',
   delta:'Frozen TRIAID target weight minus baseline target weight. Positive means more allocation than baseline; negative means less.',
   why:'Explains what the strategy does, why it entered the current run’s group, and why TRIAID increased or reduced it relative to baseline.',
   candidateWhy:'Explains the candidate strategy logic and suitable conditions. Unselected strategies receive no current live allocation.',
@@ -979,7 +979,7 @@ const TABLE_HEADER_TIPS={
   'Multi-windowannualizedstateestimate':'Multi-window annualized state-return estimate from realized 21/63/126/252-day strategy net returns. Each window uses mean daily return × 252 before weighting. It is not an underlying-price forecast or a calibrated future-return prediction.',
   'Risk':'Annualized volatility of the latest 63 available strategy-return observations, computed as population standard deviation × √252; shorter available history is used when fewer than 63 observations exist. It is not loss probability.',
   'BeforeTRIAID':'Baseline allocation before TRIAID Core intervention.',
-  'AfterTRIAID':'Allocation after TRIAID evaluates current state, risk and uncertainty.',
+  'AfterTRIAID':'Allocation after TRIAID maximizes realizable net return within current market and execution constraints.',
   'Weightchange':'Frozen TRIAID target weight minus baseline target weight. Positive means more allocation than baseline; negative means less.',
   'Explanation':'Supporting explanation for the row, including logic, conditions and selection rationale.',
   'Return-Maxweight':'Frozen strategy weight from the US Return-Max route. Its ranking signal is the multi-window annualized state-return estimate, not a calibrated future-return forecast.',
@@ -1367,7 +1367,7 @@ function renderUSReturnMax(report){
  el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
  el('usReturnMaxNote').textContent=lang==='zh'
   ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
-  : 'The US primary route does not reuse the CN recovery thesis. It selects the ACTIVE strategy with the highest current multi-window annualized state-return estimate. That signal is built from realized 21/63/126/252-day strategy net returns under fixed weights and is not an underlying-price forecast. Exact score ties are broken by lower execution cost, risk, uncertainty, then deterministic strategy ID, before expansion into target SPY/QQQ/IWM/TLT/GLD exposures. Four USD capital tiers share the same frozen decision; only capital size changes simulated capacity and impact cost, and no broker orders are sent.';
+  : 'The US route follows the same TRIAID FIN constitution as every supported market: maximize realizable net return as the only optimization objective. Liquidity, capacity, concentration and risk are feasibility constraints, while switching and execution costs are deducted as real costs. The return signal uses realized 21/63/126/252-day strategy net returns under frozen weights and is not an underlying-price forecast. Exact net-score ties use lower execution cost and deterministic strategy ID only. Four USD capital tiers apply the same objective with capital-specific capacity and impact checks, and no broker orders are sent.';
  const rw=d.target_strategy_weights||{};
  const gw=d.generic_core_control_weights||{};
  const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
