@@ -7,7 +7,7 @@ from .contracts import RunRecord
 
 
 class ReviewModule:
-    version="review@0.4.0"
+    version="review@0.4.1"
 
     @staticmethod
     def _evidence_eligible(run:RunRecord)->bool:
@@ -18,11 +18,25 @@ class ReviewModule:
             and run.status!="PREVIEW_READY"
         )
 
+    @staticmethod
+    def _primary_mode(market_id:str)->str:
+        market_id=str(market_id).upper()
+        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else ""
+
+    @classmethod
+    def _primary_route(cls,run:RunRecord)->bool:
+        expected=cls._primary_mode(run.market.market_id)
+        return bool(
+            expected
+            and str((run.market.metadata or {}).get("experiment_mode") or "").upper()==expected
+        )
+
     def daily_summary(self,runs:Iterable[RunRecord])->dict:
         rows=[
             r for r in runs
             if r.market.snapshot_id!="PENDING"
             and self._evidence_eligible(r)
+            and self._primary_route(r)
         ]
         dates=sorted({r.market.as_of for r in rows if r.market.as_of})
         target_date=dates[-1] if dates else datetime.now(timezone.utc).date().isoformat()
@@ -98,6 +112,7 @@ class ReviewModule:
                 r for r in runs
                 if r.evaluation and r.evaluation.status=="EVALUATED"
                 and self._evidence_eligible(r)
+                and self._primary_route(r)
                 and (r.market.metadata or {}).get("daily_bar_complete") is not False
             ],
             key=lambda r:(r.market.as_of,r.created_at),
