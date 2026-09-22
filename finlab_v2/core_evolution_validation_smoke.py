@@ -96,7 +96,7 @@ try:
     assert receipt["shadow_by_market"]["CN"]["count"]==0
     assert receipt["shadow_by_market"]["HK"]["count"]==0
 
-    for market in ("US","CN"):
+    for market in ("US","CN","HK"):
         for i in range(10,15):
             add_verified(engine,market,i)
 
