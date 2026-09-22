@@ -295,6 +295,26 @@ def us_return_max_history(
     return engine.us_return_max_history(limit)
 
 
+@app.get("/api/experiments/us/long-cycle/status")
+def us_long_cycle_status() -> dict:
+    return engine.long_cycle_hypothesis_status()
+
+
+@app.get("/api/experiments/us/long-cycle/latest")
+def us_long_cycle_latest() -> dict:
+    row=engine.long_cycle_hypothesis_latest()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no US long-cycle hypothesis experiment")
+    return row
+
+
+@app.get("/api/experiments/us/long-cycle/history")
+def us_long_cycle_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.long_cycle_hypothesis_history(limit)
+
+
 @app.get("/api/recovery-wave/status")
 def recovery_wave_status(market_id: str = "CN") -> dict:
     return engine.recovery_wave_status(market_id)
