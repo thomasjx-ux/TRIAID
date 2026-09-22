@@ -88,6 +88,12 @@ async def bootstrap_long_horizon_research()->None:
                     row for row in (latent.get("factor_lead_results") or [])
                     if row.get("candidate")
                 ],
+                "top_long_lead_composites":latent.get("top_long_lead_composites") or [],
+                "top_any_lead_composites":latent.get("top_any_lead_composites") or [],
+                "candidate_composite_rows":[
+                    row for row in (latent.get("composite_lead_results") or [])
+                    if row.get("candidate")
+                ],
             },ensure_ascii=False,sort_keys=True),
         )
     except Exception as exc:
