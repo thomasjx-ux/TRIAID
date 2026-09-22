@@ -17,11 +17,54 @@ LEADS=(20,60,120,250)
 FACTOR_ALERT_PERCENTILE=0.80
 CONTROL_STEP=63
 CRASH_EXCLUSION_SESSIONS=250
+MARKET_EXPECTATION_YAHOO={
+    "MOVE_INDEX":"^MOVE",
+    "FED_FUNDS_FUTURE":"ZQ=F",
+    "SOFR_1M_FUTURE":"SR1=F",
+}
+COMPOSITE_RULES={
+    "RATES_POLICY_PRESSURE":{
+        "factors":(
+            "US_TREASURY_2Y_RISE_90D",
+            "US_REAL_YIELD_10Y_RISE_90D",
+            "MOVE_LEVEL",
+            "FED_POLICY_RATE_LEVEL",
+            "FED_FUNDS_FUTURES_REPRICING_ABS_30D",
+        ),
+        "min_hits":3,
+    },
+    "HK_RATES_EARLY_WARNING":{
+        "factors":(
+            "HK_NEGATIVE_MOMENTUM_63",
+            "US_TREASURY_2Y_RISE_90D",
+            "MOVE_LEVEL",
+        ),
+        "min_hits":2,
+    },
+    "POLICY_REPRICING_STRESS":{
+        "factors":(
+            "US_TREASURY_2Y_RISE_90D",
+            "FED_FUNDS_FUTURES_REPRICING_ABS_30D",
+            "SOFR_FUTURES_REPRICING_ABS_30D",
+            "MOVE_RISE_30D",
+        ),
+        "min_hits":2,
+    },
+    "SYSTEMIC_TRANSMISSION":{
+        "factors":(
+            "HK_NEGATIVE_MOMENTUM_63",
+            "CROSS_MARKET_STRESS_COUNT_10PCT",
+            "CORR_HK_US_60",
+            "MOVE_LEVEL",
+        ),
+        "min_hits":3,
+    },
+}
 
 
 class LatentHazardExperiment:
-    version="latent-hazard-discovery@0.2.0"
-    protocol_version="point-in-time-hazard-protocol@0.2.0"
+    version="latent-hazard-discovery@0.3.0"
+    protocol_version="point-in-time-hazard-protocol@0.3.0"
     latest_file="latent_hazard_latest.json"
     history_file="latent_hazard_history.jsonl"
 
@@ -48,6 +91,42 @@ class LatentHazardExperiment:
                 if attempt+1<attempts:
                     time.sleep(1.5*(attempt+1))
         raise RuntimeError(f"fred_retry_exhausted:{series_id}:{' | '.join(errors)}")
+
+
+    @staticmethod
+    def _yahoo_observations(symbol:str,transform:str="identity")->list[tuple[date,float]]:
+        series=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
+        rows=[]
+        for ts,price in zip(series["ts"],series["close"]):
+            value=float(price)
+            if transform=="imm_implied_rate":
+                value=100.0-value
+            if math.isfinite(value):
+                rows.append((datetime.fromtimestamp(int(ts),timezone.utc).date(),value))
+        if len(rows)<100:
+            raise RuntimeError(f"insufficient_yahoo_observations:{symbol}:{len(rows)}")
+        return rows
+
+    @staticmethod
+    def _composite_signals(percentiles:dict[str,float|None])->dict[str,dict]:
+        out={}
+        for name,spec in COMPOSITE_RULES.items():
+            factors=tuple(spec["factors"])
+            available=[f for f in factors if percentiles.get(f) is not None]
+            hits=[f for f in available if float(percentiles[f])>=FACTOR_ALERT_PERCENTILE]
+            min_hits=int(spec["min_hits"])
+            out[name]={
+                "available":len(available)>=min_hits,
+                "available_count":len(available),
+                "factor_count":len(factors),
+                "alert_count":len(hits),
+                "min_hits":min_hits,
+                "score":(len(hits)/len(available) if available else None),
+                "triggered":(len(available)>=min_hits and len(hits)>=min_hits),
+                "triggered_factors":hits,
+                "factors":list(factors),
+            }
+        return out
 
     @staticmethod
     def _series_map(series:dict)->dict[date,float]:
@@ -313,6 +392,40 @@ class LatentHazardExperiment:
             out["FED_BALANCE_SHEET_CONTRACTION_180D"]=-walcl_change
             out["FED_BALANCE_SHEET_EXPANSION_180D"]=walcl_change
 
+        move=cls._fred_value(fred.get("MOVE_INDEX",[]),d)
+        if move is not None:
+            out["MOVE_LEVEL"]=move
+            move30=cls._fred_change(fred.get("MOVE_INDEX",[]),d,30)
+            move90=cls._fred_change(fred.get("MOVE_INDEX",[]),d,90)
+            if move30 is not None:
+                out["MOVE_RISE_30D"]=move30
+            if move90 is not None:
+                out["MOVE_RISE_90D"]=move90
+
+        zq=cls._fred_value(fred.get("FED_FUNDS_FUTURE",[]),d)
+        if zq is not None:
+            out["FED_FUNDS_FUTURES_IMPLIED_RATE"]=zq
+            zq30=cls._fred_change(fred.get("FED_FUNDS_FUTURE",[]),d,30)
+            zq90=cls._fred_change(fred.get("FED_FUNDS_FUTURE",[]),d,90)
+            if zq30 is not None:
+                out["FED_FUNDS_FUTURES_REPRICING_ABS_30D"]=abs(zq30)
+                out["FED_FUNDS_FUTURES_TIGHTENING_30D"]=zq30
+            if zq90 is not None:
+                out["FED_FUNDS_FUTURES_REPRICING_ABS_90D"]=abs(zq90)
+
+        sr1=cls._fred_value(fred.get("SOFR_1M_FUTURE",[]),d)
+        if sr1 is not None:
+            out["SOFR_FUTURES_IMPLIED_RATE"]=sr1
+            sr30=cls._fred_change(fred.get("SOFR_1M_FUTURE",[]),d,30)
+            if sr30 is not None:
+                out["SOFR_FUTURES_REPRICING_ABS_30D"]=abs(sr30)
+                out["SOFR_FUTURES_TIGHTENING_30D"]=sr30
+
+        if zq is not None and policy is not None:
+            out["FED_FUNDS_FUTURES_GAP_VS_DFF"]=abs(float(zq)-float(policy))
+        if zq is not None and sr1 is not None:
+            out["SOFR_FED_FUNDS_FUTURES_BASIS_ABS"]=abs(float(sr1)-float(zq))
+
         return {k:float(v) for k,v in out.items() if math.isfinite(float(v))}
 
     @staticmethod
@@ -402,6 +515,13 @@ class LatentHazardExperiment:
             except Exception as exc:
                 errors[f"FRED:{name}"]=f"{type(exc).__name__}:{exc}"
 
+        for name,symbol in MARKET_EXPECTATION_YAHOO.items():
+            try:
+                transform="imm_implied_rate" if name in {"FED_FUNDS_FUTURE","SOFR_1M_FUTURE"} else "identity"
+                fred[name]=self._yahoo_observations(symbol,transform)
+            except Exception as exc:
+                errors[f"YAHOO:{name}"]=f"{type(exc).__name__}:{exc}"
+
         control_indexes=self._controls(dates,event_indexes)
         feature_cache={}
         def features_at(i:int)->dict:
@@ -423,6 +543,7 @@ class LatentHazardExperiment:
                 "date":dates[idx].isoformat(),
                 "index":idx,
                 "percentiles":pct,
+                "composites":self._composite_signals(pct),
             })
 
         event_evaluations=[]
@@ -448,6 +569,7 @@ class LatentHazardExperiment:
                     "cutoff_date":dates[i].isoformat(),
                     "features":feats,
                     "point_in_time_percentiles":percentiles,
+                    "composites":self._composite_signals(percentiles),
                 }
             event_evaluations.append({
                 "event_id":event["event_id"],
@@ -531,6 +653,67 @@ class LatentHazardExperiment:
             reverse=True,
         )
 
+
+        composite_lead_results=[]
+        for lead in LEADS:
+            for name,spec in COMPOSITE_RULES.items():
+                event_rows=[]
+                for event in event_evaluations:
+                    comp=((event.get("leads") or {}).get(str(lead)) or {}).get("composites",{}).get(name)
+                    if comp and comp.get("available"):
+                        event_rows.append(bool(comp.get("triggered")))
+                control_rows=[]
+                for row in control_evaluations:
+                    comp=(row.get("composites") or {}).get(name)
+                    if comp and comp.get("available"):
+                        control_rows.append(bool(comp.get("triggered")))
+                if not event_rows or not control_rows:
+                    continue
+                hit=sum(1 for x in event_rows if x)/len(event_rows)
+                fpr=sum(1 for x in control_rows if x)/len(control_rows)
+                lift=hit-fpr
+                composite_lead_results.append({
+                    "composite":name,
+                    "lead_trading_days":lead,
+                    "event_samples":len(event_rows),
+                    "control_samples":len(control_rows),
+                    "event_hit_rate":hit,
+                    "control_false_positive_rate":fpr,
+                    "hit_rate_lift":lift,
+                    "candidate":(
+                        len(event_rows)>=3
+                        and hit>=0.50
+                        and fpr<=0.30
+                        and lift>=0.20
+                    ),
+                    "rule":{
+                        "factors":list(spec["factors"]),
+                        "min_hits":int(spec["min_hits"]),
+                        "factor_alert_percentile":FACTOR_ALERT_PERCENTILE,
+                    },
+                })
+        composite_summary=[]
+        for name in COMPOSITE_RULES:
+            rows=[r for r in composite_lead_results if r["composite"]==name]
+            if not rows:
+                continue
+            selected=[r for r in rows if r["candidate"]]
+            long_selected=[r for r in selected if r["lead_trading_days"]>=120]
+            best=max(rows,key=lambda r:r["hit_rate_lift"])
+            composite_summary.append({
+                "composite":name,
+                "candidate_leads":[r["lead_trading_days"] for r in selected],
+                "long_lead_candidate":bool(long_selected),
+                "passes_any_lead":bool(selected),
+                "best_lift":best["hit_rate_lift"],
+                "best_lead_trading_days":best["lead_trading_days"],
+                "rule":best["rule"],
+            })
+        composite_summary.sort(
+            key=lambda r:(r["long_lead_candidate"],r["passes_any_lead"],r["best_lift"]),
+            reverse=True,
+        )
+
         payload={
             "version":self.version,
             "protocol_version":self.protocol_version,
@@ -558,18 +741,25 @@ class LatentHazardExperiment:
             "factor_summary":factor_summary,
             "top_long_lead_candidates":[x for x in factor_summary if x["long_lead_candidate"]][:10],
             "top_any_lead_candidates":[x for x in factor_summary if x["passes_any_lead"]][:15],
+            "composite_lead_results":composite_lead_results,
+            "composite_summary":composite_summary,
+            "top_long_lead_composites":[x for x in composite_summary if x["long_lead_candidate"]][:10],
+            "top_any_lead_composites":[x for x in composite_summary if x["passes_any_lead"]][:10],
             "data_completeness":{
                 "primary_markets":len(primary),
                 "common_sessions":len(dates),
-                "fred_series":len(fred),
+                "fred_and_market_expectation_series":len(fred),
+                "fred_series_requested":10,
+                "market_expectation_series_requested":len(MARKET_EXPECTATION_YAHOO),
                 "errors":errors,
             },
             "rates_policy_layer":{
                 "enabled":True,
                 "series":[
-                    "DGS2","DGS10","DGS30","DFII10","T10Y2Y","T10Y3M","DFF","WALCL"
+                    "DGS2","DGS10","DGS30","DFII10","T10Y2Y","T10Y3M","DFF","WALCL",
+                    "^MOVE","ZQ=F","SR1=F"
                 ],
-                "policy_repricing_proxy":"Absolute 30-calendar-day change in the 2Y Treasury yield. This is a market policy-expectations proxy, not OIS or Fed Funds futures.",
+                "policy_repricing_proxy":"Uses both 2Y Treasury repricing and nearby continuous 30-Day Fed Funds / 1-Month SOFR futures implied rates. Futures are research proxies from continuous Yahoo series, not a full contract-by-contract OIS curve.",
                 "key_derived_factors":[
                     "US_REAL_YIELD_10Y_RISE_90D",
                     "US_POLICY_REPRICING_PROXY_2Y_ABS_30D",
@@ -580,7 +770,7 @@ class LatentHazardExperiment:
                     "FED_BALANCE_SHEET_CONTRACTION_180D"
                 ],
             },
-            "interpretation_guard":"Historical recurrence identifies candidate latent hazards, not causal proof or calibrated crash probability. Rates and policy variables are evaluated point-in-time and may change sign by regime; no fixed rule such as high rates = crash or easing = bullish is assumed. Long-lead candidates are prioritized; short-lead-only signals are treated as confirmation rather than early warning.",
+            "interpretation_guard":"Historical recurrence identifies candidate latent hazards, not causal proof or calibrated crash probability. Rates, policy, MOVE and nearby futures variables are evaluated point-in-time and may change sign by regime. Continuous futures can contain roll effects and are treated as research proxies. Composite signals require multiple independent stress dimensions and remain shadow-only.",
         }
         digest=self._hash(payload)
         payload["experiment_hash"]=digest
