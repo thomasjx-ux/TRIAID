@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from statistics import median
 from typing import Iterable
 
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
@@ -90,21 +91,36 @@ class TriaidCoreModule:
             ranked.append((strategy_id,score))
 
         ranked.sort(key=lambda x:(-x[1],x[0]))
-        n=len(ranked)
-        if severe_risk:
-            keep_count=min(2,n)
-            regime_policy="SEVERE_RISK_TOP_2"
-        elif risk_off:
-            keep_count=min(3,n)
-            regime_policy="RISK_OFF_TOP_3"
+        score_values=[score for _,score in ranked]
+        selection_median=median(score_values) if score_values else None
+        selection_mad=(
+            median([abs(score-selection_median) for score in score_values])
+            if score_values else None
+        )
+        if not ranked:
+            selection_threshold=None
+            kept=[]
+            regime_policy="NO_ADMISSIBLE_STRATEGIES"
         elif risk_on:
-            keep_count=n
+            selection_threshold=min(score_values)
+            kept=list(ranked)
             regime_policy="RISK_ON_FULL_ADMISSIBLE_GROUP"
         else:
-            keep_count=min(max(1,(n+1)//2),n) if n else 0
-            regime_policy="MIXED_TOP_HALF"
-
-        kept=ranked[:keep_count]
+            multiplier=1.5 if severe_risk else 1.0 if risk_off else 0.0
+            selection_threshold=float(selection_median)+multiplier*float(selection_mad or 0.0)
+            kept=[
+                row for row in ranked
+                if row[1]>=selection_threshold-1e-15
+            ]
+            if not kept:
+                kept=[ranked[0]]
+            regime_policy=(
+                "SEVERE_RISK_ADAPTIVE_RETURN_THRESHOLD"
+                if severe_risk
+                else "RISK_OFF_ADAPTIVE_RETURN_THRESHOLD"
+                if risk_off
+                else "MIXED_ADAPTIVE_RETURN_THRESHOLD"
+            )
         raw={}
         score_temperature=None
         if kept:
@@ -176,6 +192,11 @@ class TriaidCoreModule:
                 "regime_policy":regime_policy,
                 "ranked_opportunities":[{"strategy_id":sid,"net_return_proxy":score} for sid,score in ranked],
                 "kept_strategy_ids":[sid for sid,_ in kept],
+                "selection_median":selection_median,
+                "selection_mad":selection_mad,
+                "selection_threshold":selection_threshold,
+                "selection_count":len(kept),
+                "fixed_strategy_count_target":False,
                 "score_temperature":score_temperature,
                 "cash_target":float(target.get("P28_CASH",0.0)),
                 "cash_is_fixed_template":False,
