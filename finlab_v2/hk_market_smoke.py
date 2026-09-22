@@ -9,6 +9,9 @@ from triaid_fin.trading_calendar import trading_day_info, official_session_phase
 
 assert "HK" in MARKETS
 assert MARKETS["HK"].currency=="HKD"
+assert MARKETS["HK"].benchmark=="2800.HK"
+assert MARKETS["HK"].risk_assets==("2800.HK","2828.HK","3033.HK")
+assert MARKETS["HK"].defensive_assets==("2819.HK",)
 hub=get_market_data_hub()
 caps=hub.capabilities("HK")["HK"]
 assert caps["DAILY"]["supported"] is True
