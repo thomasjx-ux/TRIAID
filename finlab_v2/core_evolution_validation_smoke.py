@@ -33,7 +33,7 @@ def states():
     ]
 
 
-def add_verified(engine,market,day_index):
+def add_verified(engine,market,day_index,experiment_mode=None):
     d=(date(2026,1,5)+timedelta(days=day_index)).isoformat()
     req=RunRequest(
         market=MarketSnapshot(
@@ -44,7 +44,7 @@ def add_verified(engine,market,day_index):
             metadata={
                 "daily_bar_complete":True,
                 "base_cost_bps":0.0,
-                "experiment_mode":"CN_RETURN_MAX_CAPACITY" if market=="CN" else "US_RETURN_MAX_CAPACITY",
+                "experiment_mode":experiment_mode or ("CN_RETURN_MAX_CAPACITY" if market=="CN" else "US_RETURN_MAX_CAPACITY"),
             },
         ),
         strategy_states=states(),
@@ -72,6 +72,10 @@ try:
     for market in ("US","CN"):
         for i in range(10):
             add_verified(engine,market,i)
+
+    # Deliberate stress evidence must not count toward the primary Core evolution set.
+    add_verified(engine,"CN",40,experiment_mode="CN_WORST_POOL_RESCUE")
+    add_verified(engine,"US",40,experiment_mode="US_STRESS_ONLY")
 
     proposal=engine.propose_core_candidate()
     assert proposal["created"] is True,proposal
