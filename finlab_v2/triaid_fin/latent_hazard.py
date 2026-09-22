@@ -20,8 +20,8 @@ CRASH_EXCLUSION_SESSIONS=250
 
 
 class LatentHazardExperiment:
-    version="latent-hazard-discovery@0.1.1"
-    protocol_version="point-in-time-hazard-protocol@0.1.0"
+    version="latent-hazard-discovery@0.2.0"
+    protocol_version="point-in-time-hazard-protocol@0.2.0"
     latest_file="latent_hazard_latest.json"
     history_file="latent_hazard_history.jsonl"
 
@@ -171,6 +171,33 @@ class LatentHazardExperiment:
         hist=[float(v) for rd,v in rows if rd<=d]
         return cls._percentile(hist,value)
 
+
+    @classmethod
+    def _fred_prior_value(cls,rows:list[tuple[date,float]],d:date,calendar_days:int)->float|None:
+        return cls._fred_value(rows,d-timedelta(days=int(calendar_days)))
+
+    @classmethod
+    def _fred_change(cls,rows:list[tuple[date,float]],d:date,calendar_days:int)->float|None:
+        current=cls._fred_value(rows,d)
+        prior=cls._fred_prior_value(rows,d,calendar_days)
+        if current is None or prior is None:
+            return None
+        return float(current)-float(prior)
+
+    @classmethod
+    def _fred_pct_change(cls,rows:list[tuple[date,float]],d:date,calendar_days:int)->float|None:
+        current=cls._fred_value(rows,d)
+        prior=cls._fred_prior_value(rows,d,calendar_days)
+        if current is None or prior is None or abs(float(prior))<1e-12:
+            return None
+        return float(current)/float(prior)-1.0
+
+    @staticmethod
+    def _fred_window_min(rows:list[tuple[date,float]],d:date,calendar_days:int)->float|None:
+        start=d-timedelta(days=int(calendar_days))
+        vals=[float(v) for rd,v in rows if start<=rd<=d]
+        return min(vals) if vals else None
+
     @classmethod
     def _features(
         cls,
@@ -225,6 +252,67 @@ class LatentHazardExperiment:
         curve=cls._fred_value(fred.get("YIELD_CURVE_10Y2Y",[]),d)
         if curve is not None:
             out["YIELD_CURVE_INVERSION"]=-curve
+
+        curve3m=cls._fred_value(fred.get("YIELD_CURVE_10Y3M",[]),d)
+        if curve3m is not None:
+            out["YIELD_CURVE_10Y3M_INVERSION"]=-curve3m
+
+        dgs2=cls._fred_value(fred.get("TREASURY_2Y",[]),d)
+        dgs10=cls._fred_value(fred.get("TREASURY_10Y",[]),d)
+        dgs30=cls._fred_value(fred.get("TREASURY_30Y",[]),d)
+        real10=cls._fred_value(fred.get("REAL_YIELD_10Y",[]),d)
+        policy=cls._fred_value(fred.get("FED_FUNDS_DAILY",[]),d)
+        walcl=cls._fred_value(fred.get("FED_BALANCE_SHEET",[]),d)
+
+        if dgs2 is not None:
+            out["US_TREASURY_2Y_LEVEL"]=dgs2
+        if dgs10 is not None:
+            out["US_TREASURY_10Y_LEVEL"]=dgs10
+        if dgs30 is not None:
+            out["US_TREASURY_30Y_LEVEL"]=dgs30
+        if real10 is not None:
+            out["US_REAL_YIELD_10Y_LEVEL"]=real10
+        if policy is not None:
+            out["FED_POLICY_RATE_LEVEL"]=policy
+
+        for factor,rows in (
+            ("US_TREASURY_2Y",fred.get("TREASURY_2Y",[])),
+            ("US_TREASURY_10Y",fred.get("TREASURY_10Y",[])),
+            ("US_REAL_YIELD_10Y",fred.get("REAL_YIELD_10Y",[])),
+        ):
+            change=cls._fred_change(rows,d,90)
+            if change is not None:
+                out[f"{factor}_RISE_90D"]=change
+
+        policy_change=cls._fred_change(fred.get("FED_FUNDS_DAILY",[]),d,90)
+        if policy_change is not None:
+            out["FED_POLICY_TIGHTENING_90D"]=policy_change
+            out["FED_POLICY_EASING_90D"]=-policy_change
+
+        repricing=cls._fred_change(fred.get("TREASURY_2Y",[]),d,30)
+        if repricing is not None:
+            out["US_POLICY_REPRICING_PROXY_2Y_ABS_30D"]=abs(repricing)
+
+        for name,rows in (
+            ("10Y2Y",fred.get("YIELD_CURVE_10Y2Y",[])),
+            ("10Y3M",fred.get("YIELD_CURVE_10Y3M",[])),
+        ):
+            current=cls._fred_value(rows,d)
+            window_min=cls._fred_window_min(rows,d,180)
+            if current is not None and window_min is not None:
+                out[f"YIELD_CURVE_{name}_RESTEEPENING_180D"]=(
+                    float(current)-float(window_min)
+                    if float(window_min)<0.0
+                    else 0.0
+                )
+
+        walcl_change=cls._fred_pct_change(fred.get("FED_BALANCE_SHEET",[]),d,180)
+        if walcl is not None:
+            out["FED_BALANCE_SHEET_LEVEL"]=walcl
+        if walcl_change is not None:
+            out["FED_BALANCE_SHEET_CONTRACTION_180D"]=-walcl_change
+            out["FED_BALANCE_SHEET_EXPANSION_180D"]=walcl_change
+
         return {k:float(v) for k,v in out.items() if math.isfinite(float(v))}
 
     @staticmethod
@@ -301,6 +389,13 @@ class LatentHazardExperiment:
             "HY_OAS":"BAMLH0A0HYM2",
             "NFCI":"NFCI",
             "YIELD_CURVE_10Y2Y":"T10Y2Y",
+            "YIELD_CURVE_10Y3M":"T10Y3M",
+            "TREASURY_2Y":"DGS2",
+            "TREASURY_10Y":"DGS10",
+            "TREASURY_30Y":"DGS30",
+            "REAL_YIELD_10Y":"DFII10",
+            "FED_FUNDS_DAILY":"DFF",
+            "FED_BALANCE_SHEET":"WALCL",
         }.items():
             try:
                 fred[name]=self._fred_with_retry(series_id)
@@ -469,7 +564,23 @@ class LatentHazardExperiment:
                 "fred_series":len(fred),
                 "errors":errors,
             },
-            "interpretation_guard":"Historical recurrence identifies candidate latent hazards, not causal proof or calibrated crash probability. Long-lead candidates are prioritized; short-lead-only signals are treated as confirmation rather than early warning.",
+            "rates_policy_layer":{
+                "enabled":True,
+                "series":[
+                    "DGS2","DGS10","DGS30","DFII10","T10Y2Y","T10Y3M","DFF","WALCL"
+                ],
+                "policy_repricing_proxy":"Absolute 30-calendar-day change in the 2Y Treasury yield. This is a market policy-expectations proxy, not OIS or Fed Funds futures.",
+                "key_derived_factors":[
+                    "US_REAL_YIELD_10Y_RISE_90D",
+                    "US_POLICY_REPRICING_PROXY_2Y_ABS_30D",
+                    "YIELD_CURVE_10Y2Y_RESTEEPENING_180D",
+                    "YIELD_CURVE_10Y3M_RESTEEPENING_180D",
+                    "FED_POLICY_TIGHTENING_90D",
+                    "FED_POLICY_EASING_90D",
+                    "FED_BALANCE_SHEET_CONTRACTION_180D"
+                ],
+            },
+            "interpretation_guard":"Historical recurrence identifies candidate latent hazards, not causal proof or calibrated crash probability. Rates and policy variables are evaluated point-in-time and may change sign by regime; no fixed rule such as high rates = crash or easing = bullish is assumed. Long-lead candidates are prioritized; short-lead-only signals are treated as confirmation rather than early warning.",
         }
         digest=self._hash(payload)
         payload["experiment_hash"]=digest
