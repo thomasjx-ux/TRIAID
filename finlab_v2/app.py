@@ -110,7 +110,7 @@ async def lifespan(app:FastAPI):
     if startup_maintenance_enabled:
         receipt=engine.recover_stale_runs()
         primary_references={}
-        for market_id in ("US","CN"):
+        for market_id in ("US","CN","HK"):
             try:
                 primary_references[market_id]=engine.ensure_primary_reference(market_id)
             except Exception as exc:
@@ -210,8 +210,8 @@ def storage_status()->dict:
 @app.post("/api/live/run/{market_id}", status_code=202)
 def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
     market_id = market_id.upper()
-    if market_id not in {"US", "CN"}:
-        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if market_id not in {"US", "CN", "HK"}:
+        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
     run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
     background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
     return {
@@ -226,7 +226,7 @@ def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
 @app.post("/api/live/run-all", status_code=202)
 def live_run_all(background_tasks: BackgroundTasks) -> dict:
     runs = []
-    for market_id in ("US", "CN"):
+    for market_id in ("US", "CN", "HK"):
         run = engine.create_pending_live_run(market_id,"MANUAL_PREVIEW")
         background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
         runs.append({
@@ -454,7 +454,7 @@ def strategies(
             raise HTTPException(status_code=409,detail="run decision is not ready")
     elif market_id:
         market_key=market_id.upper()
-        latest_run=None if market_key=="HK" else engine.latest_decision_run(market_key)
+        latest_run=engine.latest_decision_run(market_key)
     effective_market=(
         latest_run.market.market_id
         if latest_run
@@ -547,8 +547,8 @@ def strategy_evolution_status(market_id: str | None = None) -> dict:
 @app.post("/api/strategy-evolution/propose/{market_id}")
 def strategy_evolution_propose(market_id: str, _admin:None=Depends(require_admin_token)) -> dict:
     market_id=market_id.upper()
-    if market_id not in {"US","CN"}:
-        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if market_id not in {"US","CN","HK"}:
+        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
     return engine.propose_strategy_candidate(market_id)
 
 
@@ -560,8 +560,8 @@ def strategy_evolution_promote(
     _admin:None=Depends(require_admin_token),
 ) -> dict:
     market_id=market_id.upper()
-    if market_id not in {"US","CN"}:
-        raise HTTPException(status_code=400, detail="market_id must be US or CN")
+    if market_id not in {"US","CN","HK"}:
+        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
     try:
         return engine.promote_strategy_rules(market_id,version,validation)
     except KeyError as exc:
@@ -964,7 +964,7 @@ const T={
   before:'基线权重',after:'TRIAID 权重',delta:'权重变化',why:'策略说明与选择原因',
   evolution:'Core 进化状态',observed:'已后验评价运行',negative:'负相对收益差比例',next:'下一步',
   noEval:'等待下一交易日后验',noResult:'尚无可评价结果',evoNote:'Core 会根据持续后验评价形成候选改进',
-  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即运行（预览）',runAll:'预览美股 + A股',
+  noCandidate:'尚无 Candidate',propose:'生成 Candidate Core',run:'立即运行（预览）',runAll:'预览三个市场',
   running:'已创建即时预览，后台正在读取真实市场数据；该运行不进入正式证据链。',pending:'当前决策已生成，等待下一交易日结果。',
   preview:'即时预览，仅展示当前策略状态和TRIAID权重，不写入正式证据、后验、进化或前瞻实验。',
   positive:'TRIAID 本期后验收益高于基线',negativeResult:'TRIAID 本期后验收益低于基线，需要回看权重调整归因',flat:'TRIAID 本期后验收益与基线基本一致'
@@ -987,7 +987,7 @@ const T={
   before:'Baseline weight',after:'TRIAID weight',delta:'Weight change',why:'Strategy explanation and selection reason',
   evolution:'Core Evolution State',observed:'Posterior-evaluated runs',negative:'Negative relative-return-gap rate',next:'Next step',
   noEval:'Awaiting next-period outcome',noResult:'No evaluated outcome yet',evoNote:'Core forms candidate improvements from continuous posterior evaluations',
-  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Preview',runAll:'Preview US + CN',
+  noCandidate:'No Candidate yet',propose:'Generate Candidate Core',run:'Run Preview',runAll:'Preview Three Markets',
   running:'Manual preview created. Real market data is being processed; this run does not enter the official evidence chain.',pending:'Current decision is ready and awaiting the next market outcome.',
   preview:'Manual preview only. It displays current strategy state and TRIAID weights without entering official evidence, posterior, evolution or prospective experiments.',
   positive:'TRIAID posterior return was above baseline in the latest evaluated run',negativeResult:'TRIAID posterior return was below baseline; weight-adjustment attribution should be reviewed',flat:'TRIAID posterior return was approximately in line with baseline'
@@ -1301,7 +1301,1019 @@ function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 function fmtPrice(x,currency){
  const v=Number(x);if(!Number.isFinite(v))return '-';
  const digits=v>=100?2:v>=10?3:4;
- return (currency==='USD'?'$':currency==='CNY'?'¥':'')+v.toFixed(digits);
+ return (currency==='USD'?'
+}
+function strategyLabelHtml(name,strategyId){
+ const n=name||strategyId||'-',sid=strategyId||'';
+ return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
+  '<span class="market-tip-icon" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'" aria-label="'+(lang==='zh'?'查看最新可用价格':'View latest available price')+'">i</span>';
+}
+function strategyMarketTip(strategyId,name){
+ const m=el('market').value;
+ const ctx=strategyMarketContext[m];
+ const title=(name||strategyId||'-')+(strategyId&&name!==strategyId?' · '+strategyId:'');
+ if(!ctx)return title+'\\n'+(lang==='zh'?'正在读取最新市场价格…':'Loading latest market prices…');
+ const row=(ctx.strategies||{})[strategyId];
+ if(!row)return title+'\\n'+(lang==='zh'?'当前策略暂无可用的底层资产价格映射。':'No current underlying-price mapping is available for this strategy.');
+ const lines=[title];
+ const assets=row.assets||[];
+ if(!assets.length){
+  lines.push(lang==='zh'?'当前底层：现金，无市场价格':'Current underlying: cash, no market price');
+ }else{
+  assets.forEach(a=>{
+   const assetName=a.name||a.symbol;
+   const px=fmtPrice(a.latest_price,ctx.currency);
+   const chg=signedPct(a.last_trading_day_change);
+   lines.push(
+    lang==='zh'
+     ? assetName+' '+a.symbol+' · 目标敞口 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
+     : assetName+' '+a.symbol+' · target exposure '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
+   );
+  });
+ }
+ if(Number(row.cash_weight||0)>1e-6)lines.push((lang==='zh'?'现金 ':'Cash ')+fmtPct(row.cash_weight));
+ lines.push(
+  (lang==='zh'?'价格源 ':'Price source ')+(ctx.provider||'-')+' · '+(ctx.price_mode||'-')+
+  ' · '+(lang==='zh'?'最近交易日 ':'Last trading day ')+(ctx.last_trading_day||'-')
+ );
+ return lines.join('\\n');
+}
+function applyText(){
+ const t=T[lang];
+ const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
+ liveTitle:'live',indexWindowTitle:'indexWindow',activityWindowTitle:'activityWindow',
+ baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
+ selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
+ candidatePoolTitle:'candidatePool',
+ usReturnMaxTitle:'usReturnMax',usrmExpectedLabel:'usrmExpected',usrmGenericLabel:'usrmGeneric',usrmSpyLabel:'usrmSpy',usrmRiskLabel:'usrmRisk',usrmStrategyTitle:'usrmStrategy',usrmAssetTitle:'usrmAsset',usrmCapitalTitle:'usrmCapital',usrmRealizedTitle:'usrmRealized',usrmControlTitle:'usrmControl',
+ regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',
+ prospectiveTitle:'prospective',prospectiveDaysLabel:'prospectiveDays',prospectiveHoldLabel:'prospectiveHold',prospectiveTriaidLabel:'prospectiveTriaid',prospectiveGapLabel:'prospectiveGap',
+ prospectiveStrategyTitle:'prospectiveStrategy',prospectiveDailyTitle:'prospectiveDaily',
+ pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',
+ recoveryWaveTitle:'recoveryWave',recoveryCashLabel:'recoveryCash',recoveryPrevDaysLabel:'recoveryPrevDays',recoveryPrevReturnLabel:'recoveryPrevReturn',recoveryPrevGapLabel:'recoveryPrevGap',
+ recoveryOpinionTitle:'recoveryOpinion',recoveryReviewTitle:'recoveryReview',rwthProduct:'product',rwthAction:'action',rwthTarget:'target',rwthChange:'change',rwthDrawdown:'drawdown',rwthDirection:'direction',rwthHorizon:'horizon',rwthSpeed:'speed',rwthHitEdge:'hitEdge',rwthExpected:'expected',rwthSamples:'samples',
+ capitalSleeveTitle:'capitalSleeve',capitalRealizedTitle:'capitalRealized',csthCapital:'capital',csthInvested:'invested',csthParticipation:'participation',csthDays:'days',csthCost:'cost',csthPnl:'pnl',csthReturn:'netReturn',crthCapital:'capital',crthFill:'fill',crthEquity:'equity',crthPnl:'realizedPnl',crthReturn:'realizedReturn',crthCost:'executionCost',crthRemaining:'remaining',
+ rvrDate:'resultDate',rvrPortfolio:'portfolioDay',rvrEqual:'equalDay',rvrCum:'portfolioCum',rvrGap:'gapCum',strategyTitle:'strategies',
+ thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+ evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
+ proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
+ Object.entries(map).forEach(([id,key])=>el(id).textContent=t[key]);
+ const tips=TIP[lang];
+ const headerTips={
+  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+  cthStrategy:'strategy',cthState:'state',cthExp:'exp',cthRisk:'risk',cthWhy:'candidateWhy'
+ };
+ Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
+ applyTableHeaderTooltips();
+ applyUiTooltips();
+}
+function statusTip(status){
+ const key=String(status||'').toLowerCase();
+ return TIP[lang][key]||TIP[lang].state;
+}
+async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+function localClockFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function localDateTimeFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleString();}catch(e){return '-'}
+}
+function localClockFromIso(x){
+ if(!x)return '-';
+ try{return new Date(x).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function setPulse(id,on,warn=false){
+ const node=el(id);node.className='pulse'+(on?' on':warn?' warn':'');
+}
+async function refreshLiveWindows(){
+ const m=el('market').value;
+ try{
+  const [idx,act,strategyCtx]=await Promise.all([
+   json('/api/market-data/live-indicators/'+m),
+   json('/api/market-data/activity/'+m+'?limit=80'),
+   json('/api/market-data/strategy-context/'+m)
+  ]);
+  strategyMarketContext[m]=strategyCtx;
+  const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
+  setPulse('marketPulse',fresh,idx.available&&!fresh);
+  el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
+  el('indexMeta').textContent=idx.available
+   ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
+   : (lang==='zh'?'暂无可用市场数据':'No market data available');
+  el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
+   const p=Number(x.change_pct);
+   const pText=Number.isFinite(p)?signedPct(p):'-';
+   const px=Number(x.close);
+   return '<div class="indexitem">'+
+    '<div class="small muted">'+esc(x.name||x.symbol)+'</div>'+
+    '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
+    '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
+  }).join('');
+  const events=act.events||[];
+  const last=events.length?events[events.length-1]:null;
+  const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
+  setPulse('activityPulse',!!recent,events.length>0&&!recent);
+  el('activityPhase').textContent=act.session_phase||'-';
+  el('scheduleMeta').textContent=(lang==='zh'?'当前调度: ':'Schedule: ')+(act.schedule_text||'-');
+  el('commandLog').innerHTML=[...events].reverse().map(e=>{
+   return '<div class="cmd"><span class="cmdtime">'+esc(localClockFromIso(e.at))+'</span> '+
+    '<span class="cmdkind">'+esc(e.kind||'EVENT')+'</span> '+
+    '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
+    esc(e.message||'')+'</div>';
+  }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+ }catch(e){
+  setPulse('marketPulse',false,true);setPulse('activityPulse',false,true);
+  el('indexMeta').textContent='Live data error: '+e.message;
+  el('scheduleMeta').textContent='Activity error: '+e.message;
+ }
+}
+function applyMarketScope(){
+ const m=el('market').value;
+ const hk=m==='HK';
+ el('runBtn').disabled=false;
+ el('marketScopeStatus').style.display=hk?'block':'none';
+ el('marketScopeStatus').textContent=hk
+  ? (lang==='zh'
+     ? '港股已进入独立策略研究路线：2800/2828/3033 为风险资产，2819 为防御资产；策略、TRIAID权重与后验独立记录。仍为研究系统，不连接券商、不自动交易。'
+     : 'Hong Kong now has an independent strategy research route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded independently. Research only; no broker execution.')
+  : '';
+}
+function onMarketChange(){applyMarketScope();refreshAll();refreshLiveWindows()}
+async function runNow(){
+ const m=el('market').value;
+ const x=await json('/api/live/run/'+m,{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id,m);
+}
+async function runAll(){
+ const x=await json('/api/live/run-all',{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
+ x.runs.forEach(r=>pollRun(r.run_id,r.market_id));
+}
+async function pollRun(id,market){
+ for(let i=0;i<60;i++){
+  await new Promise(r=>setTimeout(r,1000));
+  try{
+   const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
+   if(!['CREATED','FETCHING_DATA'].includes(x.status)){
+    if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
+    await refreshAll();
+    return;
+   }
+  }catch(e){}
+ }
+}
+function drawCurve(points){
+ const c=el('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+ if(!points.length){g.fillStyle='#7b8593';g.font='13px system-ui';g.fillText(T[lang].noEval,18,32);return}
+ const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);
+ let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
+ const X=i=>45+(c.width-70)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-55)*(hi-v)/(hi-lo);
+ g.strokeStyle='#e1e6ec';g.lineWidth=1;for(let j=0;j<4;j++){const y=25+(c.height-55)*j/3;g.beginPath();g.moveTo(45,y);g.lineTo(c.width-20,y);g.stroke()}
+ [['baseline_equity','#6f7782'],['triaid_equity','#1769e0']].forEach(([key,color])=>{
+  g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+ });
+}
+function renderComparison(evaluated){
+ const t=T[lang];
+ if(!evaluated){
+  el('baseReturn').textContent=t.noEval;el('triaidReturn').textContent=t.noEval;el('gain').textContent=t.noEval;
+  el('gain').className='value';el('gainCard').style.background='#fff';return;
+ }
+ const e=evaluated.evaluation, gain=Number(e.excess_return||0);
+ el('baseReturn').textContent=fmtPct(e.baseline_return);el('triaidReturn').textContent=fmtPct(e.triaid_return);
+ el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
+ el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
+}
+function renderUSReturnMax(report){
+ const panel=el('usReturnMaxPanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ el('usReturnMaxStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'排序信号：多周期年化状态收益估计':'Ranking signal: multi-window annualized state-return estimate');
+ el('usrmExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
+ el('usrmGeneric').textContent=fmtPct(d.generic_core_projected_annualized_expected_net_return);
+ el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
+ el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
+ el('usReturnMaxNote').textContent=lang==='zh'
+  ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
+  : 'The US route follows the same TRIAID FIN constitution as every supported market: maximize realizable net return as the only optimization objective. Liquidity, capacity, concentration and risk are feasibility constraints, while switching and execution costs are deducted as real costs. The return signal uses realized 21/63/126/252-day strategy net returns under frozen weights and is not an underlying-price forecast. Exact net-score ties use lower execution cost and deterministic strategy ID only. Four USD capital tiers apply the same objective with capital-specific capacity and impact checks, and no broker orders are sent.';
+ const rw=d.target_strategy_weights||{};
+ const gw=d.generic_core_control_weights||{};
+ const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
+ el('usrmStrategyRows').innerHTML=sids.map(sid=>'<tr><td>'+strategyLabelHtml(strategyNameIndex.US[sid]||sid,sid)+'</td><td class="num triaid">'+fmtPct(rw[sid]||0)+'</td><td class="num">'+fmtPct(gw[sid]||0)+'</td></tr>').join('') ||
+  '<tr><td colspan="3">'+(lang==='zh'?'等待冻结策略':'Awaiting frozen strategy mix')+'</td></tr>';
+ const aw=d.target_asset_weights||{};
+ el('usrmAssetRows').innerHTML=Object.entries(aw).filter(([_,w])=>Number(w)>1e-12).sort((a,b)=>Number(b[1])-Number(a[1])).map(([a,w])=>'<tr><td>'+esc(a)+'</td><td class="num">'+fmtPct(w)+'</td></tr>').join('') ||
+  '<tr><td colspan="2">'+(lang==='zh'?'当前无风险ETF敞口':'No current risky ETF exposure')+'</td></tr>';
+ const cap=d.capital_capacity||{};
+ el('usrmCapitalMeta').textContent=(lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+'ADV20 · '+fmtPct(cap.max_participation_adv)+' cap · '+(cap.base_cost_bps??'-')+'bps base · '+(cap.impact_coefficient_bps??'-')+'bps×√participation';
+ el('usrmCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtUsd(x.target_invested_notional_usd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtUsd(x.estimated_round_trip_cost_proxy_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
+ const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior decision yet')+'</td></tr>';
+ const path=(review&&review.daily_path)||[];
+ el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
+  '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
+}
+function renderProspective(report){
+ const panel=el('prospectivePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const t=T[lang];
+ el('prospectiveStatus').textContent=report.status||'-';
+ el('prospectiveDays').textContent=String(report.observation_days??0)+' / '+((report.horizons_trading_days||[]).join('/')||'-');
+ const p=report.current_portfolio_cumulative_returns||{};
+ el('prospectiveHold').textContent=fmtPct(p.HOLD_EQUAL);el('prospectiveHold').className=cls(Number(p.HOLD_EQUAL||0));
+ el('prospectiveTriaid').textContent=fmtPct(p.TRIAID_STATIC_ALLOCATION);el('prospectiveTriaid').className=cls(Number(p.TRIAID_STATIC_ALLOCATION||0));
+ el('prospectiveGap').textContent=signedPct(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);el('prospectiveGap').className=cls(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL||0));
+ el('prospectiveMeta').textContent=(report.experiment_id||'-')+' · '+(lang==='zh'?'登记日 ':'Registered ')+(report.market_as_of||'-')+' · '+(lang==='zh'?'待完成窗口 ':'Pending horizons ')+((report.pending_horizons||[]).join('/')||'none');
+ el('prospectiveNote').textContent=lang==='zh'
+   ? '策略池与TRIAID综合排序在登记时冻结，禁止事后换成员或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复排序能力的主要证据。'
+   : 'Pool membership and the TRIAID composite ranking are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-ranking skill.';
+ const rows=report.strategy_determination||[];
+ el('prospectiveStrategyRows').innerHTML=rows.map(x=>{
+   const name=(x.name&&x.name[lang])||x.strategy_id;
+   const reason=(x.selection_reason&&x.selection_reason[lang])||'';
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td class="num">'+(x.triaid_predicted_rank??'-')+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.latest_daily_return||0))+'">'+fmtPct(x.latest_daily_return)+'</td>'+
+    '<td class="num '+cls(Number(x.realized_cumulative_return||0))+'">'+fmtPct(x.realized_cumulative_return)+'</td>'+
+    '<td class="num">'+(x.realized_rank_so_far??'-')+'</td>'+
+    '<td class="reason">'+esc(reason)+'</td></tr>';
+ }).join('');
+ const pool=rows.map(x=>x.strategy_id);
+ el('prospectiveDailyHead').innerHTML='<tr><th>'+(lang==='zh'?'交易日':'Trading day')+'</th>'+
+   pool.map(sid=>'<th>'+strategyLabelHtml(strategyNameIndex.CN[sid]||sid,sid)+'</th>').join('')+
+   '<th>'+(lang==='zh'?'最差池':'Worst pool')+'</th><th>TRIAID</th><th>'+(lang==='zh'?'差值':'Gap')+'</th></tr>';
+ const daily=report.daily_fluctuation||[];
+ el('prospectiveDailyRows').innerHTML=daily.map(day=>{
+   const cr=day.portfolio_cumulative_returns||{};
+   return '<tr><td class="nowrap">'+esc(day.as_of||'-')+'</td>'+
+    pool.map(sid=>'<td class="num '+cls(Number((day.strategy_returns||{})[sid]||0))+'">'+signedPct((day.strategy_returns||{})[sid])+'</td>').join('')+
+    '<td class="num '+cls(Number(cr.HOLD_EQUAL||0))+'">'+fmtPct(cr.HOLD_EQUAL)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_ALLOCATION||0))+'">'+fmtPct(cr.TRIAID_STATIC_ALLOCATION)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL||0))+'">'+signedPct(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL)+'</td></tr>';
+ }).join('') || '<tr><td colspan="'+(pool.length+4)+'">'+(lang==='zh'?'等待首个后续真实交易日结果':'Awaiting the first subsequent realized trading-day result')+'</td></tr>';
+}
+function renderRecoveryWave(report){
+ const panel=el('recoveryWavePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ const labels={
+  '510300.SS':'沪深300ETF · 510300',
+  '510500.SS':'中证500ETF · 510500',
+  '159915.SZ':'创业板ETF · 159915',
+  '512100.SS':'中证1000ETF · 512100'
+ };
+ el('recoveryWaveStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源数据时间 ':'Source data time ')+localDateTimeFromEpoch(d.source_latest_ts);
+ el('recoveryCash').textContent=fmtPct(d.cash_residual_weight);
+ el('recoveryPrevDays').textContent=review?String(review.observation_days??0):'-';
+ el('recoveryPrevReturn').textContent=review?fmtPct(review.current_portfolio_cumulative_return):'-';
+ el('recoveryPrevReturn').className=review?cls(Number(review.current_portfolio_cumulative_return||0)):'';
+ el('recoveryPrevGap').textContent=review?signedPct(review.current_excess_vs_equal_weight):'-';
+ el('recoveryPrevGap').className=review?cls(Number(review.current_excess_vs_equal_weight||0)):'';
+ const scope=d.data_scope||{};
+ el('recoveryWaveNote').textContent=lang==='zh'
+  ? '这是 Shadow Core 的冻结研究配置，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算后验；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。四档资金袖套从同一决策、全现金起步，唯一变量是资金规模；所谓填单是依据后续真实成交量与冻结参与率进行的模拟成交，不代表券商真实成交，模拟成交后从下一完整 bar 才开始计收益。历史配置与参数均冻结，不能事后改写。'
+  : 'These are frozen Shadow Core research allocations and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The four capital sleeves start from cash under the same frozen decision; capital size is the only experimental variable. Fills are simulated from subsequently observed real volume under the frozen participation rule and become return-active on the following complete bar; they are not broker fills. Frozen allocations and parameters cannot be rewritten after outcomes.';
+ const opinions=d.trade_opinions||[];
+ el('recoveryOpinionRows').innerHTML=opinions.map(x=>{
+   const horizon=x.expected_reversal_horizon_days==null?'-':(x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'));
+   const hit=x.historical_recovery_edge==null?'-':signedPct(x.historical_recovery_edge);
+   const exp=x.expected_forward_return==null?'-':signedPct(x.expected_forward_return);
+   const rationale=lang==='zh'?x.rationale_zh:x.rationale_en;
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(labels[x.symbol]||x.symbol)+'</span><br><span class="small muted">'+esc(x.symbol)+'</span></td>'+
+    '<td><span class="tag">'+esc(x.action||'-')+'</span></td>'+
+    '<td class="num triaid">'+fmtPct(x.target_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.suggested_weight_change||0))+'">'+signedPct(x.suggested_weight_change)+'</td>'+
+    '<td class="num '+cls(Number(x.drawdown_252||0))+'">'+fmtPct(x.drawdown_252)+'</td>'+
+    '<td>'+esc(x.state_direction||'-')+'</td>'+
+    '<td class="num">'+horizon+'</td>'+
+    '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
+    '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
+    '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
+    '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+ }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
+ const capacity=d.capital_capacity||{};
+ const capModel=capacity.model||{};
+ const capRows=capacity.sleeves||[];
+ el('capitalSleeveMeta').textContent=capacity.enabled
+   ? ((lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+
+      'ADV20 · '+fmtPct(capModel.max_participation_adv)+' cap · '+
+      (capModel.base_cost_bps??'-')+'bps base · '+
+      (capModel.impact_coefficient_bps??'-')+'bps×√participation · '+
+      (lang==='zh'?'不含券商个性化费率':'broker-specific fees excluded'))
+   : (lang==='zh'?'当前没有启用人民币资金袖套':'CNY capital sleeves not enabled');
+ el('capitalSleeveRows').innerHTML=capRows.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.target_invested_notional_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td>'+
+    '<td class="num">'+esc(x.minimum_execution_days??'-')+'</td>'+
+    '<td class="num">'+fmtMoney(x.estimated_round_trip_cost_proxy_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_pnl_before_timing_delay_cny||0))+'">'+fmtMoney(x.expected_wave_net_pnl_before_timing_delay_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_return_before_timing_delay||0))+'">'+signedPct(x.expected_wave_net_return_before_timing_delay)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'等待当前资金容量决策':'Awaiting capital-capacity decision')+'</td></tr>';
+ const realizedSleeves=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('capitalRealizedRows').innerHTML=realizedSleeves.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.fill_ratio)+'</td>'+
+    '<td class="num">'+fmtMoney(x.current_equity_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_pnl_cny||0))+'">'+fmtMoney(x.current_net_pnl_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td>'+
+    '<td class="num">'+fmtMoney(x.total_execution_cost_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.remaining_target_notional_cny)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior sleeves yet')+'</td></tr>';
+ if(review){
+   const prior=review.trade_opinions||[];
+   el('recoveryPreviousMeta').textContent=(lang==='zh'?'上一轮 '+(review.decision_id||'-')+'：':'Prior '+(review.decision_id||'-')+': ')+
+     prior.map(x=>(labels[x.symbol]||x.symbol)+' '+(x.action||'-')+' '+fmtPct(x.target_weight)+' · '+(x.expected_reversal_horizon_days==null?'-':x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'))).join(' | ');
+ }else{
+   el('recoveryPreviousMeta').textContent=lang==='zh'?'暂无上一轮冻结决策':'No prior frozen decision';
+ }
+ const path=(review&&review.daily_path)||[];
+ el('recoveryReviewRows').innerHTML=path.map(x=>{
+   return '<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_return||0))+'">'+signedPct(x.portfolio_return)+'</td>'+
+    '<td class="num '+cls(Number(x.equal_weight_return||0))+'">'+signedPct(x.equal_weight_return)+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_cumulative_return||0))+'">'+fmtPct(x.portfolio_cumulative_return)+'</td>'+
+    '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
+ }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
+}
+async function refreshAll(){
+ const m=el('market').value;
+ const previewId=previewRunIds[m];
+ try{
+  const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+   json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
+   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
+  ]);
+  const isCN=m==='CN';
+  const isHK=m==='HK';
+  const evaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCN||x.experiment_mode==='CN_RETURN_MAX_CAPACITY')
+  )||null;
+  if(isCN){
+   el('resultTitle').textContent=lang==='zh'?'A股收益最大化主路线':'CN Return-Max Primary Route';
+   el('baseReturnLabel').textContent=lang==='zh'?'收益优先策略群后验收益':'Return-first portfolio posterior return';
+   el('baseReturnSub').textContent=lang==='zh'?'决策时冻结的全策略竞争基线':'Full-universe return-first baseline frozen at decision time';
+   el('gainLabel').textContent=lang==='zh'?'TRIAID 相对基线收益差':'TRIAID return gap vs baseline';
+   el('gainSub').textContent=lang==='zh'?'TRIAID 动态权重后验收益 − 收益优先基线':'TRIAID dynamic-allocation posterior return − return-first baseline';
+   el('strategyTitle').textContent=lang==='zh'?'A股收益优先策略群与动态权重':'CN Return-First Strategy Group and Dynamic Weights';
+  }else{
+   el('resultTitle').textContent=T[lang].result;
+   el('baseReturnLabel').textContent=T[lang].baseReturn;
+   el('baseReturnSub').textContent=T[lang].baseSub;
+   el('gainLabel').textContent=T[lang].gain;
+   el('gainSub').textContent=T[lang].gainSub;
+   el('strategyTitle').textContent=m==='US'
+    ? (lang==='zh'?'通用 Core 对照策略群（非 Return-Max 主路线）':'Generic Core Control Group (not the Return-Max primary route)')
+    : m==='HK'
+      ? (lang==='zh'?'港股收益优先策略群与 TRIAID 动态权重':'HK Return-First Strategy Group and TRIAID Dynamic Weights')
+      : T[lang].strategies;
+  }
+  strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
+  const selected=cards.filter(x=>x.selected);
+  const detailRuns=d.runs_detail||[];
+  const officialLatest=isCN
+    ? ([...detailRuns].reverse().find(x=>x.experiment_mode==='CN_RETURN_MAX_CAPACITY')||null)
+    : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
+  const latest=previewRun||officialLatest;
+  const lastCurve=curves.length?curves[curves.length-1]:null;
+  renderComparison(evaluated);
+  el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
+  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
+  el('selectedCount').textContent=selected.length;
+  const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
+  el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
+  el('runState').textContent=previewRun
+    ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
+    : (latest?.status||'-');
+  el('selectedNames').innerHTML=selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-';
+  if(previewRun){
+   el('dailyAnalysis').textContent=T[lang].preview;
+   el('dailyAnalysis').className='';
+  }else if(evaluated){
+   const g=Number(evaluated.evaluation.excess_return||0);
+   el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
+   el('dailyAnalysis').className=cls(g);
+  }else if(isCN&&latest?.diagnostic_summary?.experiment_mode==='CN_RETURN_MAX_CAPACITY'){
+   const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
+   el('dailyAnalysis').textContent=Number.isFinite(p)
+    ? (lang==='zh'?'当前主路线以可实现净收益为唯一优化目标；TRIAID 相对冻结基线的状态收益差为 '+signedPct(p)+'。该值用于决策排序，不是保证的未来收益。':'The primary route uses realizable net return as the sole optimization objective; the state-return gap versus the frozen baseline is '+signedPct(p)+'. This is a decision-ranking signal, not a guaranteed future return.')
+    : T[lang].pending;
+   el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
+  }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  renderUSReturnMax(m==='US'?d.us_return_max:null);
+  renderProspective(isCN?d.prospective_experiment:null);
+  renderRecoveryWave(isCN?d.recovery_wave:null);
+  drawCurve(curves);
+  const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
+  const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
+  el('strategyRows').innerHTML=selectedCards.map(x=>{
+   const delta=(x.triaid_weight||0)-(x.baseline_weight||0);
+   const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
+   return '<tr class="selected">'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
+    '<td class="reason">'+esc(explanation)+'</td></tr>';
+  }).join('');
+  el('candidateRows').innerHTML=candidateCards.map(x=>{
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
+  }).join('');
+  const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
+  el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
+    (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
+  el('evoMean').className='sub '+cls(diag.mean_excess_return||0);
+  el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
+  const history=evo.history||[];const last=history.length?history[history.length-1]:null;
+  el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
+  el('runStatus').textContent=previewRun
+    ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
+    : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
+ }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
+}
+async function propose(){
+ const x=await json('/api/evolution/propose',{method:'POST'});
+ el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
+ refreshAll();
+}
+const hoverTip=el('hoverTip');
+document.addEventListener('mouseover',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(!target)return;
+ const tip=target.dataset.strategyId
+  ? strategyMarketTip(target.dataset.strategyId,target.dataset.strategyName||strategyNameIndex[el('market').value][target.dataset.strategyId])
+  : target.dataset.tip;
+ if(!tip)return;
+ hoverTip.textContent=tip;hoverTip.style.display='block';
+});
+document.addEventListener('mousemove',e=>{
+ if(hoverTip.style.display!=='block')return;
+ const pad=14;let x=e.clientX+14,y=e.clientY+16;
+ const w=hoverTip.offsetWidth,h=hoverTip.offsetHeight;
+ if(x+w>window.innerWidth-pad)x=e.clientX-w-14;
+ if(y+h>window.innerHeight-pad)y=e.clientY-h-14;
+ hoverTip.style.left=Math.max(pad,x)+'px';hoverTip.style.top=Math.max(pad,y)+'px';
+});
+document.addEventListener('mouseout',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
+});
+const tableHeaderObserver=new MutationObserver(mutations=>{
+ if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
+});
+tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows()}
+applyText();applyMarketScope();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
+</script>
+</body>
+</html>
+"""
+:currency==='CNY'?'¥':currency==='HKD'?'HK
+}
+function strategyLabelHtml(name,strategyId){
+ const n=name||strategyId||'-',sid=strategyId||'';
+ return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
+  '<span class="market-tip-icon" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'" aria-label="'+(lang==='zh'?'查看最新可用价格':'View latest available price')+'">i</span>';
+}
+function strategyMarketTip(strategyId,name){
+ const m=el('market').value;
+ const ctx=strategyMarketContext[m];
+ const title=(name||strategyId||'-')+(strategyId&&name!==strategyId?' · '+strategyId:'');
+ if(!ctx)return title+'\\n'+(lang==='zh'?'正在读取最新市场价格…':'Loading latest market prices…');
+ const row=(ctx.strategies||{})[strategyId];
+ if(!row)return title+'\\n'+(lang==='zh'?'当前策略暂无可用的底层资产价格映射。':'No current underlying-price mapping is available for this strategy.');
+ const lines=[title];
+ const assets=row.assets||[];
+ if(!assets.length){
+  lines.push(lang==='zh'?'当前底层：现金，无市场价格':'Current underlying: cash, no market price');
+ }else{
+  assets.forEach(a=>{
+   const assetName=a.name||a.symbol;
+   const px=fmtPrice(a.latest_price,ctx.currency);
+   const chg=signedPct(a.last_trading_day_change);
+   lines.push(
+    lang==='zh'
+     ? assetName+' '+a.symbol+' · 目标敞口 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
+     : assetName+' '+a.symbol+' · target exposure '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
+   );
+  });
+ }
+ if(Number(row.cash_weight||0)>1e-6)lines.push((lang==='zh'?'现金 ':'Cash ')+fmtPct(row.cash_weight));
+ lines.push(
+  (lang==='zh'?'价格源 ':'Price source ')+(ctx.provider||'-')+' · '+(ctx.price_mode||'-')+
+  ' · '+(lang==='zh'?'最近交易日 ':'Last trading day ')+(ctx.last_trading_day||'-')
+ );
+ return lines.join('\\n');
+}
+function applyText(){
+ const t=T[lang];
+ const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
+ liveTitle:'live',indexWindowTitle:'indexWindow',activityWindowTitle:'activityWindow',
+ baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
+ selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
+ candidatePoolTitle:'candidatePool',
+ usReturnMaxTitle:'usReturnMax',usrmExpectedLabel:'usrmExpected',usrmGenericLabel:'usrmGeneric',usrmSpyLabel:'usrmSpy',usrmRiskLabel:'usrmRisk',usrmStrategyTitle:'usrmStrategy',usrmAssetTitle:'usrmAsset',usrmCapitalTitle:'usrmCapital',usrmRealizedTitle:'usrmRealized',usrmControlTitle:'usrmControl',
+ regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',
+ prospectiveTitle:'prospective',prospectiveDaysLabel:'prospectiveDays',prospectiveHoldLabel:'prospectiveHold',prospectiveTriaidLabel:'prospectiveTriaid',prospectiveGapLabel:'prospectiveGap',
+ prospectiveStrategyTitle:'prospectiveStrategy',prospectiveDailyTitle:'prospectiveDaily',
+ pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',
+ recoveryWaveTitle:'recoveryWave',recoveryCashLabel:'recoveryCash',recoveryPrevDaysLabel:'recoveryPrevDays',recoveryPrevReturnLabel:'recoveryPrevReturn',recoveryPrevGapLabel:'recoveryPrevGap',
+ recoveryOpinionTitle:'recoveryOpinion',recoveryReviewTitle:'recoveryReview',rwthProduct:'product',rwthAction:'action',rwthTarget:'target',rwthChange:'change',rwthDrawdown:'drawdown',rwthDirection:'direction',rwthHorizon:'horizon',rwthSpeed:'speed',rwthHitEdge:'hitEdge',rwthExpected:'expected',rwthSamples:'samples',
+ capitalSleeveTitle:'capitalSleeve',capitalRealizedTitle:'capitalRealized',csthCapital:'capital',csthInvested:'invested',csthParticipation:'participation',csthDays:'days',csthCost:'cost',csthPnl:'pnl',csthReturn:'netReturn',crthCapital:'capital',crthFill:'fill',crthEquity:'equity',crthPnl:'realizedPnl',crthReturn:'realizedReturn',crthCost:'executionCost',crthRemaining:'remaining',
+ rvrDate:'resultDate',rvrPortfolio:'portfolioDay',rvrEqual:'equalDay',rvrCum:'portfolioCum',rvrGap:'gapCum',strategyTitle:'strategies',
+ thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+ evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
+ proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
+ Object.entries(map).forEach(([id,key])=>el(id).textContent=t[key]);
+ const tips=TIP[lang];
+ const headerTips={
+  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+  cthStrategy:'strategy',cthState:'state',cthExp:'exp',cthRisk:'risk',cthWhy:'candidateWhy'
+ };
+ Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
+ applyTableHeaderTooltips();
+ applyUiTooltips();
+}
+function statusTip(status){
+ const key=String(status||'').toLowerCase();
+ return TIP[lang][key]||TIP[lang].state;
+}
+async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+function localClockFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function localDateTimeFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleString();}catch(e){return '-'}
+}
+function localClockFromIso(x){
+ if(!x)return '-';
+ try{return new Date(x).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function setPulse(id,on,warn=false){
+ const node=el(id);node.className='pulse'+(on?' on':warn?' warn':'');
+}
+async function refreshLiveWindows(){
+ const m=el('market').value;
+ try{
+  const [idx,act,strategyCtx]=await Promise.all([
+   json('/api/market-data/live-indicators/'+m),
+   json('/api/market-data/activity/'+m+'?limit=80'),
+   json('/api/market-data/strategy-context/'+m)
+  ]);
+  strategyMarketContext[m]=strategyCtx;
+  const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
+  setPulse('marketPulse',fresh,idx.available&&!fresh);
+  el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
+  el('indexMeta').textContent=idx.available
+   ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
+   : (lang==='zh'?'暂无可用市场数据':'No market data available');
+  el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
+   const p=Number(x.change_pct);
+   const pText=Number.isFinite(p)?signedPct(p):'-';
+   const px=Number(x.close);
+   return '<div class="indexitem">'+
+    '<div class="small muted">'+esc(x.name||x.symbol)+'</div>'+
+    '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
+    '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
+  }).join('');
+  const events=act.events||[];
+  const last=events.length?events[events.length-1]:null;
+  const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
+  setPulse('activityPulse',!!recent,events.length>0&&!recent);
+  el('activityPhase').textContent=act.session_phase||'-';
+  el('scheduleMeta').textContent=(lang==='zh'?'当前调度: ':'Schedule: ')+(act.schedule_text||'-');
+  el('commandLog').innerHTML=[...events].reverse().map(e=>{
+   return '<div class="cmd"><span class="cmdtime">'+esc(localClockFromIso(e.at))+'</span> '+
+    '<span class="cmdkind">'+esc(e.kind||'EVENT')+'</span> '+
+    '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
+    esc(e.message||'')+'</div>';
+  }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+ }catch(e){
+  setPulse('marketPulse',false,true);setPulse('activityPulse',false,true);
+  el('indexMeta').textContent='Live data error: '+e.message;
+  el('scheduleMeta').textContent='Activity error: '+e.message;
+ }
+}
+function applyMarketScope(){
+ const m=el('market').value;
+ const hk=m==='HK';
+ el('runBtn').disabled=hk;
+ el('marketScopeStatus').style.display=hk?'block':'none';
+ el('marketScopeStatus').textContent=hk
+  ? (lang==='zh'
+     ? '港股已接入真实市场数据、交易日历、自动刷新与美股/A股/港股跨市场研究。当前专用港股策略选择器尚未通过晋升验证，因此不生成虚构策略权重，也不允许人工策略预览。'
+     : 'Hong Kong is live for real market data, calendar-aware refresh and US/CN/HK cross-market research. A dedicated HK strategy selector has not passed promotion validation, so no synthetic strategy weights or manual strategy previews are produced.')
+  : '';
+}
+function onMarketChange(){applyMarketScope();refreshAll();refreshLiveWindows()}
+async function runNow(){
+ const m=el('market').value;
+ if(m==='HK'){
+  applyMarketScope();
+  el('runStatus').textContent=lang==='zh'?'港股数据研究模式：自动刷新已启用，策略预览暂不开放。':'HK market-data research mode: automatic refresh is enabled; strategy preview is not enabled yet.';
+  return;
+ }
+ const x=await json('/api/live/run/'+m,{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id,m);
+}
+async function runAll(){
+ const x=await json('/api/live/run-all',{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
+ x.runs.forEach(r=>pollRun(r.run_id,r.market_id));
+}
+async function pollRun(id,market){
+ for(let i=0;i<60;i++){
+  await new Promise(r=>setTimeout(r,1000));
+  try{
+   const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
+   if(!['CREATED','FETCHING_DATA'].includes(x.status)){
+    if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
+    await refreshAll();
+    return;
+   }
+  }catch(e){}
+ }
+}
+function drawCurve(points){
+ const c=el('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+ if(!points.length){g.fillStyle='#7b8593';g.font='13px system-ui';g.fillText(T[lang].noEval,18,32);return}
+ const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);
+ let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
+ const X=i=>45+(c.width-70)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-55)*(hi-v)/(hi-lo);
+ g.strokeStyle='#e1e6ec';g.lineWidth=1;for(let j=0;j<4;j++){const y=25+(c.height-55)*j/3;g.beginPath();g.moveTo(45,y);g.lineTo(c.width-20,y);g.stroke()}
+ [['baseline_equity','#6f7782'],['triaid_equity','#1769e0']].forEach(([key,color])=>{
+  g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+ });
+}
+function renderComparison(evaluated){
+ const t=T[lang];
+ if(!evaluated){
+  el('baseReturn').textContent=t.noEval;el('triaidReturn').textContent=t.noEval;el('gain').textContent=t.noEval;
+  el('gain').className='value';el('gainCard').style.background='#fff';return;
+ }
+ const e=evaluated.evaluation, gain=Number(e.excess_return||0);
+ el('baseReturn').textContent=fmtPct(e.baseline_return);el('triaidReturn').textContent=fmtPct(e.triaid_return);
+ el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
+ el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
+}
+function renderUSReturnMax(report){
+ const panel=el('usReturnMaxPanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ el('usReturnMaxStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'排序信号：多周期年化状态收益估计':'Ranking signal: multi-window annualized state-return estimate');
+ el('usrmExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
+ el('usrmGeneric').textContent=fmtPct(d.generic_core_projected_annualized_expected_net_return);
+ el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
+ el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
+ el('usReturnMaxNote').textContent=lang==='zh'
+  ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
+  : 'The US route follows the same TRIAID FIN constitution as every supported market: maximize realizable net return as the only optimization objective. Liquidity, capacity, concentration and risk are feasibility constraints, while switching and execution costs are deducted as real costs. The return signal uses realized 21/63/126/252-day strategy net returns under frozen weights and is not an underlying-price forecast. Exact net-score ties use lower execution cost and deterministic strategy ID only. Four USD capital tiers apply the same objective with capital-specific capacity and impact checks, and no broker orders are sent.';
+ const rw=d.target_strategy_weights||{};
+ const gw=d.generic_core_control_weights||{};
+ const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
+ el('usrmStrategyRows').innerHTML=sids.map(sid=>'<tr><td>'+strategyLabelHtml(strategyNameIndex.US[sid]||sid,sid)+'</td><td class="num triaid">'+fmtPct(rw[sid]||0)+'</td><td class="num">'+fmtPct(gw[sid]||0)+'</td></tr>').join('') ||
+  '<tr><td colspan="3">'+(lang==='zh'?'等待冻结策略':'Awaiting frozen strategy mix')+'</td></tr>';
+ const aw=d.target_asset_weights||{};
+ el('usrmAssetRows').innerHTML=Object.entries(aw).filter(([_,w])=>Number(w)>1e-12).sort((a,b)=>Number(b[1])-Number(a[1])).map(([a,w])=>'<tr><td>'+esc(a)+'</td><td class="num">'+fmtPct(w)+'</td></tr>').join('') ||
+  '<tr><td colspan="2">'+(lang==='zh'?'当前无风险ETF敞口':'No current risky ETF exposure')+'</td></tr>';
+ const cap=d.capital_capacity||{};
+ el('usrmCapitalMeta').textContent=(lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+'ADV20 · '+fmtPct(cap.max_participation_adv)+' cap · '+(cap.base_cost_bps??'-')+'bps base · '+(cap.impact_coefficient_bps??'-')+'bps×√participation';
+ el('usrmCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtUsd(x.target_invested_notional_usd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtUsd(x.estimated_round_trip_cost_proxy_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
+ const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior decision yet')+'</td></tr>';
+ const path=(review&&review.daily_path)||[];
+ el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
+  '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
+}
+function renderProspective(report){
+ const panel=el('prospectivePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const t=T[lang];
+ el('prospectiveStatus').textContent=report.status||'-';
+ el('prospectiveDays').textContent=String(report.observation_days??0)+' / '+((report.horizons_trading_days||[]).join('/')||'-');
+ const p=report.current_portfolio_cumulative_returns||{};
+ el('prospectiveHold').textContent=fmtPct(p.HOLD_EQUAL);el('prospectiveHold').className=cls(Number(p.HOLD_EQUAL||0));
+ el('prospectiveTriaid').textContent=fmtPct(p.TRIAID_STATIC_ALLOCATION);el('prospectiveTriaid').className=cls(Number(p.TRIAID_STATIC_ALLOCATION||0));
+ el('prospectiveGap').textContent=signedPct(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);el('prospectiveGap').className=cls(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL||0));
+ el('prospectiveMeta').textContent=(report.experiment_id||'-')+' · '+(lang==='zh'?'登记日 ':'Registered ')+(report.market_as_of||'-')+' · '+(lang==='zh'?'待完成窗口 ':'Pending horizons ')+((report.pending_horizons||[]).join('/')||'none');
+ el('prospectiveNote').textContent=lang==='zh'
+   ? '策略池与TRIAID综合排序在登记时冻结，禁止事后换成员或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复排序能力的主要证据。'
+   : 'Pool membership and the TRIAID composite ranking are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-ranking skill.';
+ const rows=report.strategy_determination||[];
+ el('prospectiveStrategyRows').innerHTML=rows.map(x=>{
+   const name=(x.name&&x.name[lang])||x.strategy_id;
+   const reason=(x.selection_reason&&x.selection_reason[lang])||'';
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td class="num">'+(x.triaid_predicted_rank??'-')+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.latest_daily_return||0))+'">'+fmtPct(x.latest_daily_return)+'</td>'+
+    '<td class="num '+cls(Number(x.realized_cumulative_return||0))+'">'+fmtPct(x.realized_cumulative_return)+'</td>'+
+    '<td class="num">'+(x.realized_rank_so_far??'-')+'</td>'+
+    '<td class="reason">'+esc(reason)+'</td></tr>';
+ }).join('');
+ const pool=rows.map(x=>x.strategy_id);
+ el('prospectiveDailyHead').innerHTML='<tr><th>'+(lang==='zh'?'交易日':'Trading day')+'</th>'+
+   pool.map(sid=>'<th>'+strategyLabelHtml(strategyNameIndex.CN[sid]||sid,sid)+'</th>').join('')+
+   '<th>'+(lang==='zh'?'最差池':'Worst pool')+'</th><th>TRIAID</th><th>'+(lang==='zh'?'差值':'Gap')+'</th></tr>';
+ const daily=report.daily_fluctuation||[];
+ el('prospectiveDailyRows').innerHTML=daily.map(day=>{
+   const cr=day.portfolio_cumulative_returns||{};
+   return '<tr><td class="nowrap">'+esc(day.as_of||'-')+'</td>'+
+    pool.map(sid=>'<td class="num '+cls(Number((day.strategy_returns||{})[sid]||0))+'">'+signedPct((day.strategy_returns||{})[sid])+'</td>').join('')+
+    '<td class="num '+cls(Number(cr.HOLD_EQUAL||0))+'">'+fmtPct(cr.HOLD_EQUAL)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_ALLOCATION||0))+'">'+fmtPct(cr.TRIAID_STATIC_ALLOCATION)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL||0))+'">'+signedPct(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL)+'</td></tr>';
+ }).join('') || '<tr><td colspan="'+(pool.length+4)+'">'+(lang==='zh'?'等待首个后续真实交易日结果':'Awaiting the first subsequent realized trading-day result')+'</td></tr>';
+}
+function renderRecoveryWave(report){
+ const panel=el('recoveryWavePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ const labels={
+  '510300.SS':'沪深300ETF · 510300',
+  '510500.SS':'中证500ETF · 510500',
+  '159915.SZ':'创业板ETF · 159915',
+  '512100.SS':'中证1000ETF · 512100'
+ };
+ el('recoveryWaveStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源数据时间 ':'Source data time ')+localDateTimeFromEpoch(d.source_latest_ts);
+ el('recoveryCash').textContent=fmtPct(d.cash_residual_weight);
+ el('recoveryPrevDays').textContent=review?String(review.observation_days??0):'-';
+ el('recoveryPrevReturn').textContent=review?fmtPct(review.current_portfolio_cumulative_return):'-';
+ el('recoveryPrevReturn').className=review?cls(Number(review.current_portfolio_cumulative_return||0)):'';
+ el('recoveryPrevGap').textContent=review?signedPct(review.current_excess_vs_equal_weight):'-';
+ el('recoveryPrevGap').className=review?cls(Number(review.current_excess_vs_equal_weight||0)):'';
+ const scope=d.data_scope||{};
+ el('recoveryWaveNote').textContent=lang==='zh'
+  ? '这是 Shadow Core 的冻结研究配置，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算后验；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。四档资金袖套从同一决策、全现金起步，唯一变量是资金规模；所谓填单是依据后续真实成交量与冻结参与率进行的模拟成交，不代表券商真实成交，模拟成交后从下一完整 bar 才开始计收益。历史配置与参数均冻结，不能事后改写。'
+  : 'These are frozen Shadow Core research allocations and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The four capital sleeves start from cash under the same frozen decision; capital size is the only experimental variable. Fills are simulated from subsequently observed real volume under the frozen participation rule and become return-active on the following complete bar; they are not broker fills. Frozen allocations and parameters cannot be rewritten after outcomes.';
+ const opinions=d.trade_opinions||[];
+ el('recoveryOpinionRows').innerHTML=opinions.map(x=>{
+   const horizon=x.expected_reversal_horizon_days==null?'-':(x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'));
+   const hit=x.historical_recovery_edge==null?'-':signedPct(x.historical_recovery_edge);
+   const exp=x.expected_forward_return==null?'-':signedPct(x.expected_forward_return);
+   const rationale=lang==='zh'?x.rationale_zh:x.rationale_en;
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(labels[x.symbol]||x.symbol)+'</span><br><span class="small muted">'+esc(x.symbol)+'</span></td>'+
+    '<td><span class="tag">'+esc(x.action||'-')+'</span></td>'+
+    '<td class="num triaid">'+fmtPct(x.target_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.suggested_weight_change||0))+'">'+signedPct(x.suggested_weight_change)+'</td>'+
+    '<td class="num '+cls(Number(x.drawdown_252||0))+'">'+fmtPct(x.drawdown_252)+'</td>'+
+    '<td>'+esc(x.state_direction||'-')+'</td>'+
+    '<td class="num">'+horizon+'</td>'+
+    '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
+    '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
+    '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
+    '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+ }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
+ const capacity=d.capital_capacity||{};
+ const capModel=capacity.model||{};
+ const capRows=capacity.sleeves||[];
+ el('capitalSleeveMeta').textContent=capacity.enabled
+   ? ((lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+
+      'ADV20 · '+fmtPct(capModel.max_participation_adv)+' cap · '+
+      (capModel.base_cost_bps??'-')+'bps base · '+
+      (capModel.impact_coefficient_bps??'-')+'bps×√participation · '+
+      (lang==='zh'?'不含券商个性化费率':'broker-specific fees excluded'))
+   : (lang==='zh'?'当前没有启用人民币资金袖套':'CNY capital sleeves not enabled');
+ el('capitalSleeveRows').innerHTML=capRows.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.target_invested_notional_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td>'+
+    '<td class="num">'+esc(x.minimum_execution_days??'-')+'</td>'+
+    '<td class="num">'+fmtMoney(x.estimated_round_trip_cost_proxy_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_pnl_before_timing_delay_cny||0))+'">'+fmtMoney(x.expected_wave_net_pnl_before_timing_delay_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_return_before_timing_delay||0))+'">'+signedPct(x.expected_wave_net_return_before_timing_delay)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'等待当前资金容量决策':'Awaiting capital-capacity decision')+'</td></tr>';
+ const realizedSleeves=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('capitalRealizedRows').innerHTML=realizedSleeves.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.fill_ratio)+'</td>'+
+    '<td class="num">'+fmtMoney(x.current_equity_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_pnl_cny||0))+'">'+fmtMoney(x.current_net_pnl_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td>'+
+    '<td class="num">'+fmtMoney(x.total_execution_cost_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.remaining_target_notional_cny)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior sleeves yet')+'</td></tr>';
+ if(review){
+   const prior=review.trade_opinions||[];
+   el('recoveryPreviousMeta').textContent=(lang==='zh'?'上一轮 '+(review.decision_id||'-')+'：':'Prior '+(review.decision_id||'-')+': ')+
+     prior.map(x=>(labels[x.symbol]||x.symbol)+' '+(x.action||'-')+' '+fmtPct(x.target_weight)+' · '+(x.expected_reversal_horizon_days==null?'-':x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'))).join(' | ');
+ }else{
+   el('recoveryPreviousMeta').textContent=lang==='zh'?'暂无上一轮冻结决策':'No prior frozen decision';
+ }
+ const path=(review&&review.daily_path)||[];
+ el('recoveryReviewRows').innerHTML=path.map(x=>{
+   return '<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_return||0))+'">'+signedPct(x.portfolio_return)+'</td>'+
+    '<td class="num '+cls(Number(x.equal_weight_return||0))+'">'+signedPct(x.equal_weight_return)+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_cumulative_return||0))+'">'+fmtPct(x.portfolio_cumulative_return)+'</td>'+
+    '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
+ }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
+}
+async function refreshAll(){
+ const m=el('market').value;
+ const previewId=previewRunIds[m];
+ try{
+  const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+   json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
+   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
+  ]);
+  const isCN=m==='CN';
+  const isHK=m==='HK';
+  const evaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCN||x.experiment_mode==='CN_RETURN_MAX_CAPACITY')
+  )||null;
+  if(isCN){
+   el('resultTitle').textContent=lang==='zh'?'A股收益最大化主路线':'CN Return-Max Primary Route';
+   el('baseReturnLabel').textContent=lang==='zh'?'收益优先策略群后验收益':'Return-first portfolio posterior return';
+   el('baseReturnSub').textContent=lang==='zh'?'决策时冻结的全策略竞争基线':'Full-universe return-first baseline frozen at decision time';
+   el('gainLabel').textContent=lang==='zh'?'TRIAID 相对基线收益差':'TRIAID return gap vs baseline';
+   el('gainSub').textContent=lang==='zh'?'TRIAID 动态权重后验收益 − 收益优先基线':'TRIAID dynamic-allocation posterior return − return-first baseline';
+   el('strategyTitle').textContent=lang==='zh'?'A股收益优先策略群与动态权重':'CN Return-First Strategy Group and Dynamic Weights';
+  }else{
+   el('resultTitle').textContent=T[lang].result;
+   el('baseReturnLabel').textContent=T[lang].baseReturn;
+   el('baseReturnSub').textContent=T[lang].baseSub;
+   el('gainLabel').textContent=T[lang].gain;
+   el('gainSub').textContent=T[lang].gainSub;
+   el('strategyTitle').textContent=m==='US'
+    ? (lang==='zh'?'通用 Core 对照策略群（非 Return-Max 主路线）':'Generic Core Control Group (not the Return-Max primary route)')
+    : T[lang].strategies;
+  }
+  strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
+  const selected=cards.filter(x=>x.selected);
+  const detailRuns=d.runs_detail||[];
+  const officialLatest=isCN
+    ? ([...detailRuns].reverse().find(x=>x.experiment_mode==='CN_RETURN_MAX_CAPACITY')||null)
+    : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
+  const latest=previewRun||officialLatest;
+  const lastCurve=curves.length?curves[curves.length-1]:null;
+  renderComparison(evaluated);
+  el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
+  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
+  el('selectedCount').textContent=selected.length;
+  const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
+  el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
+  el('runState').textContent=isHK
+    ? (lang==='zh'?'MARKET_DATA_RESEARCH_ONLY · 自动刷新中':'MARKET_DATA_RESEARCH_ONLY · automatic refresh')
+    : (previewRun
+       ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
+       : (latest?.status||'-'));
+  el('selectedNames').innerHTML=isHK
+    ? (lang==='zh'?'尚未启用专用港股策略选择器':'Dedicated HK strategy selector not enabled yet')
+    : (selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-');
+  if(isHK){
+   el('dailyAnalysis').textContent=lang==='zh'
+    ? '当前港股链路只使用真实港股市场数据参与状态观测和跨市场风险研究。策略层在独立验证通过前保持关闭。'
+    : 'The HK path currently uses real Hong Kong market data for state observation and cross-market risk research only. The strategy layer remains closed until separately validated.';
+   el('dailyAnalysis').className='';
+  }else if(previewRun){
+   el('dailyAnalysis').textContent=T[lang].preview;
+   el('dailyAnalysis').className='';
+  }else if(evaluated){
+   const g=Number(evaluated.evaluation.excess_return||0);
+   el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
+   el('dailyAnalysis').className=cls(g);
+  }else if(isCN&&latest?.diagnostic_summary?.experiment_mode==='CN_RETURN_MAX_CAPACITY'){
+   const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
+   el('dailyAnalysis').textContent=Number.isFinite(p)
+    ? (lang==='zh'?'当前主路线以可实现净收益为唯一优化目标；TRIAID 相对冻结基线的状态收益差为 '+signedPct(p)+'。该值用于决策排序，不是保证的未来收益。':'The primary route uses realizable net return as the sole optimization objective; the state-return gap versus the frozen baseline is '+signedPct(p)+'. This is a decision-ranking signal, not a guaranteed future return.')
+    : T[lang].pending;
+   el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
+  }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  renderUSReturnMax(!isCN?d.us_return_max:null);
+  renderProspective(isCN?d.prospective_experiment:null);
+  renderRecoveryWave(isCN?d.recovery_wave:null);
+  drawCurve(curves);
+  const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
+  const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
+  el('strategyRows').innerHTML=selectedCards.map(x=>{
+   const delta=(x.triaid_weight||0)-(x.baseline_weight||0);
+   const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
+   return '<tr class="selected">'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
+    '<td class="reason">'+esc(explanation)+'</td></tr>';
+  }).join('') || (isHK
+    ? '<tr><td colspan="8" class="reason">'+esc(lang==='zh'
+       ? '港股市场数据链路已接通，但专用港股策略群尚未晋升。这里不从美股或A股策略硬套权重。'
+       : 'HK market data is live, but a dedicated HK strategy group has not been promoted. US or CN strategy weights are not reused here.')+'</td></tr>'
+    : '');
+  el('candidateRows').innerHTML=candidateCards.map(x=>{
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
+  }).join('') || (isHK
+    ? '<tr><td colspan="5" class="reason">'+esc(lang==='zh'
+       ? '港股候选策略层等待独立规则、回测、前瞻验证和审计通过后再开放。'
+       : 'The HK candidate strategy layer will open only after independent rules, backtests, prospective validation and audit pass.')+'</td></tr>'
+    : '');
+  const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
+  el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
+    (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
+  el('evoMean').className='sub '+cls(diag.mean_excess_return||0);
+  el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
+  const history=evo.history||[];const last=history.length?history[history.length-1]:null;
+  el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
+  el('runStatus').textContent=previewRun
+    ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
+    : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
+ }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
+}
+async function propose(){
+ const x=await json('/api/evolution/propose',{method:'POST'});
+ el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
+ refreshAll();
+}
+const hoverTip=el('hoverTip');
+document.addEventListener('mouseover',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(!target)return;
+ const tip=target.dataset.strategyId
+  ? strategyMarketTip(target.dataset.strategyId,target.dataset.strategyName||strategyNameIndex[el('market').value][target.dataset.strategyId])
+  : target.dataset.tip;
+ if(!tip)return;
+ hoverTip.textContent=tip;hoverTip.style.display='block';
+});
+document.addEventListener('mousemove',e=>{
+ if(hoverTip.style.display!=='block')return;
+ const pad=14;let x=e.clientX+14,y=e.clientY+16;
+ const w=hoverTip.offsetWidth,h=hoverTip.offsetHeight;
+ if(x+w>window.innerWidth-pad)x=e.clientX-w-14;
+ if(y+h>window.innerHeight-pad)y=e.clientY-h-14;
+ hoverTip.style.left=Math.max(pad,x)+'px';hoverTip.style.top=Math.max(pad,y)+'px';
+});
+document.addEventListener('mouseout',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
+});
+const tableHeaderObserver=new MutationObserver(mutations=>{
+ if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
+});
+tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows()}
+applyText();applyMarketScope();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
+</script>
+</body>
+</html>
+"""
+:'')+v.toFixed(digits);
 }
 function strategyLabelHtml(name,strategyId){
  const n=name||strategyId||'-',sid=strategyId||'';
