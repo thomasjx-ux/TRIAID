@@ -216,11 +216,10 @@ class StrategyPopulationModule:
 
     @staticmethod
     def _robust_return(state: StrategyState, cfg: PopulationConfig) -> float:
-        return (
-            float(state.expected_net_return)
-            - cfg.uncertainty_penalty*max(0.0,float(state.uncertainty))
-            - max(0.0,float(state.estimated_cost))
-        )
+        # The primary objective is realizable net return. Uncertainty is carried
+        # as evidence quality and can gate eligibility elsewhere, but it must not
+        # become a second additive objective that silently changes return ordering.
+        return float(state.expected_net_return)-max(0.0,float(state.estimated_cost))
 
     @staticmethod
     def _allocate_scores_with_cap(scores: Dict[str,float], cap: float) -> tuple[Dict[str,float],float]:
@@ -330,6 +329,8 @@ class StrategyPopulationModule:
             "allocation_scores":allocation_scores,
             "score_temperature":score_temperature,
             "absolute_sign_used_as_cash_gate":False,
+            "uncertainty_used_as_additive_penalty":False,
+            "primary_objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
             "cash_semantics":"RESIDUAL_ONLY_WHEN_RISK_CAPACITY_OR_MEMBER_LIMITS_PREVENT_FULL_ALLOCATION",
         }
         return weights,diagnostics
