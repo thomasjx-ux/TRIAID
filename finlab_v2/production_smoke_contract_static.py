@@ -35,6 +35,11 @@ assert 'TRIAID_PRODUCTION_SMOKE_EXPECTED_STORAGE' in smoke_text
 assert 'startup_maintenance_enabled' in smoke_text
 assert 'read-only production smoke changed persistent run ledger' in smoke_text
 assert 'if MUTATING_SMOKE:' in smoke_text
+assert 'route_version=="us-return-max-route@0.5.0"' in smoke_text
+assert '"MAXIMIZE_REALIZABLE_NET_RETURN"' in smoke_text
+assert '"MAX_REALIZABLE_NET_RETURN_UNDER_HARD_CONCENTRATION_AND_EXECUTION_CONSTRAINTS"' in smoke_text
+assert 'fixed_strategy_count_target' in smoke_text
+assert 'selected_strategy_count' in smoke_text
 
 probe_text=Path("production_storage_readonly_probe.py").read_text(encoding="utf-8")
 assert 'TRIAID_PRODUCTION_STORAGE_READONLY_PROBE_PASS' in probe_text
