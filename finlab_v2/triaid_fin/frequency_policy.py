@@ -17,7 +17,7 @@ class FrequencyEvidence:
 
 
 class FrequencyPolicy:
-    version="frequency-policy@0.2.0"
+    version="frequency-policy@0.2.1"
 
     LADDERS={
         "REALTIME":[60,120,300,600,900,1800],
@@ -182,7 +182,7 @@ class FrequencyPolicy:
                     mode:self.status_one(market,mode)
                     for mode in self.LADDERS
                 }
-                for market in ("US","CN")
+                for market in ("US","CN","HK")
             },
         }
 
