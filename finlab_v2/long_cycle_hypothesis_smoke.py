@@ -91,13 +91,21 @@ macro_snapshot={
     "YIELD_CURVE_10Y2Y":{"latest_value":0.1,"change_calendar_days":{"180":0.8},"pct_change_calendar_days":{}},
     "YIELD_CURVE_10Y3M":{"latest_value":-0.2,"change_calendar_days":{"180":0.6},"pct_change_calendar_days":{}},
 }
-rp=LongCycleHypothesisExperiment._rates_policy_snapshot(macro_snapshot)
+market_expectations={
+    "MOVE_INDEX":{"latest_value":110.0,"historical_percentile":0.88,"change_calendar_days":{"30":15.0}},
+    "FED_FUNDS_FUTURE":{"latest_value":4.8,"change_calendar_days":{"30":0.35}},
+    "SOFR_1M_FUTURE":{"latest_value":4.7,"change_calendar_days":{"30":0.25}},
+}
+rp=LongCycleHypothesisExperiment._rates_policy_snapshot(macro_snapshot,market_expectations)
 assert rp["treasury_curve"]["2y"]==4.2
 assert rp["real_rates"]["10y_real_yield_20y_percentile"]==0.85
 assert abs(rp["policy"]["2y_policy_repricing_proxy_abs_30d"]-0.3)<1e-9
 assert rp["curve_state"]["10y2y_inverted"] is False
 assert rp["curve_state"]["10y3m_inverted"] is True
 assert abs(rp["balance_sheet"]["walcl_pct_change_180d"]+0.05)<1e-9
+assert rp["market_expectations"]["move_level"]==110.0
+assert rp["market_expectations"]["move_historical_percentile"]==0.88
+assert abs(rp["market_expectations"]["nearby_futures_basis_abs"]-0.1)<1e-9
 
 print("TRIAID_LONG_CYCLE_HYPOTHESIS_SMOKE_PASS",{
     "horizons":list(HORIZON_YEARS),
