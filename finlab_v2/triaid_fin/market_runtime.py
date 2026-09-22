@@ -26,6 +26,8 @@ class MarketDataAutomation:
         self.auction_shadow_latest:dict[str,dict]={}
         self.long_cycle_day:str|None=None
         self.long_cycle_latest:dict|None=None
+        self.cross_market_crash_day:str|None=None
+        self.cross_market_crash_latest:dict|None=None
         self.started_at_utc:str|None=None
         self.last_loop_heartbeat_utc:str|None=None
         self.last_market_cycle_utc:dict[str,str]={}
@@ -174,6 +176,37 @@ class MarketDataAutomation:
                 except Exception as exc:
                     self.errors["US:LONG_CYCLE"]=f"{type(exc).__name__}:{exc}"
                     print("TRIAID_LONG_CYCLE_RECOVERY",self.errors["US:LONG_CYCLE"])
+
+            if self.cross_market_crash_day!=day:
+                try:
+                    report=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.cross_market_crash_run,False),
+                        timeout=max(180,self.refresh_timeout_seconds),
+                    )
+                    episodes=report.get("canonical_episode_studies") or {}
+                    self.cross_market_crash_latest={
+                        "experiment_id":report.get("experiment_id"),
+                        "as_of":report.get("as_of"),
+                        "paired_event_rows":((report.get("detected_crashes") or {}).get("paired_event_rows")),
+                        "episodes":{
+                            key:{
+                                "relation":value.get("relation"),
+                                "cn_trough_minus_us_trough_calendar_days":value.get("cn_trough_minus_us_trough_calendar_days"),
+                            }
+                            for key,value in episodes.items()
+                        },
+                    }
+                    self.cross_market_crash_day=day
+                    self.errors.pop("USCN:CRASH_LINKAGE",None)
+                    print(
+                        "TRIAID_US_CN_CRASH_LINKAGE_DAILY",
+                        report.get("experiment_id"),
+                        report.get("as_of"),
+                        self.cross_market_crash_latest.get("paired_event_rows"),
+                    )
+                except Exception as exc:
+                    self.errors["USCN:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_US_CN_CRASH_LINKAGE_RECOVERY",self.errors["USCN:CRASH_LINKAGE"])
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
@@ -373,6 +406,7 @@ class MarketDataAutomation:
             ),
             "zero_cost_auction_shadow":dict(self.auction_shadow_latest),
             "long_cycle_hypothesis":{"last_day":self.long_cycle_day,"latest":self.long_cycle_latest},
+            "cross_market_crash":{"last_day":self.cross_market_crash_day,"latest":self.cross_market_crash_latest},
             "self_healing":{
                 "enabled":True,
                 "started_at_utc":self.started_at_utc,
