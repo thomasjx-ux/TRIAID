@@ -483,6 +483,7 @@ class EvolutionLabEngine:
                 snapshot.metadata["experiment_mode"]="US_RETURN_MAX_CAPACITY"
                 snapshot.metadata["experiment_design"]="Use the existing return-first reselect strategy population as the primary US route, expand the frozen strategy mix to executable ETF exposures, and validate realized return versus SPY buy-and-hold and the generic TRIAID Core under four USD capital sleeves."
                 snapshot.metadata["market_route"]="US_RETURN_MAXIMIZATION"
+            snapshot.metadata["primary_route_revision"]=self.architecture_version
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
             current_experiment=snapshot.metadata.get("experiment_mode")
@@ -492,6 +493,7 @@ class EvolutionLabEngine:
                 and r.market.market_id.upper()==market_id
                 and r.market.snapshot_id==snapshot.snapshot_id
                 and r.market.metadata.get("experiment_mode")==current_experiment
+                and str((r.market.metadata or {}).get("primary_route_revision") or "")==self.architecture_version
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_group is not None
                 and r.triaid_decision is not None
@@ -745,7 +747,10 @@ class EvolutionLabEngine:
             and self._complete_daily_evidence_run(r)
             and (
                 primary_mode is None
-                or str((r.market.metadata or {}).get("experiment_mode") or "").upper()==primary_mode
+                or (
+                    str((r.market.metadata or {}).get("experiment_mode") or "").upper()==primary_mode
+                    and str((r.market.metadata or {}).get("primary_route_revision") or "")==self.architecture_version
+                )
             )
         ]
         return rows[-1] if rows else None
@@ -758,17 +763,20 @@ class EvolutionLabEngine:
     def ensure_primary_reference(self,market_id:str)->dict:
         market_id=market_id.upper()
         primary_mode=self.primary_experiment_mode(market_id)
+        revision=self.architecture_version
         existing=self.latest_decision_run(market_id,primary_only=True)
         if existing is not None:
             return {
                 "market_id":market_id,
                 "primary_mode":primary_mode,
+                "primary_route_revision":revision,
                 "created":False,
                 "run_id":existing.run_id,
                 "status":existing.status,
                 "as_of":existing.market.as_of,
                 "snapshot_id":existing.market.snapshot_id,
-                "reason":"PRIMARY_REFERENCE_ALREADY_PRESENT",
+                "superseded_run_ids":[],
+                "reason":"PRIMARY_REFERENCE_ALREADY_PRESENT_FOR_REVISION",
             }
 
         run=self.run_live_research(market_id)
@@ -777,33 +785,61 @@ class EvolutionLabEngine:
             return {
                 "market_id":market_id,
                 "primary_mode":primary_mode,
+                "primary_route_revision":revision,
                 "created":False,
                 "run_id":run.run_id,
                 "status":run.status,
                 "as_of":run.market.as_of,
                 "snapshot_id":run.market.snapshot_id,
+                "superseded_run_ids":[],
                 "reason":"PRIMARY_REFERENCE_NOT_EVIDENCE_READY",
             }
 
+        superseded=[]
+        superseded_at=datetime.now(ZoneInfo("UTC")).isoformat()
         with self._lock:
             stored=self._runs.get(reference.run_id)
             if stored is not None:
                 stored.market.metadata=dict(stored.market.metadata or {})
                 stored.market.metadata["primary_reference_bootstrap"]=True
-                stored.market.metadata["primary_reference_bootstrap_reason"]="ROUTE_MIGRATION_OR_EMPTY_PRIMARY_LEDGER"
+                stored.market.metadata["primary_reference_bootstrap_reason"]="ROUTE_REVISION_MIGRATION_OR_EMPTY_PRIMARY_LEDGER"
                 stored.market.metadata["primary_reference_mode"]=primary_mode
+                stored.market.metadata["primary_route_revision"]=revision
                 self._save_run(stored)
                 reference=stored
+
+            for old in self.all_runs():
+                if old.run_id==reference.run_id:
+                    continue
+                metadata=old.market.metadata or {}
+                if (
+                    old.market.market_id.upper()==market_id
+                    and str(metadata.get("experiment_mode") or "").upper()==primary_mode
+                    and str(metadata.get("primary_route_revision") or "")!=revision
+                    and old.status=="DECISION_READY_AWAITING_OUTCOME"
+                    and old.evaluation is None
+                ):
+                    old.status="SUPERSEDED"
+                    old.market.metadata=dict(metadata)
+                    old.market.metadata["primary_reference_superseded"]=True
+                    old.market.metadata["primary_reference_superseded_by"]=reference.run_id
+                    old.market.metadata["primary_reference_superseded_by_revision"]=revision
+                    old.market.metadata["primary_reference_superseded_at"]=superseded_at
+                    self._runs[old.run_id]=old
+                    self._save_run(old)
+                    superseded.append(old.run_id)
 
         return {
             "market_id":market_id,
             "primary_mode":primary_mode,
+            "primary_route_revision":revision,
             "created":True,
             "run_id":reference.run_id,
             "status":reference.status,
             "as_of":reference.market.as_of,
             "snapshot_id":reference.market.snapshot_id,
-            "reason":"PRIMARY_REFERENCE_CREATED",
+            "superseded_run_ids":superseded,
+            "reason":"PRIMARY_REFERENCE_CREATED_FOR_REVISION",
         }
 
     def recompute_transition_research(
@@ -947,6 +983,8 @@ class EvolutionLabEngine:
                 r for r in rows
                 if str((r.market.metadata or {}).get("experiment_mode") or "").upper()
                 == self.primary_experiment_mode(str(r.market.market_id).upper())
+                and str((r.market.metadata or {}).get("primary_route_revision") or "")==self.architecture_version
+                and r.status!="SUPERSEDED"
             ]
         useful=[r for r in rows if r.market.snapshot_id!="PENDING"]
         return useful[-1] if useful else (rows[-1] if rows else None)
