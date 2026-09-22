@@ -161,7 +161,7 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.4.0"
+    version="market-data-hub@0.5.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
@@ -177,6 +177,7 @@ class MarketDataHub:
             routes=(
                 "US:DAILY","US:INTRADAY","US:PREOPEN","US:REALTIME",
                 "CN:DAILY","CN:INTRADAY","CN:REALTIME",
+                "HK:DAILY","HK:INTRADAY","HK:REALTIME",
             ),
         )
         self.registry.register(
@@ -221,6 +222,7 @@ class MarketDataHub:
             )
         routing["CN:PREOPEN_AUCTION"]=self.tushare_auction.version if self.tushare_auction.configured else None
         routing.setdefault("CN:QUOTE_L1",None)
+        routing.setdefault("HK:QUOTE_L1",None)
         return {
             "registry":registry,
             "bar_provider":{
@@ -252,7 +254,7 @@ class MarketDataHub:
         }
 
     def product_capabilities(self,market_id:str|None=None)->dict:
-        markets=[market_id.upper()] if market_id else ["US","CN"]
+        markets=[market_id.upper()] if market_id else ["US","CN","HK"]
         out={}
         for market in markets:
             if market=="US":
@@ -320,6 +322,22 @@ class MarketDataHub:
                     "BROKER_FILLS":{
                         "available":False,"provider":None,"grade":"unavailable",
                     },
+                }
+            elif market=="HK":
+                out[market]={
+                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
+                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
+                    "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_connected"},
+                    "PREOPEN_AUCTION":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "SECTOR_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "STOCK_BARS":{
+                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
+                        "note":"Yahoo-supported Hong Kong symbols can be requested for research bars; not execution-grade.",
+                    },
+                    "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
                 }
         return out
 
@@ -390,7 +408,7 @@ class MarketDataHub:
 
     def instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
         market=market_id.upper();mode=mode.upper()
-        if market not in {"US","CN"}:
+        if market not in {"US","CN","HK"}:
             raise MarketDataError(f"unsupported_market:{market}")
         if mode not in MODE_CONFIGS:
             raise MarketDataError(f"unsupported_mode:{mode}")
@@ -524,7 +542,7 @@ class MarketDataHub:
         )
 
     def capabilities(self,market_id:str|None=None)->dict:
-        markets=[market_id.upper()] if market_id else ["US","CN"]
+        markets=[market_id.upper()] if market_id else ["US","CN","HK"]
         result={}
         for market in markets:
             modes={}
@@ -532,7 +550,11 @@ class MarketDataHub:
                 supported=True
                 note=""
                 quality=cfg.quality
-                if market=="CN" and name=="PREOPEN":
+                if market=="HK" and name=="PREOPEN":
+                    supported=False
+                    quality="not_connected"
+                    note="HKEX pre-opening auction is modeled in the official session calendar, but a dedicated auction data feed is not connected."
+                elif market=="CN" and name=="PREOPEN":
                     supported=self.tushare_auction.configured
                     quality="research_auction_final" if supported else "auction_credentials_required"
                     note=(
@@ -610,7 +632,7 @@ class MarketDataHub:
 
         def freshness_key(p:ProviderPanel):
             if mode=="DAILY":
-                tz=ZoneInfo("America/New_York" if market=="US" else "Asia/Shanghai")
+                tz=ZoneInfo("America/New_York" if market=="US" else "Asia/Hong_Kong" if market=="HK" else "Asia/Shanghai")
                 return datetime.fromtimestamp(int(p.source_latest_ts),tz).date().toordinal()
             return int(p.source_latest_ts)
 
