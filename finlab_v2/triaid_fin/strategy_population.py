@@ -316,7 +316,7 @@ class StrategyPopulationModule:
 
         weights,remaining=self._allocate_scores_with_cap(allocation_scores,cfg.max_weight)
         cash=next((s for s in states if s.strategy_id=="P28_CASH" and s.eligible and s.lifecycle in {"active","reduced"}),None)
-        if cash is not None and (remaining>1e-12 or not weights):
+        if cash is not None:
             weights["P28_CASH"]=remaining if weights else 1.0
 
         diagnostics={
@@ -526,7 +526,10 @@ class StrategyPopulationModule:
         else:
             diagnostics["selection_mode"]="INITIAL_GROUP"
 
-        members=[sid for sid,w in candidate_weights.items() if w>1e-12]
+        members=[
+            sid for sid,w in candidate_weights.items()
+            if w>1e-12 or sid=="P28_CASH"
+        ]
         reasons:Dict[str,BilingualText]={}
         for sid in members:
             if sid=="P28_CASH":
