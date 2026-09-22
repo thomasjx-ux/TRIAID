@@ -48,7 +48,11 @@ def run(i:int)->RunRecord:
             as_of=f"2026-01-{day:02d}" if day<=31 else f"2026-02-{day-31:02d}",
             snapshot_id=f"STRATEVO:{i}",
             regime="risk_on_trend",
-            metadata={"daily_bar_complete":True,"base_cost_bps":0.0},
+            metadata={
+                "daily_bar_complete":True,
+                "base_cost_bps":0.0,
+                "experiment_mode":"US_RETURN_MAX_CAPACITY",
+            },
         ),
         strategy_states=states(),
         evaluation=EvaluationResult(
@@ -75,6 +79,9 @@ try:
     m=evo._market("US")
     m["profiles"][candidate.version]=asdict(candidate)
     all_runs=[run(i) for i in range(25)]
+    stress_run=run(25)
+    stress_run.market.metadata["experiment_mode"]="US_STRESS_ONLY"
+    all_runs.append(stress_run)
     dev=all_runs[:14]
     holdout=all_runs[14:20]
     shadow=all_runs[20:]
@@ -85,6 +92,8 @@ try:
         "created_at":"2026-01-20T23:59:59+00:00",
         "development_run_ids":[r.run_id for r in dev],
         "reserved_holdout_run_ids":[r.run_id for r in holdout],
+        "evidence_scope":"PRIMARY_ROUTE_ONLY",
+        "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
     })
     evo._save()
 
@@ -103,6 +112,8 @@ try:
     assert receipt["holdout_pass"] is True
     assert receipt["shadow_pass"] is True
     assert receipt["audit_pass"] is True
+    assert receipt["evidence_scope"]=="PRIMARY_ROUTE_ONLY"
+    assert receipt["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
 
     promoted=evo.promote("US",candidate.version,{"receipt_id":receipt["receipt_id"]})
     assert promoted["promoted"] is True,promoted

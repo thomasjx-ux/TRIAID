@@ -75,7 +75,7 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
 class StrategyEvolutionModule:
     """Independent self-evolution loop for Strategy Population rules."""
 
-    version="strategy-evolution@0.4.0"
+    version="strategy-evolution@0.4.1"
     min_verified_runs=20
 
     def __init__(self,store:RunStore) -> None:
@@ -114,6 +114,26 @@ class StrategyEvolutionModule:
             m.setdefault("profiles",{})[seed.version]=asdict(seed)
         m.setdefault("history",[])
         m.setdefault("validations",{})
+
+    @staticmethod
+    def _primary_mode(market_id:str)->str:
+        market_id=str(market_id).upper()
+        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else ""
+
+    @classmethod
+    def _primary_evidence(cls,run:RunRecord,market_id:str|None=None)->bool:
+        actual=str(run.market.market_id).upper()
+        if market_id and actual!=str(market_id).upper():
+            return False
+        expected=cls._primary_mode(actual)
+        metadata=run.market.metadata or {}
+        return bool(
+            expected
+            and run.evaluation
+            and run.evaluation.status=="EVALUATED"
+            and metadata.get("daily_bar_complete") is not False
+            and str(metadata.get("experiment_mode") or "").upper()==expected
+        )
 
     def _market(self,market_id:str)->dict:
         key=market_id.upper()
@@ -205,12 +225,7 @@ class StrategyEvolutionModule:
         return returns
 
     def diagnose(self,market_id:str,runs:Iterable[RunRecord])->dict:
-        rows=[
-            r for r in runs
-            if r.market.market_id.upper()==market_id.upper()
-            and r.evaluation and r.evaluation.status=="EVALUATED"
-            and (r.market.metadata or {}).get("daily_bar_complete") is not False
-        ]
+        rows=[r for r in runs if self._primary_evidence(r,market_id)]
         if not rows:
             return {
                 "evaluated_runs":0,
@@ -240,11 +255,10 @@ class StrategyEvolutionModule:
             ("long",(0.20,0.25,0.25,0.30)),
         ]
         sizes=sorted(set([max(6,active.max_group_size-2),active.max_group_size,min(16,active.max_group_size+2)]))
-        redundancy_values=sorted(set([
-            max(0.0,active.redundancy_penalty-0.15),
-            active.redundancy_penalty,
-            min(0.80,active.redundancy_penalty+0.15),
-        ]))
+        # Diversification penalties are not an independent objective. Candidate
+        # rules keep them disabled and let realized net return decide whether
+        # different horizons, group sizes or switching behavior add value.
+        redundancy_values=[0.0]
         switch_modes=sorted(set([active.switch_guard_enabled,not active.switch_guard_enabled]))
         out=[]
         for label,weights in weight_sets:
@@ -275,12 +289,7 @@ class StrategyEvolutionModule:
 
     def propose_candidate(self,market_id:str,runs:Iterable[RunRecord])->dict:
         market_id=market_id.upper()
-        rows=[
-            r for r in runs
-            if r.market.market_id.upper()==market_id
-            and r.evaluation and r.evaluation.status=="EVALUATED"
-            and (r.market.metadata or {}).get("daily_bar_complete") is not False
-        ]
+        rows=[r for r in runs if self._primary_evidence(r,market_id)]
         diag=self.diagnose(market_id,rows)
         if len(rows)<self.min_verified_runs:
             return {
@@ -347,6 +356,8 @@ class StrategyEvolutionModule:
             "candidate_development_mean":best[0],
             "diagnosis":diag,
             "hypothesis":candidate.hypothesis,
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
         })
         self._save()
         return {
@@ -355,6 +366,8 @@ class StrategyEvolutionModule:
             "development_runs":len(dev),
             "reserved_holdout_runs":len(rows)-len(dev),
             "diagnosis":diag,
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
         }
 
     def candidate_manifest(self,market_id:str,version:str)->dict|None:
@@ -371,7 +384,12 @@ class StrategyEvolutionModule:
             raise KeyError(version)
         candidate=StrategyRuleProfile(**m["profiles"][version])
         manifest=self.candidate_manifest(market_id,version)
-        if manifest is None or not candidate.parent_version or candidate.parent_version not in m["profiles"]:
+        if (
+            manifest is None
+            or manifest.get("evidence_scope")!="PRIMARY_ROUTE_ONLY"
+            or not candidate.parent_version
+            or candidate.parent_version not in m["profiles"]
+        ):
             receipt={
                 "receipt_id":f"STRATVAL-{market_id}-{version}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}",
                 "passed":False,
@@ -385,12 +403,7 @@ class StrategyEvolutionModule:
             self._save()
             return receipt
         parent=StrategyRuleProfile(**m["profiles"][candidate.parent_version])
-        eligible=[
-            r for r in runs
-            if r.market.market_id.upper()==market_id
-            and r.evaluation and r.evaluation.status=="EVALUATED"
-            and (r.market.metadata or {}).get("daily_bar_complete") is not False
-        ]
+        eligible=[r for r in runs if self._primary_evidence(r,market_id)]
         run_map={r.run_id:r for r in eligible}
         dev=[run_map[x] for x in manifest.get("development_run_ids",[]) if x in run_map]
         holdout=[run_map[x] for x in manifest.get("reserved_holdout_run_ids",[]) if x in run_map]
@@ -437,7 +450,9 @@ class StrategyEvolutionModule:
             "holdout":holdout_result,
             "shadow":shadow_result,
             "shadow_min_runs":5,
-            "validation_discipline":"INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
+            "validation_discipline":"PRIMARY_ROUTE_ONLY; INTERNAL_REPLAY_RESERVED_HOLDOUT_AND_POST_CREATION_SHADOW_ONLY",
+            "evidence_scope":"PRIMARY_ROUTE_ONLY",
+            "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
         }
         m["validations"][version]=receipt
         m["history"].append({

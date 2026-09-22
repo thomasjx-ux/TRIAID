@@ -36,7 +36,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.13.0"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.13.1"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
@@ -368,6 +368,7 @@ try:
     assert cn_decision.strategy_group
     assert cn_decision.strategy_group.diagnostics["optimizer"]=="relative-return-max-v1"
     assert cn_decision.strategy_group.diagnostics["absolute_sign_used_as_cash_gate"] is False
+    assert cn_decision.strategy_group.diagnostics["uncertainty_used_as_additive_penalty"] is False
     risky_members=[x for x in cn_decision.strategy_group.members if x!="P28_CASH"]
     assert len(risky_members)==12
     assert "P28_CASH" in cn_decision.strategy_group.members
@@ -381,15 +382,19 @@ try:
     risk_off_market=cn_request.market.model_copy(deep=True)
     risk_off_market.regime="intraday_risk_off"
     risk_off=engine.core.decide(risk_off_market,cn_decision.strategy_group,cn_states)
-    assert risk_off.diagnostics["regime_policy"]=="RISK_OFF_TOP_3"
+    assert risk_off.diagnostics["regime_policy"]=="RISK_OFF_ADAPTIVE_RETURN_THRESHOLD"
+    assert risk_off.diagnostics["fixed_strategy_count_target"] is False
+    assert 0<risk_off.diagnostics["selection_count"]<len(risky_members)
     assert 0.0<risk_off.weights_after.get("P28_CASH",0.0)<0.5
     assert risk_off.weights_after!=cn_decision.triaid_decision.weights_after
 
     severe_market=cn_request.market.model_copy(deep=True)
     severe_market.regime="shock_high_vol"
     severe=engine.core.decide(severe_market,cn_decision.strategy_group,cn_states)
-    assert severe.diagnostics["regime_policy"]=="SEVERE_RISK_TOP_2"
-    assert severe.weights_after.get("P28_CASH",0.0)>risk_off.weights_after.get("P28_CASH",0.0)
+    assert severe.diagnostics["regime_policy"]=="SEVERE_RISK_ADAPTIVE_RETURN_THRESHOLD"
+    assert severe.diagnostics["fixed_strategy_count_target"] is False
+    assert severe.diagnostics["selection_count"]<=risk_off.diagnostics["selection_count"]
+    assert severe.weights_after.get("P28_CASH",0.0)>=risk_off.weights_after.get("P28_CASH",0.0)
 
     # The former worst-pool rescue remains available only as an explicit stress test.
     cn_stress_request=RunRequest(
@@ -420,6 +425,28 @@ try:
     us_primary_receipt=engine.ensure_primary_reference("US")
     assert us_primary_receipt["created"] is False
     assert us_primary_receipt["run_id"]==decision.run_id
+
+    # Main reports and curves must exclude the explicitly evaluated stress route.
+    cn_realized={sid:0.001 for sid in cn_ids}
+    cn_realized["P28_CASH"]=0.0
+    engine.submit_outcome(
+        cn_decision.run_id,
+        OutcomeRequest(realized_returns=cn_realized,trading_cost=0.0),
+    )
+    engine.submit_outcome(
+        cn_stress.run_id,
+        OutcomeRequest(realized_returns=cn_realized,trading_cost=0.0),
+    )
+    cn_daily=engine.daily_summary("CN")
+    assert cn_daily["evaluated_runs"]==1
+    assert cn_daily["runs_detail"][0]["experiment_mode"]=="CN_RETURN_MAX_CAPACITY"
+    assert all(
+        row.get("run_id")!=cn_stress.run_id
+        for row in cn_daily.get("runs_detail",[])
+    )
+    cn_curve=engine.curves("CN")
+    assert len(cn_curve)==1
+    assert cn_curve[0]["run_id"]==cn_decision.run_id
 
     verified=engine.submit_outcome(
         run.run_id,
@@ -469,7 +496,8 @@ try:
     assert negative_recompute["status"]=="RECOMPUTED"
     assert negative_recompute["transition_regime"]=="intraday_risk_off"
     assert negative_recompute["diagnostics"]["risk_off_detected"] is True
-    assert negative_recompute["diagnostics"]["regime_policy"]=="RISK_OFF_TOP_3"
+    assert negative_recompute["diagnostics"]["regime_policy"]=="RISK_OFF_ADAPTIVE_RETURN_THRESHOLD"
+    assert negative_recompute["diagnostics"]["fixed_strategy_count_target"] is False
     assert negative_recompute["weights_after"].get("P28_CASH",0.0) > negative_recompute["weights_before"].get("P28_CASH",0.0)
 
     curves=engine.curves("US")

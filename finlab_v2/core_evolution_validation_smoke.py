@@ -33,7 +33,7 @@ def states():
     ]
 
 
-def add_verified(engine,market,day_index):
+def add_verified(engine,market,day_index,experiment_mode=None):
     d=(date(2026,1,5)+timedelta(days=day_index)).isoformat()
     req=RunRequest(
         market=MarketSnapshot(
@@ -41,7 +41,11 @@ def add_verified(engine,market,day_index):
             as_of=d,
             snapshot_id=f"EVOSMOKE:{market}:{day_index}",
             regime="risk_on_trend",
-            metadata={"daily_bar_complete":True,"base_cost_bps":0.0},
+            metadata={
+                "daily_bar_complete":True,
+                "base_cost_bps":0.0,
+                "experiment_mode":experiment_mode or ("CN_RETURN_MAX_CAPACITY" if market=="CN" else "US_RETURN_MAX_CAPACITY"),
+            },
         ),
         strategy_states=states(),
         max_group_size=3,
@@ -69,10 +73,16 @@ try:
         for i in range(10):
             add_verified(engine,market,i)
 
+    # Deliberate stress evidence must not count toward the primary Core evolution set.
+    add_verified(engine,"CN",40,experiment_mode="CN_WORST_POOL_RESCUE")
+    add_verified(engine,"US",40,experiment_mode="US_STRESS_ONLY")
+
     proposal=engine.propose_core_candidate()
     assert proposal["created"] is True,proposal
     assert proposal["development_runs_by_market"]=={"US":7,"CN":7}
     assert proposal["reserved_holdout_runs_by_market"]=={"US":3,"CN":3}
+    assert proposal["evidence_scope"]=="PRIMARY_ROUTE_ONLY"
+    assert proposal["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
     version=proposal["candidate"]["version"]
 
     before_shadow=engine.promote_core(version)
