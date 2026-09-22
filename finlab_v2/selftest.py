@@ -435,6 +435,7 @@ try:
     )
     cn_daily=engine.daily_summary("CN")
     assert cn_daily["evaluated_runs"]==1
+    assert cn_daily["runs_detail"][0]["experiment_mode"]=="CN_RETURN_MAX_CAPACITY"
     assert all(
         row.get("run_id")!=cn_stress.run_id
         for row in cn_daily.get("runs_detail",[])
