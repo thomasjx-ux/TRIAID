@@ -142,7 +142,12 @@ assert decision["fast_challenger"]["windows_days"]==[1,3,5]
 assert "pilot_execution_check" in decision["fast_challenger"]
 assert decision["fast_challenger"]["pilot_execution_check"]["pilot_max_risk_budget"]==0.10
 assert decision["max_return_tie_set"]==["P18_XMOM20"]
-assert decision["target_strategy_weights"]=={"P18_XMOM20":0.28,"P25_BALANCED":0.28,"P04_TREND50":0.28,"P00_BUY_HOLD":0.16}
+expected_route_weights={"P18_XMOM20":0.28,"P25_BALANCED":0.28,"P04_TREND50":0.28,"P00_BUY_HOLD":0.16}
+assert set(decision["target_strategy_weights"])==set(expected_route_weights)
+assert all(
+    abs(float(decision["target_strategy_weights"][sid])-weight)<1e-12
+    for sid,weight in expected_route_weights.items()
+)
 assert decision["return_first_population_control_weights"]==group.weights
 assert abs(decision["return_first_population_projected_annualized_expected_net_return"]-0.2608)<1e-12
 assert decision["generic_core_control_weights"]==generic.weights_after
