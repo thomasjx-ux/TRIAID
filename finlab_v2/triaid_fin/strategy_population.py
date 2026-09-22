@@ -111,24 +111,26 @@ class StrategyPopulationModule:
     def rules(self, market_id: str) -> dict:
         cfg = self.config_for(market_id)
         result = asdict(cfg)
-        result["selection_objective"] = "maximize robust multi-window annualized state-return score subject to lifecycle, liquidity, capacity, concentration and redundancy constraints"
-        result["group_optimizer"] = "return-first group construction with versioned marginal-value, redundancy and switching constraints; unvalidated diversity penalties remain disabled"
-        result["switch_rule"] = "replace the current group only when improvement in the robust state-return score exceeds annualized switching cost, uncertainty guard and switching hurdle"
+        result["global_objective"] = "MAXIMIZE_REALIZABLE_NET_RETURN"
+        result["objective_constitution"] = "RETURN_IS_THE_ONLY_OPTIMIZATION_OBJECTIVE; RISK_LIQUIDITY_CAPACITY_CONCENTRATION_AND_EXECUTION_COST_ARE_CONSTRAINTS_OR_REAL_COSTS, NOT CO_EQUAL_OBJECTIVES"
+        result["selection_objective"] = "maximize realizable net return from the full admissible strategy universe after modeled switching and execution costs"
+        result["group_optimizer"] = "return-first group construction with hard admissibility, capacity and concentration constraints; diversification and uncertainty are not independent utility objectives"
+        result["switch_rule"] = "replace the current group only when the estimated realizable net-return improvement exceeds the modeled switching cost and operational hurdle"
         result["exposure_rule"] = "only ACTIVE or REDUCED strategies can receive experimental weight; SHADOW receives no exposure"
         result["cash_rule"] = "unallocated weight is explicit cash when P28_CASH is available"
         result["empty_group_allowed"] = True
         if cfg.market_id=="CN":
             result["active_research_experiment"]="CN_RETURN_MAX_CAPACITY"
             result["market_route"]="CN_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="maximize realizable net return from the full admissible strategy universe; risk, liquidity, capacity, concentration and switching costs are constraints rather than co-equal objectives"
+            result["research_experiment_objective"]="MAXIMIZE_REALIZABLE_NET_RETURN"
             result["primary_route_selector"]="RELATIVE_RETURN_FIRST_PORTFOLIO_WITH_CAPACITY_AND_SWITCHING_CONSTRAINTS"
             result["stress_test_route"]="CN_WORST_POOL_RESCUE"
             result["stress_test_role"]="SECONDARY_DIAGNOSTIC_ONLY_NOT_PRIMARY_PORTFOLIO"
         else:
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
-            result["research_experiment_objective"]="maximize the current multi-window annualized state-return estimate net of modeled route switching cost across admissible ACTIVE strategies; break exact net-score ties by lower switching cost, risk, uncertainty and deterministic strategy ID, then validate posterior theoretical and simulated-execution return separately under four USD capital sleeves"
-            result["primary_route_selector"]="MAX_NET_STATE_RETURN_ESTIMATE_WITH_DETERMINISTIC_TIE_BREAK"
+            result["research_experiment_objective"]="MAXIMIZE_REALIZABLE_NET_RETURN"
+            result["primary_route_selector"]="MAX_REALIZABLE_NET_RETURN_WITH_MARKET_SPECIFIC_EXECUTION_CONSTRAINTS"
             result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
         return result
 
