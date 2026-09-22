@@ -817,7 +817,10 @@ class EvolutionLabEngine:
                     and str(metadata.get("experiment_mode") or "").upper()==primary_mode
                     and str(metadata.get("primary_route_revision") or "")!=revision
                     and old.status=="DECISION_READY_AWAITING_OUTCOME"
-                    and old.evaluation is None
+                    and (
+                        old.evaluation is None
+                        or str(old.evaluation.status or "")=="PENDING_OUTCOME"
+                    )
                 ):
                     old.status="SUPERSEDED"
                     old.market.metadata=dict(metadata)
