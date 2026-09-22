@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
@@ -62,33 +63,68 @@ class TriaidCoreModule:
         before=dict(group.weights)
         state_map={s.strategy_id:s for s in states}
         regime=(market.regime or "").lower()
-        risk_off=any(x in regime for x in ("risk_off","stress","bear","shock","high_vol"))
-        raw={}
+        severe_risk=any(x in regime for x in ("stress","bear","shock","high_vol"))
+        risk_off=("risk_off" in regime) or severe_risk
+        risk_on=("risk_on" in regime) and not risk_off
+
+        ranked=[]
         for strategy_id in group.members:
+            if strategy_id=="P28_CASH":
+                continue
             s=state_map.get(strategy_id)
             if not s:
-                raw[strategy_id]=max(0.0,before.get(strategy_id,0.0))
                 continue
-            signal=max(
-                0.0,
-                s.expected_net_return
-                - self.params.risk_penalty*max(0.0,s.risk)
-                - self.params.uncertainty_penalty*max(0.0,s.uncertainty),
-            )
-            raw[strategy_id]=signal
+            if (
+                not s.eligible
+                or s.hard_failure
+                or not s.liquidity_ok
+                or not s.capacity_ok
+                or not s.risk_ok
+                or not s.concentration_ok
+            ):
+                continue
+            # Primary objective is return. Risk, liquidity, capacity and
+            # concentration are admission constraints, not additive penalties
+            # that can silently overturn the return ordering.
+            score=float(s.expected_net_return)-max(0.0,float(s.estimated_cost))
+            ranked.append((strategy_id,score))
 
-        if "P28_CASH" in group.members and "P28_CASH" not in raw:
+        ranked.sort(key=lambda x:(-x[1],x[0]))
+        n=len(ranked)
+        if severe_risk:
+            keep_count=min(2,n)
+            regime_policy="SEVERE_RISK_TOP_2"
+        elif risk_off:
+            keep_count=min(3,n)
+            regime_policy="RISK_OFF_TOP_3"
+        elif risk_on:
+            keep_count=n
+            regime_policy="RISK_ON_FULL_ADMISSIBLE_GROUP"
+        else:
+            keep_count=min(max(1,(n+1)//2),n) if n else 0
+            regime_policy="MIXED_TOP_HALF"
+
+        kept=ranked[:keep_count]
+        raw={}
+        score_temperature=None
+        if kept:
+            scores=[score for _,score in kept]
+            hi=max(scores)
+            lo=min(scores)
+            spread=hi-lo
+            if spread<=1e-12:
+                raw={sid:1.0 for sid,_ in kept}
+                score_temperature=0.0
+            else:
+                score_temperature=spread/2.0
+                raw={
+                    sid:math.exp(max(-50.0,min(0.0,(score-hi)/score_temperature)))
+                    for sid,score in kept
+                }
+        if "P28_CASH" in group.members:
             raw["P28_CASH"]=0.0
 
-        target=_normalize_capped(raw,0.28)
-        if risk_off:
-            scale=max(0.0,min(1.0,self.params.risk_off_multiplier))
-            for k in list(target):
-                if k!="P28_CASH":
-                    target[k]*=scale
-            if "P28_CASH" in group.members:
-                target["P28_CASH"]=max(0.0,1.0-sum(v for k,v in target.items() if k!="P28_CASH"))
-
+        target=_normalize_capped(raw,0.28) if raw else ({"P28_CASH":1.0} if "P28_CASH" in group.members else {})
         strength=max(0.0,min(1.0,self.params.intervention_strength))
         keys=set(before)|set(target)
         after={k:(1-strength)*before.get(k,0.0)+strength*target.get(k,0.0) for k in keys}
@@ -99,15 +135,25 @@ class TriaidCoreModule:
             b=before.get(strategy_id,0.0)
             a=after.get(strategy_id,0.0)
             delta=a-b
-            if abs(delta)<1e-7:
-                zh="当前证据不足以支持改变该策略权重，因此保持基本不变。"
-                en="Current evidence does not justify a material weight change, so the allocation is left essentially unchanged."
+            if strategy_id=="P28_CASH":
+                if abs(delta)<1e-7:
+                    zh="现金只保留未被高质量风险策略合理占用的剩余资金，本轮没有需要调整的剩余风险预算。"
+                    en="Cash represents only residual risk budget not justified by higher-return admissible strategies; no material residual change is required in this state."
+                elif delta>0:
+                    zh="当前状态提高了策略进入门槛，受单策略上限和可交易约束影响后留下剩余风险预算，因此现金被动上升；现金比例不是固定模板。"
+                    en="The current state raises the admission threshold; after position caps and tradability constraints a residual risk budget remains, so cash rises mechanically rather than from a fixed cash template."
+                else:
+                    zh="当前高收益可交易策略足以吸收更多风险预算，因此减少剩余现金。"
+                    en="Higher-return admissible strategies can absorb more of the risk budget, so residual cash falls."
+            elif abs(delta)<1e-7:
+                zh="该策略在当前收益排序和约束下无需调整。"
+                en="No material change is required for this strategy under the current return ranking and constraints."
             elif delta>0:
-                zh="在当前策略群内，该策略的多周期年化状态收益估计在扣除风险与不确定性惩罚后形成的相对信号更高，因此 TRIAID 增配。"
-                en="Within the current group, the strategy has a stronger relative signal after penalizing its multi-window annualized state-return estimate for risk and uncertainty, so TRIAID increases the allocation."
+                zh="该策略在当前可交易策略中具有更高的净收益排序，因此获得更多风险预算。"
+                en="The strategy ranks higher on the current realizable net-return proxy and receives more risk budget."
             else:
-                zh="该策略的多周期年化状态收益估计经风险与不确定性惩罚后的相对信号较弱，因此 TRIAID 降低配置。"
-                en="The strategy has a weaker relative signal after risk and uncertainty penalties are applied to its multi-window annualized state-return estimate, so TRIAID reduces the allocation."
+                zh="该策略当前净收益排序落后，或在更严格的状态门槛下未进入优先集合，因此降低配置。"
+                en="The strategy ranks lower on the current net-return proxy or falls outside the stricter state-dependent priority set, so its allocation is reduced."
             reasons[strategy_id]=BilingualText(zh=zh,en=en)
 
         return TriaidDecision(
@@ -117,10 +163,21 @@ class TriaidCoreModule:
             reasons=reasons,
             diagnostics={
                 "interface_version":self.interface_version,
+                "implementation_version":"triaid-core-return-max@0.3.0",
+                "objective":"MAXIMIZE_REALIZABLE_NET_RETURN_PROXY_SUBJECT_TO_HARD_CONSTRAINTS",
                 "risk_penalty":self.params.risk_penalty,
                 "uncertainty_penalty":self.params.uncertainty_penalty,
                 "intervention_strength":self.params.intervention_strength,
                 "risk_off_multiplier":self.params.risk_off_multiplier,
                 "risk_off_detected":risk_off,
+                "severe_risk_detected":severe_risk,
+                "regime_policy":regime_policy,
+                "ranked_opportunities":[{"strategy_id":sid,"net_return_proxy":score} for sid,score in ranked],
+                "kept_strategy_ids":[sid for sid,_ in kept],
+                "score_temperature":score_temperature,
+                "cash_target":float(target.get("P28_CASH",0.0)),
+                "cash_is_fixed_template":False,
+                "risk_role":"HARD_ADMISSION_AND_STATE_THRESHOLD_CONSTRAINT_NOT_CO_EQUAL_OBJECTIVE",
             },
         )
+
