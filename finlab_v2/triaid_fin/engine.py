@@ -20,6 +20,7 @@ from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
 from .recovery_ledger import RecoveryWaveLedger
 from .observation import MarketObservationStore
+from .objective import VERSION as OBJECTIVE_CONSTITUTION_VERSION
 from .review import ReviewModule
 from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
@@ -120,6 +121,7 @@ class EvolutionLabEngine:
     def module_manifest(self)->Dict[str,str]:
         return {
             "architecture":self.architecture_version,
+            "objective_constitution":OBJECTIVE_CONSTITUTION_VERSION,
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
             "official_trading_calendar":TRADING_CALENDAR_VERSION,
