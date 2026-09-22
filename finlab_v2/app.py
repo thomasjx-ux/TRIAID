@@ -1734,8 +1734,9 @@ async function refreshAll(){
   ]);
   const isCN=m==='CN';
   const isHK=m==='HK';
+  const primaryMode=isCN?'CN_RETURN_MAX_CAPACITY':isHK?'HK_RETURN_MAX_CAPACITY':null;
   const evaluated=[...runs].reverse().find(x=>
-   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCN||x.experiment_mode==='CN_RETURN_MAX_CAPACITY')
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!primaryMode||x.experiment_mode===primaryMode)
   )||null;
   if(isCN){
    el('resultTitle').textContent=lang==='zh'?'A股收益最大化主路线':'CN Return-Max Primary Route';
@@ -1759,8 +1760,8 @@ async function refreshAll(){
   strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
   const selected=cards.filter(x=>x.selected);
   const detailRuns=d.runs_detail||[];
-  const officialLatest=isCN
-    ? ([...detailRuns].reverse().find(x=>x.experiment_mode==='CN_RETURN_MAX_CAPACITY')||null)
+  const officialLatest=primaryMode
+    ? ([...detailRuns].reverse().find(x=>x.experiment_mode===primaryMode)||null)
     : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
