@@ -12,7 +12,7 @@ from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.5.0"
+    version="market-data-automation@0.6.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
@@ -28,6 +28,8 @@ class MarketDataAutomation:
         self.long_cycle_latest:dict|None=None
         self.cross_market_crash_day:str|None=None
         self.cross_market_crash_latest:dict|None=None
+        self.hazard_research_day:str|None=None
+        self.hazard_research_latest:dict|None=None
         self.started_at_utc:str|None=None
         self.last_loop_heartbeat_utc:str|None=None
         self.last_market_cycle_utc:dict[str,str]={}
@@ -207,6 +209,54 @@ class MarketDataAutomation:
                 except Exception as exc:
                     self.errors["USCNHK:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
                     print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCNHK:CRASH_LINKAGE"])
+
+            if self.hazard_research_day!=day:
+                try:
+                    latent=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.latent_hazard_run,False),
+                        timeout=max(240,self.refresh_timeout_seconds),
+                    )
+                    policy=None
+                    try:
+                        policy=await asyncio.wait_for(
+                            asyncio.to_thread(self.engine.policy_curve_run,False),
+                            timeout=max(180,self.refresh_timeout_seconds),
+                        )
+                    except Exception as curve_exc:
+                        self.errors["US:POLICY_CURVE"]=f"{type(curve_exc).__name__}:{curve_exc}"
+                        print("TRIAID_POLICY_CURVE_RECOVERY",self.errors["US:POLICY_CURVE"])
+                    frozen=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.hazard_prospective_freeze,latent,policy),
+                        timeout=max(120,self.refresh_timeout_seconds),
+                    )
+                    resolved=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.hazard_prospective_resolve),
+                        timeout=max(240,self.refresh_timeout_seconds),
+                    )
+                    self.hazard_research_latest={
+                        "experiment_id":latent.get("experiment_id"),
+                        "as_of":latent.get("as_of"),
+                        "current_state":(latent.get("current_state") or {}).get("state_label"),
+                        "supported_trigger_count":(latent.get("current_state") or {}).get("supported_trigger_count"),
+                        "policy_curve_snapshot_id":(policy or {}).get("snapshot_id"),
+                        "policy_curve_usable":((policy or {}).get("data_quality") or {}).get("term_curve_usable"),
+                        "prospective_ledger_id":frozen.get("ledger_id"),
+                        "updated_outcomes":resolved.get("updated_outcomes"),
+                    }
+                    self.hazard_research_day=day
+                    self.errors.pop("US:LATENT_HAZARD",None)
+                    self.errors.pop("US:HAZARD_PROSPECTIVE",None)
+                    print(
+                        "TRIAID_HAZARD_RESEARCH_DAILY",
+                        latent.get("experiment_id"),
+                        latent.get("as_of"),
+                        self.hazard_research_latest.get("current_state"),
+                        self.hazard_research_latest.get("policy_curve_usable"),
+                        self.hazard_research_latest.get("updated_outcomes"),
+                    )
+                except Exception as exc:
+                    self.errors["US:HAZARD_PROSPECTIVE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_HAZARD_PROSPECTIVE_RECOVERY",self.errors["US:HAZARD_PROSPECTIVE"])
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
@@ -413,6 +463,7 @@ class MarketDataAutomation:
             "zero_cost_auction_shadow":dict(self.auction_shadow_latest),
             "long_cycle_hypothesis":{"last_day":self.long_cycle_day,"latest":self.long_cycle_latest},
             "cross_market_crash":{"last_day":self.cross_market_crash_day,"latest":self.cross_market_crash_latest},
+            "hazard_research":{"last_day":self.hazard_research_day,"latest":self.hazard_research_latest},
             "self_healing":{
                 "enabled":True,
                 "started_at_utc":self.started_at_utc,
