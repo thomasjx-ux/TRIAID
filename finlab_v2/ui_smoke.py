@@ -57,6 +57,11 @@ assert 'id="activityPulse"' in html
 assert 'id="indexRows"' in html
 assert 'id="commandLog"' in html
 assert "refreshLiveWindows" in html
+assert '<option value="HK">港股 / HK</option>' in html
+assert 'id="marketScopeStatus"' in html
+assert "MARKET_DATA_RESEARCH_ONLY" in html
+assert "专用港股策略选择器" in html
+assert "预览美股 + A股" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
 assert "/api/market-data/strategy-context/" in html
@@ -129,6 +134,9 @@ if "recovery_wave" in dcn:
     assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["enabled"] is True
     assert dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["capital_sleeves_cny"]==[100000,1000000,10000000,100000000]
     assert len(dcn["recovery_wave"]["latest_decision"]["capital_capacity"]["sleeves"])==4
+
+hk_cards=strategies("zh","HK")
+assert hk_cards==[]
 
 cards=strategies("zh","US")
 assert len(cards)==29
