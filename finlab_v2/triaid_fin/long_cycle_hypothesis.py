@@ -7,11 +7,11 @@ import json
 import math
 import urllib.parse
 import urllib.request
+import time
 from datetime import date, datetime, timedelta, timezone
 from statistics import mean, pstdev
 from typing import Any
 
-from .market_lab import fetch_yahoo
 from .store import RunStore
 
 
@@ -39,7 +39,7 @@ FRED_SERIES={
 
 
 class LongCycleHypothesisExperiment:
-    version="us-long-cycle-hypothesis@0.1.0"
+    version="us-long-cycle-hypothesis@0.2.0"
     protocol_version="secular-hypothesis-protocol@0.1.0"
     latest_file="us_long_cycle_hypothesis_latest.json"
     history_file="us_long_cycle_hypothesis_history.jsonl"
@@ -54,6 +54,53 @@ class LongCycleHypothesisExperiment:
     @classmethod
     def _hash(cls,payload:dict)->str:
         return hashlib.sha256(cls._canonical(payload).encode("utf-8")).hexdigest()
+
+
+    @staticmethod
+    def _fetch_yahoo_full(symbol:str,timeout:int=25)->dict:
+        query=urllib.parse.urlencode({
+            "period1":"0",
+            "period2":str(int(time.time())+86400),
+            "interval":"1d",
+            "includeAdjustedClose":"true",
+            "includePrePost":"false",
+            "events":"div,splits",
+        })
+        url=f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?{query}"
+        req=urllib.request.Request(
+            url,
+            headers={"User-Agent":"Mozilla/5.0 TRIAID-FIN-LONG-CYCLE/0.2"},
+        )
+        with urllib.request.urlopen(req,timeout=timeout) as response:
+            payload=json.loads(response.read().decode("utf-8"))
+        chart=payload.get("chart") or {}
+        if chart.get("error"):
+            raise RuntimeError(f"yahoo_provider_error:{symbol}:{chart.get('error')}")
+        result=(chart.get("result") or [None])[0]
+        if not result:
+            raise RuntimeError(f"yahoo_empty_result:{symbol}")
+        ts=result.get("timestamp") or []
+        indicators=result.get("indicators") or {}
+        quote=(indicators.get("quote") or [{}])[0]
+        raw_close=quote.get("close") or []
+        adj=(indicators.get("adjclose") or [{}])[0].get("adjclose")
+        close=adj if adj and len(adj)==len(ts) else raw_close
+        rows=[]
+        for stamp,price in zip(ts,close):
+            try:
+                x=float(price)
+            except Exception:
+                continue
+            if not math.isfinite(x) or x<=0:
+                continue
+            rows.append((int(stamp),x))
+        if len(rows)<300:
+            raise RuntimeError(f"yahoo_insufficient_full_history:{symbol}:{len(rows)}")
+        return {
+            "symbol":symbol,
+            "ts":[x[0] for x in rows],
+            "close":[x[1] for x in rows],
+        }
 
     @staticmethod
     def _percentile(values:list[float],current:float)->float|None:
@@ -131,18 +178,18 @@ class LongCycleHypothesisExperiment:
 
     @classmethod
     def _asset_report(cls,label:str,symbol:str)->dict:
-        series=fetch_yahoo(symbol,range_="max",interval="1d",timeout=25)
+        series=cls._fetch_yahoo_full(symbol,timeout=25)
         horizons={
-            str(year):cls._horizon_metrics(series.ts,series.close,year)
+            str(year):cls._horizon_metrics(series["ts"],series["close"],year)
             for year in HORIZON_YEARS
         }
         return {
             "label":label,
             "symbol":symbol,
-            "points":len(series.close),
-            "first_date":datetime.fromtimestamp(int(series.ts[0]),timezone.utc).date().isoformat(),
-            "latest_date":datetime.fromtimestamp(int(series.ts[-1]),timezone.utc).date().isoformat(),
-            "latest_price":float(series.close[-1]),
+            "points":len(series["close"]),
+            "first_date":datetime.fromtimestamp(int(series["ts"][0]),timezone.utc).date().isoformat(),
+            "latest_date":datetime.fromtimestamp(int(series["ts"][-1]),timezone.utc).date().isoformat(),
+            "latest_price":float(series["close"][-1]),
             "horizons":horizons,
         }
 
@@ -158,13 +205,15 @@ class LongCycleHypothesisExperiment:
             text=response.read().decode("utf-8")
         rows=[]
         reader=csv.DictReader(io.StringIO(text))
-        value_key=series_id if series_id in (reader.fieldnames or []) else (reader.fieldnames or ["DATE","VALUE"])[-1]
+        fields=reader.fieldnames or []
+        value_key=series_id if series_id in fields else (fields[-1] if fields else "VALUE")
+        date_key="observation_date" if "observation_date" in fields else ("DATE" if "DATE" in fields else (fields[0] if fields else "DATE"))
         for row in reader:
             raw=(row.get(value_key) or "").strip()
             if not raw or raw==".":
                 continue
             try:
-                d=date.fromisoformat((row.get("DATE") or "").strip())
+                d=date.fromisoformat((row.get(date_key) or "").strip())
                 value=float(raw)
             except Exception:
                 continue
