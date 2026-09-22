@@ -63,8 +63,8 @@ COMPOSITE_RULES={
 
 
 class LatentHazardExperiment:
-    version="latent-hazard-discovery@0.4.0"
-    protocol_version="point-in-time-hazard-protocol@0.4.0"
+    version="latent-hazard-discovery@0.5.0"
+    protocol_version="point-in-time-hazard-protocol@0.5.0"
     latest_file="latent_hazard_latest.json"
     history_file="latent_hazard_history.jsonl"
 
@@ -823,6 +823,49 @@ class LatentHazardExperiment:
             reverse=True,
         )
 
+        current_i=len(dates)-1
+        current_features=features_at(current_i)
+        current_percentiles={}
+        for factor,value in current_features.items():
+            hist=[
+                feature_cache[row["index"]].get(factor)
+                for row in control_evaluations
+                if row["index"]<current_i
+                and feature_cache.get(row["index"],{}).get(factor) is not None
+            ]
+            current_percentiles[factor]=self._percentile(hist,value)
+        current_composites=self._composite_signals(current_percentiles)
+        supported_rules={
+            row["composite"]:row
+            for row in composite_lead_results
+            if row.get("statistically_supported")
+        }
+        for name,state in current_composites.items():
+            state["historically_statistically_supported"]=name in supported_rules
+            state["historical_support_rows"]=[
+                row for row in composite_lead_results
+                if row.get("composite")==name and row.get("statistically_supported")
+            ]
+        supported_triggered=[
+            name for name,state in current_composites.items()
+            if state.get("triggered") and state.get("historically_statistically_supported")
+        ]
+        current_state={
+            "as_of":dates[current_i].isoformat(),
+            "features":current_features,
+            "point_in_time_percentiles":current_percentiles,
+            "composites":current_composites,
+            "statistically_supported_composites_triggered":supported_triggered,
+            "supported_trigger_count":len(supported_triggered),
+            "state_label":(
+                "SUPPORTED_HAZARD_ACTIVE"
+                if supported_triggered
+                else "NO_SUPPORTED_HAZARD_TRIGGER"
+            ),
+            "production_action":"NONE",
+            "shadow_only":True,
+        }
+
         payload={
             "version":self.version,
             "protocol_version":self.protocol_version,
@@ -856,6 +899,7 @@ class LatentHazardExperiment:
             "top_any_lead_composites":[x for x in composite_summary if x["passes_any_lead"]][:10],
             "statistically_supported_factor_rows":[x for x in candidates if x.get("statistically_supported")],
             "statistically_supported_composite_rows":[x for x in composite_lead_results if x.get("statistically_supported")],
+            "current_state":current_state,
             "data_completeness":{
                 "primary_markets":len(primary),
                 "common_sessions":len(dates),
