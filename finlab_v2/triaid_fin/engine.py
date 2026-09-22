@@ -17,6 +17,7 @@ from .evolution import EvolutionModule
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
+from .latent_hazard import LatentHazardExperiment
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -56,6 +57,7 @@ class EvolutionLabEngine:
         self.us_return_max_ledger=USReturnMaxLedger(self.store)
         self.long_cycle_hypothesis=LongCycleHypothesisExperiment(self.store)
         self.cross_market_crash=CrossMarketCrashExperiment(self.store)
+        self.latent_hazard=LatentHazardExperiment(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
@@ -148,7 +150,8 @@ class EvolutionLabEngine:
             "us_return_max":self.us_return_max.version if hasattr(self,"us_return_max") else "us-return-max-route@unknown",
             "us_return_max_ledger":self.us_return_max_ledger.version if hasattr(self,"us_return_max_ledger") else "us-return-max-ledger@unknown",
             "long_cycle_hypothesis":self.long_cycle_hypothesis.version if hasattr(self,"long_cycle_hypothesis") else "us-long-cycle-hypothesis@unknown",
-            "cross_market_crash":self.cross_market_crash.version if hasattr(self,"cross_market_crash") else "us-cn-crash-linkage@unknown",
+            "cross_market_crash":self.cross_market_crash.version if hasattr(self,"cross_market_crash") else "us-cn-hk-crash-linkage@unknown",
+            "latent_hazard":self.latent_hazard.version if hasattr(self,"latent_hazard") else "latent-hazard-discovery@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
             "execution_calibration":ExecutionCalibration.version,
@@ -742,6 +745,18 @@ class EvolutionLabEngine:
     def cross_market_crash_status(self)->dict:
         return self.cross_market_crash.status()
 
+    def latent_hazard_run(self,force:bool=False)->dict:
+        return self.latent_hazard.run(force=force)
+
+    def latent_hazard_latest(self)->dict|None:
+        return self.latent_hazard.latest()
+
+    def latent_hazard_history(self,limit:int=100)->list[dict]:
+        return self.latent_hazard.history(limit)
+
+    def latent_hazard_status(self)->dict:
+        return self.latent_hazard.status()
+
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
 
@@ -1123,6 +1138,9 @@ class EvolutionLabEngine:
             crash_linkage=self.cross_market_crash.latest()
             if crash_linkage:
                 summary["cross_market_crash"]=crash_linkage
+            latent=self.latent_hazard.latest()
+            if latent:
+                summary["latent_hazard"]=latent
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
