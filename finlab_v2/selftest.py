@@ -36,8 +36,11 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.13.1"
+    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.14.0"
     assert engine.module_manifest["objective_constitution"]=="fin-objective-constitution@0.1.0"
+    assert engine.status()["markets"]==["US","CN","HK"]
+    assert engine.module_manifest["strategy_rules_HK"].startswith("strategy-rules-hk@")
+    assert engine.primary_experiment_mode("HK")=="HK_RETURN_MAX_CAPACITY"
     runtime=MarketDataAutomation(engine)
     assert session_phase("CN",datetime(2026,9,22,9,20,tzinfo=ZoneInfo("Asia/Shanghai")))=="PREOPEN"
     assert session_phase("CN",datetime(2026,9,22,10,0,tzinfo=ZoneInfo("Asia/Shanghai")))=="OPEN"
