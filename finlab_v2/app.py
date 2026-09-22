@@ -46,6 +46,30 @@ async def supervise_market_automation()->None:
             )
             await asyncio.sleep(5)
 
+
+async def bootstrap_long_horizon_research()->None:
+    try:
+        long_cycle=await asyncio.to_thread(engine.long_cycle_hypothesis_run,False)
+        print(
+            "TRIAID_LONG_CYCLE_BACKGROUND_PASS",
+            long_cycle.get("experiment_id"),
+            long_cycle.get("as_of"),
+            ((long_cycle.get("hypotheses") or {}).get("downturn_confirmation") or {}).get("state"),
+            ((long_cycle.get("hypotheses") or {}).get("stretch_vulnerability") or {}).get("state"),
+        )
+    except Exception as exc:
+        print("TRIAID_LONG_CYCLE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+    try:
+        linkage=await asyncio.to_thread(engine.cross_market_crash_run,False)
+        print(
+            "TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_PASS",
+            linkage.get("experiment_id"),
+            linkage.get("as_of"),
+            ((linkage.get("detected_crashes") or {}).get("synchronized_pair_rows")),
+        )
+    except Exception as exc:
+        print("TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     tasks=[]
@@ -77,6 +101,8 @@ async def lifespan(app:FastAPI):
         tasks.append(asyncio.create_task(calendar_sync.run()))
     if market_automation.enabled:
         tasks.append(asyncio.create_task(supervise_market_automation()))
+    if os.getenv("TRIAID_LONG_RESEARCH_BOOTSTRAP","1").lower() not in {"0","false","off","no"}:
+        tasks.append(asyncio.create_task(bootstrap_long_horizon_research()))
     try:
         yield
     finally:
