@@ -40,6 +40,10 @@ MARKETS={
         ("510300.SS","510500.SS","159915.SZ","512100.SS"),("511010.SS",),
         "CNY",50_000_000.0,2.5,60.0,0.02,
     ),
+    "HK":MarketSpec(
+        "HK","^HSI",("^HSI","^HSCE","^HSTECH"),("^HSI","^HSCE","^HSTECH"),(),
+        "HKD",50_000_000.0,2.0,55.0,0.02,
+    ),
 }
 
 
@@ -560,7 +564,7 @@ def prepare_live_market(
     daily_content_fingerprint=hashlib.sha256(
         json.dumps(final_payload,sort_keys=True,separators=(",",":")).encode("utf-8")
     ).hexdigest()
-    local_tz=ZoneInfo("America/New_York" if panel.spec.market_id=="US" else "Asia/Shanghai")
+    local_tz=ZoneInfo("America/New_York" if panel.spec.market_id=="US" else "Asia/Hong_Kong" if panel.spec.market_id=="HK" else "Asia/Shanghai")
     local_now=datetime.now(local_tz)
     local_today=local_now.date().isoformat()
     settle_seconds=max(0,int(os.getenv("TRIAID_CLOSE_SETTLE_SECONDS","300")))
