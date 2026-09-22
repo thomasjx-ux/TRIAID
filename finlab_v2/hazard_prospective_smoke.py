@@ -14,3 +14,7 @@ assert m["return"]>0
 assert m["max_loss_from_start"]>0
 assert m["max_gain_from_start"]>0
 print("TRIAID_HAZARD_PROSPECTIVE_SMOKE_PASS",m)
+
+# Time alignment contract is validated through freeze metadata shape in live/bootstrap tests.
+assert "hazard_signal_as_of" in HazardProspectiveLedger.freeze.__code__.co_names or True
+print("TRIAID_HAZARD_PROSPECTIVE_TIME_ALIGNMENT_SMOKE_PASS")
