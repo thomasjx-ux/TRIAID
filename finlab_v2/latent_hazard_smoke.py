@@ -56,6 +56,21 @@ assert rate_features["YIELD_CURVE_10Y2Y_RESTEEPENING_180D"]>0
 assert rate_features["YIELD_CURVE_10Y3M_RESTEEPENING_180D"]>0
 assert rate_features["FED_POLICY_TIGHTENING_90D"]>0
 assert rate_features["FED_BALANCE_SHEET_CONTRACTION_180D"]>0
+composite=LatentHazardExperiment._composite_signals({
+    "HK_NEGATIVE_MOMENTUM_63":0.90,
+    "US_TREASURY_2Y_RISE_90D":0.95,
+    "MOVE_LEVEL":0.85,
+    "FED_POLICY_RATE_LEVEL":0.90,
+    "FED_FUNDS_FUTURES_REPRICING_ABS_30D":0.90,
+    "SOFR_FUTURES_REPRICING_ABS_30D":0.90,
+    "MOVE_RISE_30D":0.85,
+    "CROSS_MARKET_STRESS_COUNT_10PCT":0.90,
+    "CORR_HK_US_60":0.90,
+})
+assert composite["HK_RATES_EARLY_WARNING"]["triggered"] is True
+assert composite["RATES_POLICY_PRESSURE"]["triggered"] is True
+assert composite["POLICY_REPRICING_STRESS"]["triggered"] is True
+assert composite["SYSTEMIC_TRANSMISSION"]["triggered"] is True
 
 events={
     "US":[{"breach_date":"2009-03-01","trough_date":"2009-03-20","max_drawdown":-0.3}],
@@ -73,4 +88,5 @@ print("TRIAID_LATENT_HAZARD_SMOKE_PASS",{
     "real_yield_shock":rate_features["US_REAL_YIELD_10Y_RISE_90D"],
     "policy_repricing":rate_features["US_POLICY_REPRICING_PROXY_2Y_ABS_30D"],
     "curve_resteepening":rate_features["YIELD_CURVE_10Y2Y_RESTEEPENING_180D"],
+    "composite_rules":list(composite),
 })
