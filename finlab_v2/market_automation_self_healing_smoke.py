@@ -5,6 +5,16 @@ from triaid_fin.market_runtime import MarketDataAutomation
 
 
 class FakeStore:
+    def __init__(self):
+        self.data={}
+
+    def load_json(self,name,default=None):
+        return self.data.get(name,default)
+
+    def save_json(self,name,value):
+        self.data[name]=value
+        return None
+
     def append_jsonl(self,*args,**kwargs):
         return None
 
