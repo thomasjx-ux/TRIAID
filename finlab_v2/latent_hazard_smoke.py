@@ -71,6 +71,13 @@ assert composite["HK_RATES_EARLY_WARNING"]["triggered"] is True
 assert composite["RATES_POLICY_PRESSURE"]["triggered"] is True
 assert composite["POLICY_REPRICING_STRESS"]["triggered"] is True
 assert composite["SYSTEMIC_TRANSMISSION"]["triggered"] is True
+fisher=LatentHazardExperiment._fisher_right(3,0,3,33)
+assert fisher is not None and fisher<0.01
+rows=[{"fisher_p_value":0.001},{"fisher_p_value":0.01},{"fisher_p_value":0.2}]
+LatentHazardExperiment._bh_adjust(rows)
+assert rows[0]["bh_q_value"]<=rows[1]["bh_q_value"]<=rows[2]["bh_q_value"]
+assert LatentHazardExperiment._leave_one_out_min_hit_rate([True,True,True])==1.0
+assert LatentHazardExperiment._leave_one_out_min_hit_rate([True,True,False])==0.5
 
 events={
     "US":[{"breach_date":"2009-03-01","trough_date":"2009-03-20","max_drawdown":-0.3}],
@@ -89,4 +96,5 @@ print("TRIAID_LATENT_HAZARD_SMOKE_PASS",{
     "policy_repricing":rate_features["US_POLICY_REPRICING_PROXY_2Y_ABS_30D"],
     "curve_resteepening":rate_features["YIELD_CURVE_10Y2Y_RESTEEPENING_180D"],
     "composite_rules":list(composite),
+    "fisher":fisher,
 })
