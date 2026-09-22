@@ -1518,17 +1518,17 @@ async function refreshAll(){
    json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
-  const isCNStress=m==='CN';
+  const isCN=m==='CN';
   const evaluated=[...runs].reverse().find(x=>
-   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCNStress||x.experiment_mode==='CN_WORST_POOL_RESCUE')
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!isCN||x.experiment_mode==='CN_RETURN_MAX_CAPACITY')
   )||null;
-  if(isCNStress){
-   el('resultTitle').textContent=lang==='zh'?'A股逆向压力实验结果':'CN Adversarial Stress Experiment';
-   el('baseReturnLabel').textContent=lang==='zh'?'最差策略池后验收益':'Worst-pool posterior return';
-   el('baseReturnSub').textContent=lang==='zh'?'登记时冻结的不利基线':'Adverse baseline frozen at registration';
-   el('gainLabel').textContent=lang==='zh'?'TRIAID 相对最差池收益差':'TRIAID return gap vs worst pool';
-   el('gainSub').textContent=lang==='zh'?'TRIAID 配置后验收益 − 最差池后验收益':'TRIAID allocation posterior return − worst-pool posterior return';
-   el('strategyTitle').textContent=lang==='zh'?'A股最差策略池与 TRIAID 权重调整':'CN Worst Strategy Pool and TRIAID Weight Adjustment';
+  if(isCN){
+   el('resultTitle').textContent=lang==='zh'?'A股收益最大化主路线':'CN Return-Max Primary Route';
+   el('baseReturnLabel').textContent=lang==='zh'?'收益优先策略群后验收益':'Return-first portfolio posterior return';
+   el('baseReturnSub').textContent=lang==='zh'?'决策时冻结的全策略竞争基线':'Full-universe return-first baseline frozen at decision time';
+   el('gainLabel').textContent=lang==='zh'?'TRIAID 相对基线收益差':'TRIAID return gap vs baseline';
+   el('gainSub').textContent=lang==='zh'?'TRIAID 动态权重后验收益 − 收益优先基线':'TRIAID dynamic-allocation posterior return − return-first baseline';
+   el('strategyTitle').textContent=lang==='zh'?'A股收益优先策略群与动态权重':'CN Return-First Strategy Group and Dynamic Weights';
   }else{
    el('resultTitle').textContent=T[lang].result;
    el('baseReturnLabel').textContent=T[lang].baseReturn;
@@ -1561,16 +1561,16 @@ async function refreshAll(){
    const g=Number(evaluated.evaluation.excess_return||0);
    el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
    el('dailyAnalysis').className=cls(g);
-  }else if(isCNStress&&latest?.diagnostic_summary?.experiment_mode==='CN_WORST_POOL_RESCUE'){
+  }else if(isCN&&latest?.diagnostic_summary?.experiment_mode==='CN_RETURN_MAX_CAPACITY'){
    const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
    el('dailyAnalysis').textContent=Number.isFinite(p)
-    ? (lang==='zh'?'按当前多周期年化状态收益估计，TRIAID 相对基线差值 '+signedPct(p)+'；这不是未来减损预测，实际挽回以后验为准':'Current multi-window annualized state-return estimate gives a TRIAID-vs-baseline gap of '+signedPct(p)+'; this is not a future loss-reduction forecast and realized rescue awaits posterior outcomes')
+    ? (lang==='zh'?'当前主路线以可实现净收益为唯一优化目标；TRIAID 相对冻结基线的状态收益差为 '+signedPct(p)+'。该值用于决策排序，不是保证的未来收益。':'The primary route uses realizable net return as the sole optimization objective; the state-return gap versus the frozen baseline is '+signedPct(p)+'. This is a decision-ranking signal, not a guaranteed future return.')
     : T[lang].pending;
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
-  renderUSReturnMax(!isCNStress?d.us_return_max:null);
-  renderProspective(isCNStress?d.prospective_experiment:null);
-  renderRecoveryWave(isCNStress?d.recovery_wave:null);
+  renderUSReturnMax(!isCN?d.us_return_max:null);
+  renderProspective(isCN?d.prospective_experiment:null);
+  renderRecoveryWave(isCN?d.recovery_wave:null);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
