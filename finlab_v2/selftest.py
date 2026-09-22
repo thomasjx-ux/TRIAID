@@ -260,6 +260,10 @@ try:
     products=engine.market_data_product_capabilities()
     providers=engine.market_data_provider_status()
     storage=engine.store.status()
+    calibration=engine.execution_calibration_status()
+    assert calibration["version"]=="execution-calibration@0.1.0"
+    assert calibration["US"]["automatic_parameter_mutation"] is False
+    assert calibration["CN"]["automatic_parameter_mutation"] is False
     assert storage["backend"]["backend"]=="file"
     assert storage["backend"]["version"]=="file-storage-backend@0.2.0"
     assert storage["durability"] in {"EPHEMERAL","PERSISTENT"}

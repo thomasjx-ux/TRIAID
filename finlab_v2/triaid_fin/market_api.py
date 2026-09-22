@@ -50,6 +50,10 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     def market_data_providers_api()->dict:
         return engine.market_data_provider_status()
 
+    @router.get("/execution-calibration")
+    def execution_calibration_api()->dict:
+        return engine.execution_calibration_status()
+
     @router.get("/alpha-evidence/status")
     def alpha_evidence_status_api()->dict:
         return engine.alpha_evidence_status()
