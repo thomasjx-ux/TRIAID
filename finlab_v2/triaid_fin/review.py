@@ -87,6 +87,9 @@ class ReviewModule:
             "snapshot_id":r.market.snapshot_id,
             "regime":r.market.regime,
             "status":r.status,
+            "experiment_mode":(r.market.metadata or {}).get("experiment_mode"),
+            "market_route":(r.market.metadata or {}).get("market_route"),
+            "primary_reference_bootstrap":(r.market.metadata or {}).get("primary_reference_bootstrap"),
             "module_manifest":r.module_manifest,
             "strategy_states":states,
             "strategy_group":{
