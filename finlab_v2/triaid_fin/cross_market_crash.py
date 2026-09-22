@@ -5,30 +5,44 @@ import json
 import math
 from datetime import date, datetime, timezone
 from statistics import mean
-from typing import Any
 
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
 
 
-US_INDEXES={
-    "SP500":"^GSPC",
-    "NASDAQ_COMPOSITE":"^IXIC",
+MARKET_INDEXES={
+    "US":{
+        "SP500":"^GSPC",
+        "NASDAQ_COMPOSITE":"^IXIC",
+    },
+    "CN":{
+        "SHANGHAI_COMPOSITE":"000001.SS",
+        "CSI300":"000300.SS",
+        "SHENZHEN_COMPONENT":"399001.SZ",
+        "CHINEXT":"399006.SZ",
+    },
+    "HK":{
+        "HANG_SENG":"^HSI",
+        "HANG_SENG_CHINA_ENTERPRISES":"^HSCE",
+    },
 }
-CN_INDEXES={
-    "SHANGHAI_COMPOSITE":"000001.SS",
-    "CSI300":"000300.SS",
-    "SHENZHEN_COMPONENT":"399001.SZ",
-    "CHINEXT":"399006.SZ",
+PRIMARY_INDEX={
+    "US":"SP500",
+    "CN":"SHANGHAI_COMPOSITE",
+    "HK":"HANG_SENG",
 }
 CANONICAL_EPISODES={
+    "ASIAN_FINANCIAL_CRISIS_1997_98":{
+        "start":"1997-06-01","end":"1999-01-31",
+        "description":"Asian financial crisis and regional equity stress.",
+    },
     "GLOBAL_FINANCIAL_CRISIS":{
         "start":"2007-10-01","end":"2009-06-30",
         "description":"Global financial crisis / Great Recession equity collapse.",
     },
     "CHINA_EQUITY_CRASH_2015_16":{
         "start":"2015-05-01","end":"2016-03-31",
-        "description":"China equity crash and subsequent global spillover period.",
+        "description":"China equity crash and subsequent regional/global spillover period.",
     },
     "COVID_2020":{
         "start":"2020-01-01","end":"2020-06-30",
@@ -42,10 +56,10 @@ CANONICAL_EPISODES={
 
 
 class CrossMarketCrashExperiment:
-    version="us-cn-crash-linkage@0.1.0"
-    protocol_version="cross-market-crash-linkage-protocol@0.1.0"
-    latest_file="us_cn_crash_linkage_latest.json"
-    history_file="us_cn_crash_linkage_history.jsonl"
+    version="us-cn-hk-crash-linkage@0.2.0"
+    protocol_version="cross-market-crash-linkage-protocol@0.2.0"
+    latest_file="us_cn_hk_crash_linkage_latest.json"
+    history_file="us_cn_hk_crash_linkage_history.jsonl"
 
     def __init__(self,store:RunStore)->None:
         self.store=store
@@ -90,30 +104,28 @@ class CrossMarketCrashExperiment:
     @classmethod
     def _lead_lag_corr(
         cls,
-        us_returns:dict[date,float],
-        cn_returns:dict[date,float],
+        a_returns:dict[date,float],
+        b_returns:dict[date,float],
         start:date,
         end:date,
+        *,
+        market_a:str,
+        market_b:str,
         max_lag:int=20,
     )->dict:
-        dates=sorted(d for d in set(us_returns)&set(cn_returns) if start<=d<=end)
+        dates=sorted(d for d in set(a_returns)&set(b_returns) if start<=d<=end)
         if len(dates)<40:
             return {"available":False,"observations":len(dates)}
-        us=[float(us_returns[d]) for d in dates]
-        cn=[float(cn_returns[d]) for d in dates]
+        a=[float(a_returns[d]) for d in dates]
+        b=[float(b_returns[d]) for d in dates]
         rows=[]
         for lag in range(-max_lag,max_lag+1):
             if lag>0:
-                # US[t] versus CN[t+lag]: positive lag means US leads CN.
-                xs=us[:-lag]
-                ys=cn[lag:]
+                xs=a[:-lag];ys=b[lag:]
             elif lag<0:
-                k=-lag
-                xs=us[k:]
-                ys=cn[:-k]
+                k=-lag;xs=a[k:];ys=b[:-k]
             else:
-                xs=us
-                ys=cn
+                xs=a;ys=b
             corr=cls._corr(xs,ys)
             if corr is not None:
                 rows.append({"lag_trading_days":lag,"correlation":corr,"observations":len(xs)})
@@ -122,10 +134,12 @@ class CrossMarketCrashExperiment:
         best=max(rows,key=lambda r:abs(float(r["correlation"])))
         return {
             "available":True,
+            "market_a":market_a,
+            "market_b":market_b,
             "same_day_correlation":next((r["correlation"] for r in rows if r["lag_trading_days"]==0),None),
             "strongest_absolute_correlation":best["correlation"],
             "strongest_lag_trading_days":best["lag_trading_days"],
-            "lag_semantics":"positive lag = US daily return leads CN daily return; negative lag = CN leads US",
+            "lag_semantics":f"positive lag = {market_a} daily return leads {market_b}; negative lag = {market_b} leads {market_a}",
             "rows":rows,
         }
 
@@ -139,10 +153,10 @@ class CrossMarketCrashExperiment:
             return {"available":False,"observations":len(rows)}
         first_d,first_p=rows[0]
         last_d,last_p=rows[-1]
-        peak=float(rows[0][1]);peak_date=rows[0][0]
-        trough_dd=0.0;trough_date=rows[0][0];trough_price=float(rows[0][1]);event_peak_date=peak_date
-        for d,p in rows:
-            p=float(p)
+        peak=float(first_p);peak_date=first_d
+        trough_dd=0.0;trough_date=first_d;trough_price=float(first_p);event_peak_date=peak_date
+        for d,p0 in rows:
+            p=float(p0)
             if p>peak:
                 peak=p;peak_date=d
             dd=p/peak-1.0 if peak>0 else 0.0
@@ -236,67 +250,92 @@ class CrossMarketCrashExperiment:
         if not candidates:
             return None
         _,gap,row=min(candidates,key=lambda x:(x[0],x[1]))
-        return {
-            "event":row,
-            "trough_lag_calendar_days":gap,
-        }
+        return {"event":row,"trough_lag_calendar_days":gap}
 
     @classmethod
-    def _automatic_linkage(cls,us_events:list[dict],cn_events:list[dict])->list[dict]:
-        rows=[]
-        for origin,events,counterparts in (
-            ("US",us_events,cn_events),
-            ("CN",cn_events,us_events),
-        ):
-            for event in events:
-                match=cls._nearest_event(event,counterparts,180)
-                rows.append({
-                    "origin_market":origin,
-                    "event":event,
-                    "counterpart_within_180_days":match,
-                    "classification":"SYNCHRONIZED_20PCT_CRASH" if match else "NO_20PCT_COUNTERPART_WITHIN_180D",
-                })
-        return rows
+    def _pairwise_automatic_linkage(cls,events_by_market:dict[str,list[dict]])->dict:
+        out={}
+        markets=sorted(events_by_market)
+        for i,a in enumerate(markets):
+            for b in markets[i+1:]:
+                key=f"{a}_{b}"
+                rows=[]
+                for origin,counterpart in ((a,b),(b,a)):
+                    for event in events_by_market.get(origin,[]):
+                        match=cls._nearest_event(event,events_by_market.get(counterpart,[]),180)
+                        rows.append({
+                            "origin_market":origin,
+                            "counterpart_market":counterpart,
+                            "event":event,
+                            "counterpart_within_180_days":match,
+                            "classification":"SYNCHRONIZED_20PCT_CRASH" if match else "NO_20PCT_COUNTERPART_WITHIN_180D",
+                        })
+                out[key]=rows
+        return out
 
     @classmethod
     def _episode_report(
         cls,
         episode_id:str,
         spec:dict,
-        us:dict,
-        cn:dict,
+        primary_series:dict[str,dict],
     )->dict:
         start=date.fromisoformat(spec["start"])
         end=date.fromisoformat(spec["end"])
-        us_stats=cls._window_stats(us,start,end)
-        cn_stats=cls._window_stats(cn,start,end)
-        us_ret=cls._returns(sorted(cls._series_map(us).items()))
-        cn_ret=cls._returns(sorted(cls._series_map(cn).items()))
-        leadlag=cls._lead_lag_corr(us_ret,cn_ret,start,end)
+        stats={
+            market:cls._window_stats(series,start,end)
+            for market,series in primary_series.items()
+        }
+        returns={
+            market:cls._returns(sorted(cls._series_map(series).items()))
+            for market,series in primary_series.items()
+        }
+        pairwise={}
+        markets=sorted(primary_series)
+        for i,a in enumerate(markets):
+            for b in markets[i+1:]:
+                pairwise[f"{a}_{b}"]=cls._lead_lag_corr(
+                    returns[a],returns[b],start,end,
+                    market_a=a,market_b=b,
+                )
 
-        lag=None
-        if us_stats.get("available") and cn_stats.get("available"):
-            lag=(
-                date.fromisoformat(cn_stats["trough_date"])
-                -date.fromisoformat(us_stats["trough_date"])
-            ).days
-        if us_stats.get("crash_20pct") and cn_stats.get("crash_20pct"):
-            relation="BOTH_20PCT_CRASH"
-        elif us_stats.get("stress_10pct") and cn_stats.get("stress_10pct"):
-            relation="BOTH_STRESSED"
-        elif us_stats.get("stress_10pct") or cn_stats.get("stress_10pct"):
-            relation="ONE_SIDE_DOMINANT"
+        trough_rows=[]
+        for market,row in stats.items():
+            if row.get("available") and row.get("trough_date"):
+                trough_rows.append((date.fromisoformat(row["trough_date"]),market))
+        trough_rows.sort()
+        trough_order=[{"market":market,"trough_date":d.isoformat()} for d,market in trough_rows]
+        trough_span_days=(
+            (trough_rows[-1][0]-trough_rows[0][0]).days
+            if len(trough_rows)>=2 else None
+        )
+
+        crash_count=sum(1 for row in stats.values() if row.get("crash_20pct"))
+        stress_count=sum(1 for row in stats.values() if row.get("stress_10pct"))
+        available_count=sum(1 for row in stats.values() if row.get("available"))
+        if available_count>=3 and crash_count==3:
+            relation="ALL_THREE_20PCT_CRASH"
+        elif crash_count>=2:
+            relation="TWO_OR_MORE_20PCT_CRASH"
+        elif available_count>=3 and stress_count==3:
+            relation="ALL_THREE_STRESSED"
+        elif stress_count>=2:
+            relation="TWO_OR_MORE_STRESSED"
+        elif stress_count==1:
+            relation="LOCALIZED_STRESS"
         else:
             relation="WEAK_SHARED_STRESS"
+
         return {
             "episode_id":episode_id,
             "description":spec["description"],
             "window":{"start":spec["start"],"end":spec["end"]},
-            "US":us_stats,
-            "CN":cn_stats,
-            "cn_trough_minus_us_trough_calendar_days":lag,
-            "trough_lag_semantics":"negative = CN trough occurred earlier; positive = US trough occurred earlier",
-            "daily_return_linkage":leadlag,
+            "markets":stats,
+            "pairwise_daily_return_linkage":pairwise,
+            "trough_order":trough_order,
+            "trough_span_calendar_days":trough_span_days,
+            "crash_20pct_market_count":crash_count,
+            "stress_10pct_market_count":stress_count,
             "relation":relation,
         }
 
@@ -304,23 +343,25 @@ class CrossMarketCrashExperiment:
         previous=self.latest()
         errors={}
         indexes={}
-        for market,specs in (("US",US_INDEXES),("CN",CN_INDEXES)):
-            market_rows={}
+        for market,specs in MARKET_INDEXES.items():
+            rows={}
             for label,symbol in specs.items():
                 try:
-                    market_rows[label]=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
+                    rows[label]=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
                 except Exception as exc:
                     errors[f"{market}:{label}"]=f"{type(exc).__name__}:{exc}"
-            indexes[market]=market_rows
+            indexes[market]=rows
 
-        us_primary=(indexes.get("US") or {}).get("SP500")
-        cn_primary=(indexes.get("CN") or {}).get("SHANGHAI_COMPOSITE")
-        if us_primary is None or cn_primary is None:
-            raise RuntimeError(f"primary_index_unavailable:{errors}")
+        primary_series={}
+        for market,label in PRIMARY_INDEX.items():
+            row=(indexes.get(market) or {}).get(label)
+            if row is None:
+                raise RuntimeError(f"primary_index_unavailable:{market}:{label}:{errors}")
+            primary_series[market]=row
 
         as_of=min(
-            datetime.fromtimestamp(int(us_primary["ts"][-1]),timezone.utc).date(),
-            datetime.fromtimestamp(int(cn_primary["ts"][-1]),timezone.utc).date(),
+            datetime.fromtimestamp(int(series["ts"][-1]),timezone.utc).date()
+            for series in primary_series.values()
         ).isoformat()
         if (
             previous
@@ -330,16 +371,25 @@ class CrossMarketCrashExperiment:
         ):
             return previous
 
-        us_events=self._detect_crashes(us_primary,-0.20,-0.05)
-        cn_events=self._detect_crashes(cn_primary,-0.20,-0.05)
+        events_by_market={
+            market:self._detect_crashes(series,-0.20,-0.05)
+            for market,series in primary_series.items()
+        }
+        pairwise_automatic=self._pairwise_automatic_linkage(events_by_market)
         episodes={
-            key:self._episode_report(key,spec,us_primary,cn_primary)
+            key:self._episode_report(key,spec,primary_series)
             for key,spec in CANONICAL_EPISODES.items()
         }
-        linkage=self._automatic_linkage(us_events,cn_events)
 
-        paired=[r for r in linkage if r.get("counterpart_within_180_days")]
-        independent=[r for r in linkage if not r.get("counterpart_within_180_days")]
+        synchronized_rows=sum(
+            1 for rows in pairwise_automatic.values() for row in rows
+            if row.get("counterpart_within_180_days")
+        )
+        independent_rows=sum(
+            1 for rows in pairwise_automatic.values() for row in rows
+            if not row.get("counterpart_within_180_days")
+        )
+
         payload={
             "version":self.version,
             "protocol_version":self.protocol_version,
@@ -348,10 +398,15 @@ class CrossMarketCrashExperiment:
             "shadow_only":True,
             "applied_to_weights":False,
             "production_action":"NONE",
-            "primary_indexes":{"US":"S&P 500 (^GSPC)","CN":"Shanghai Composite (000001.SS)"},
+            "markets":["US","CN","HK"],
+            "primary_indexes":{
+                "US":"S&P 500 (^GSPC)",
+                "CN":"Shanghai Composite (000001.SS)",
+                "HK":"Hang Seng Index (^HSI)",
+            },
             "secondary_indexes":{
-                "US":list(US_INDEXES),
-                "CN":list(CN_INDEXES),
+                market:list(specs)
+                for market,specs in MARKET_INDEXES.items()
             },
             "crash_definition":{
                 "trigger":"20% peak-to-current drawdown",
@@ -360,35 +415,38 @@ class CrossMarketCrashExperiment:
                 "stress_threshold":"10% maximum drawdown within canonical episode window",
             },
             "detected_crashes":{
-                "US":us_events,
-                "CN":cn_events,
-                "automatic_linkage":linkage,
-                "paired_event_rows":len(paired),
-                "independent_event_rows":len(independent),
+                **events_by_market,
+                "pairwise_automatic_linkage":pairwise_automatic,
+                "synchronized_pair_rows":synchronized_rows,
+                "independent_pair_rows":independent_rows,
             },
             "canonical_episode_studies":episodes,
             "data_completeness":{
-                "US_indexes":len(indexes.get("US") or {}),
-                "US_indexes_requested":len(US_INDEXES),
-                "CN_indexes":len(indexes.get("CN") or {}),
-                "CN_indexes_requested":len(CN_INDEXES),
+                **{
+                    f"{market}_indexes":len(indexes.get(market) or {})
+                    for market in MARKET_INDEXES
+                },
+                **{
+                    f"{market}_indexes_requested":len(specs)
+                    for market,specs in MARKET_INDEXES.items()
+                },
+                "primary_indexes_complete":all(
+                    (indexes.get(market) or {}).get(label) is not None
+                    for market,label in PRIMARY_INDEX.items()
+                ),
                 "errors":errors,
             },
             "interpretation":{
-                "purpose":"Measure whether major US and A-share crashes are synchronized, lead-lag linked, or predominantly local.",
+                "purpose":"Measure whether major US, A-share and Hong Kong equity crashes are synchronized, lead-lag linked, regionally transmitted, or predominantly local.",
                 "causality_guard":"Temporal lead/lag and return correlation do not establish causal transmission.",
                 "selection_guard":"Canonical episodes are disclosed in advance; automatic crash detection is also reported to reduce cherry-picking.",
+                "hong_kong_role":"Hong Kong is treated as an open, globally connected China-sensitive market that can differ materially from onshore A shares.",
                 "production_guard":"This experiment cannot change strategy weights until prospective incremental net-return value is established.",
-            },
-            "historical_source_context":{
-                "GLOBAL_FINANCIAL_CRISIS":"Federal Reserve History reports the S&P 500 fell 57% from its October 2007 peak to March 2009 trough.",
-                "CHINA_EQUITY_CRASH_2015_16":"IMF reported Chinese equities fell more than 30% in less than three weeks after mid-June 2015 and documented spillovers to other markets.",
-                "COVID_2020":"Federal Reserve reported broad US equities fell as much as 34% peak-to-trough during the COVID shock.",
             },
         }
         digest=self._hash(payload)
         payload["experiment_hash"]=digest
-        payload["experiment_id"]=f"USCN-CRASH-{as_of}-{digest[:10]}"
+        payload["experiment_id"]=f"USCNHK-CRASH-{as_of}-{digest[:10]}"
         payload["previous_experiment_id"]=previous.get("experiment_id") if previous else None
         self.store.save_json(self.latest_file,payload)
         history=self.history(5000)
