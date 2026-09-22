@@ -108,6 +108,16 @@ current=RunRecord(
 report=ReviewModule().daily_summary([previous,current])
 assert report["date"]=="2026-09-22"
 assert report["report_contract"]["strategy_change_reason_required"] is True
+assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
+assert report["report_contract"]["technical_runtime_report_default"] is False
+strategy_report=report["investment_strategy_reports"]["US"]
+assert strategy_report["report_type"]=="INVESTMENT_STRATEGY_DAILY"
+assert strategy_report["strategy_thesis"]["objective"].startswith("Maximize realizable net return")
+assert strategy_report["session_review"]["added"]==["P02_VOL15"]
+assert strategy_report["session_review"]["removed"]==["P01_VOL10"]
+assert strategy_report["performance_review"]["conclusion"]=="TRIAID_OUTPERFORMED_BASELINE"
+assert strategy_report["forward_view"]["forecast_discipline"].startswith("Forward view is conditional")
+assert strategy_report["technical_appendix_policy"]["default_visibility"]=="COLLAPSED"
 change=report["strategy_changes"][0]
 assert change["added"]==["P02_VOL15"]
 assert change["removed"]==["P01_VOL10"]
