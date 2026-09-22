@@ -24,6 +24,8 @@ class MarketDataAutomation:
         self.frequency_policy=FrequencyPolicy(engine.store)
         self.auction_shadow_day:dict[str,str]={}
         self.auction_shadow_latest:dict[str,dict]={}
+        self.long_cycle_day:str|None=None
+        self.long_cycle_latest:dict|None=None
         self.started_at_utc:str|None=None
         self.last_loop_heartbeat_utc:str|None=None
         self.last_market_cycle_utc:dict[str,str]={}
@@ -144,6 +146,34 @@ class MarketDataAutomation:
                     self.consecutive_failures[key],
                     self.errors[key],
                 )
+
+        if market_id=="US" and phase=="POSTCLOSE":
+            local_now=datetime.now(ZoneInfo("America/New_York"))
+            day=local_now.date().isoformat()
+            if self.long_cycle_day!=day:
+                try:
+                    report=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.long_cycle_hypothesis_run,False),
+                        timeout=max(120,self.refresh_timeout_seconds),
+                    )
+                    self.long_cycle_latest={
+                        "experiment_id":report.get("experiment_id"),
+                        "as_of":report.get("as_of"),
+                        "downturn_state":((report.get("hypotheses") or {}).get("downturn_confirmation") or {}).get("state"),
+                        "stretch_state":((report.get("hypotheses") or {}).get("stretch_vulnerability") or {}).get("state"),
+                    }
+                    self.long_cycle_day=day
+                    self.errors.pop("US:LONG_CYCLE",None)
+                    print(
+                        "TRIAID_LONG_CYCLE_DAILY",
+                        report.get("experiment_id"),
+                        report.get("as_of"),
+                        self.long_cycle_latest.get("downturn_state"),
+                        self.long_cycle_latest.get("stretch_state"),
+                    )
+                except Exception as exc:
+                    self.errors["US:LONG_CYCLE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_LONG_CYCLE_RECOVERY",self.errors["US:LONG_CYCLE"])
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
@@ -342,6 +372,7 @@ class MarketDataAutomation:
                 else None
             ),
             "zero_cost_auction_shadow":dict(self.auction_shadow_latest),
+            "long_cycle_hypothesis":{"last_day":self.long_cycle_day,"latest":self.long_cycle_latest},
             "self_healing":{
                 "enabled":True,
                 "started_at_utc":self.started_at_utc,
