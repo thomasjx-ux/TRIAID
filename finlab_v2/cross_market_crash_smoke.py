@@ -25,24 +25,26 @@ def path(crash_start:int,crash_depth:float,lag:int=0):
         out.append(base*factor)
     return {"ts":ts,"close":out}
 
-us=path(3000,0.35,0)
-cn=path(3000,0.30,10)
-
-us_events=CrossMarketCrashExperiment._detect_crashes(us)
-cn_events=CrossMarketCrashExperiment._detect_crashes(cn)
-assert us_events and cn_events
-link=CrossMarketCrashExperiment._automatic_linkage(us_events,cn_events)
-assert any(x["classification"]=="SYNCHRONIZED_20PCT_CRASH" for x in link)
+series={
+    "US":path(3000,0.35,0),
+    "CN":path(3000,0.30,10),
+    "HK":path(3000,0.40,5),
+}
+events={m:CrossMarketCrashExperiment._detect_crashes(s) for m,s in series.items()}
+assert all(events[m] for m in ("US","CN","HK"))
+link=CrossMarketCrashExperiment._pairwise_automatic_linkage(events)
+assert set(link)=={"CN_HK","CN_US","HK_US"}
+assert all(any(x["classification"]=="SYNCHRONIZED_20PCT_CRASH" for x in rows) for rows in link.values())
 
 spec={"start":"2008-01-01","end":"2012-01-01","description":"synthetic"}
-episode=CrossMarketCrashExperiment._episode_report("SYN",spec,us,cn)
-assert episode["US"]["available"] is True
-assert episode["CN"]["available"] is True
-assert episode["daily_return_linkage"]["available"] is True
-assert episode["relation"] in {"BOTH_20PCT_CRASH","BOTH_STRESSED","ONE_SIDE_DOMINANT","WEAK_SHARED_STRESS"}
+episode=CrossMarketCrashExperiment._episode_report("SYN",spec,series)
+assert all(episode["markets"][m]["available"] for m in ("US","CN","HK"))
+assert all(v["available"] for v in episode["pairwise_daily_return_linkage"].values())
+assert episode["relation"]=="ALL_THREE_20PCT_CRASH"
+assert len(episode["trough_order"])==3
 
-print("TRIAID_US_CN_CRASH_LINKAGE_SMOKE_PASS",{
-    "us_events":len(us_events),
-    "cn_events":len(cn_events),
+print("TRIAID_US_CN_HK_CRASH_LINKAGE_SMOKE_PASS",{
+    "event_counts":{m:len(v) for m,v in events.items()},
     "relation":episode["relation"],
+    "trough_order":episode["trough_order"],
 })
