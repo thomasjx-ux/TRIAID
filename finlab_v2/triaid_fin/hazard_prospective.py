@@ -12,7 +12,7 @@ HORIZONS=(20,60,120,250)
 
 
 class HazardProspectiveLedger:
-    version="hazard-prospective-ledger@0.2.0"
+    version="hazard-prospective-ledger@0.3.0"
     ledger_file="hazard_prospective_ledger.jsonl"
     state_file="hazard_prospective_state.json"
     latest_file="hazard_prospective_latest.json"
@@ -61,17 +61,52 @@ class HazardProspectiveLedger:
         }
 
     def freeze(self,hazard_report:dict,policy_curve:dict|None=None)->dict:
-        as_of=str(hazard_report.get("as_of") or "")
-        if not as_of:
+        hazard_as_of=str(hazard_report.get("as_of") or "")
+        if not hazard_as_of:
             raise ValueError("hazard report missing as_of")
-        existing=next((x for x in reversed(self.rows(5000)) if x.get("as_of")==as_of),None)
+        curve_as_of=str((policy_curve or {}).get("as_of") or hazard_as_of)
+        effective_as_of=max(hazard_as_of,curve_as_of)
+
+        rows=self.rows(5000)
+        migrated=False
+        for row in rows:
+            old_curve=str(row.get("policy_curve_as_of") or "")
+            if (
+                row.get("evidence_eligible") is not False
+                and old_curve
+                and str(row.get("as_of") or "")<old_curve
+            ):
+                row["evidence_eligible"]=False
+                row["invalidated_reason"]="PRE_V0_3_MIXED_TIMESTAMP_LOOKAHEAD_LABEL"
+                migrated=True
+        if migrated:
+            self.store.save_json(self.state_file,{"version":self.version,"rows":rows})
+            self.store.append_jsonl(self.ledger_file,{
+                "event":"MIGRATION_INVALIDATE",
+                "at":datetime.now(timezone.utc).isoformat(),
+                "reason":"PRE_V0_3_MIXED_TIMESTAMP_LOOKAHEAD_LABEL",
+            })
+
+        existing=next((
+            x for x in reversed(rows)
+            if x.get("as_of")==effective_as_of
+            and x.get("source_experiment_hash")==hazard_report.get("experiment_hash")
+            and x.get("policy_curve_snapshot_id")==((policy_curve or {}).get("snapshot_id"))
+            and x.get("evidence_eligible") is not False
+        ),None)
         if existing:
             return existing
 
         current=hazard_report.get("current_state") or {}
+        hazard_date=date.fromisoformat(hazard_as_of)
+        curve_date=date.fromisoformat(curve_as_of)
         payload={
             "version":self.version,
-            "as_of":as_of,
+            "as_of":effective_as_of,
+            "hazard_signal_as_of":hazard_as_of,
+            "policy_curve_as_of":curve_as_of,
+            "component_lag_calendar_days":abs((curve_date-hazard_date).days),
+            "evidence_eligible":True,
             "frozen_at":datetime.now(timezone.utc).isoformat(),
             "source_experiment_id":hazard_report.get("experiment_id"),
             "source_experiment_hash":hazard_report.get("experiment_hash"),
@@ -84,10 +119,11 @@ class HazardProspectiveLedger:
             "outcomes":{},
             "resolved_horizons":[],
             "pending_horizons":list(HORIZONS),
+            "time_alignment_guard":"The ledger as_of is the latest component date, so later policy-curve information is never backdated to an earlier hazard-signal date.",
             "immutable_signal_guard":"Frozen signal fields are never recomputed after insertion; only future outcome fields may be appended.",
         }
         digest=self._hash(payload)
-        payload["ledger_id"]=f"HAZARD-SHADOW-{as_of}-{digest[:10]}"
+        payload["ledger_id"]=f"HAZARD-SHADOW-{effective_as_of}-{digest[:10]}"
         rows=self.rows(5000)
         rows.append(payload)
         self.store.save_json(self.state_file,{"version":self.version,"rows":rows})
@@ -111,6 +147,9 @@ class HazardProspectiveLedger:
         new_rows=[]
         for row in rows:
             out=dict(row)
+            if out.get("evidence_eligible") is False:
+                new_rows.append(out)
+                continue
             outcomes=dict(out.get("outcomes") or {})
             for horizon in HORIZONS:
                 key=str(horizon)
