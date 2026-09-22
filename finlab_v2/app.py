@@ -84,6 +84,10 @@ async def bootstrap_long_horizon_research()->None:
                 "event_count":latent.get("event_count"),
                 "control_count":latent.get("control_count"),
                 "data_completeness":latent.get("data_completeness"),
+                "candidate_lead_rows":[
+                    row for row in (latent.get("factor_lead_results") or [])
+                    if row.get("candidate")
+                ],
             },ensure_ascii=False,sort_keys=True),
         )
     except Exception as exc:
