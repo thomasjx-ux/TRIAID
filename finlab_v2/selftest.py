@@ -87,7 +87,7 @@ try:
         datetime(2027,1,4,10,0,tzinfo=ZoneInfo("Asia/Shanghai")),
     )=="CALENDAR_UNAVAILABLE"
     cal=calendar_status()
-    assert cal["version"]=="official-trading-calendar@0.2.0"
+    assert cal["version"]=="official-trading-calendar@0.3.0"
     assert cal["markets"]["US"]["coverage_years"]==[2026,2027,2028]
     assert cal["markets"]["CN"]["coverage_years"]==[2026]
 
