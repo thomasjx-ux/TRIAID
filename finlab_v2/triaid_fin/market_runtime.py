@@ -4,6 +4,7 @@ import asyncio
 import os
 import time
 from datetime import datetime, time as dt_time, timezone
+from zoneinfo import ZoneInfo
 
 from .market_data import session_phase
 from .frequency_policy import FrequencyPolicy
@@ -23,6 +24,13 @@ class MarketDataAutomation:
         self.frequency_policy=FrequencyPolicy(engine.store)
         self.auction_shadow_day:dict[str,str]={}
         self.auction_shadow_latest:dict[str,dict]={}
+        self.started_at_utc:str|None=None
+        self.last_loop_heartbeat_utc:str|None=None
+        self.last_market_cycle_utc:dict[str,str]={}
+        self.last_success_utc:dict[str,str]={}
+        self.consecutive_failures:dict[str,int]={}
+        self.supervisor_restarts:int=0
+        self.refresh_timeout_seconds=max(10,int(os.getenv("TRIAID_REFRESH_TIMEOUT_SECONDS","30")))
 
     def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
@@ -51,75 +59,116 @@ class MarketDataAutomation:
         market=market_id.upper()
         return self.refresh_plan_for_phase(market,session_phase(market))
 
+    async def _run_market_cycle(self,market_id:str,now:float)->None:
+        phase=session_phase(market_id)
+        if self.last_phase.get(market_id)!=phase:
+            for key in [k for k in self.last_refresh if k.startswith(f"{market_id}:")]:
+                self.last_refresh[key]=0.0
+            self.last_phase[market_id]=phase
+            print("TRIAID_MARKET_PHASE",market_id,phase)
+        capabilities=self.engine.market_data_capabilities(market_id)[market_id]
+        if market_id=="CN" and phase=="PREOPEN":
+            local_now=datetime.now(ZoneInfo("Asia/Shanghai"))
+            day=local_now.date().isoformat()
+            if local_now.time()>=dt_time(9,25) and self.auction_shadow_day.get("CN")!=day:
+                try:
+                    probe=await asyncio.to_thread(self.engine.market_data_auction_shadow_probe,"CN")
+                    event={
+                        **probe,
+                        "observed_at":datetime.now(timezone.utc).isoformat(),
+                        "trade_date":day,
+                    }
+                    self.engine.store.append_jsonl("auction_shadow_events.jsonl",event)
+                    self.auction_shadow_latest["CN"]=event
+                    self.auction_shadow_day["CN"]=day
+                    print("TRIAID_ZERO_COST_AUCTION_SHADOW",probe.get("available_symbols"),probe.get("total_symbols"),probe.get("all_symbols_available"))
+                except Exception as exc:
+                    self.errors["CN:AUCTION_SHADOW"]=f"{type(exc).__name__}:{exc}"
+        for mode,interval_seconds in self.refresh_plan_for_phase(market_id,phase).items():
+            if not capabilities.get(mode,{}).get("supported",False):
+                continue
+            key=f"{market_id}:{mode}"
+            if now-self.last_refresh.get(key,0.0)<interval_seconds:
+                continue
+            try:
+                result=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.refresh_market_data,market_id,mode),
+                    timeout=self.refresh_timeout_seconds,
+                )
+                snapshot=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False),
+                    timeout=self.refresh_timeout_seconds,
+                )
+                observed=await asyncio.wait_for(
+                    asyncio.to_thread(self.engine.record_market_observation,snapshot),
+                    timeout=self.refresh_timeout_seconds,
+                )
+                decision_result=None
+                if self.decision_scheduler is not None:
+                    decision_result=await asyncio.to_thread(
+                        self.decision_scheduler.after_refresh,
+                        market_id,
+                        mode,
+                        snapshot,
+                        observed,
+                    )
+                if observed.get("reason")=="STALE_SOURCE_TIMESTAMP":
+                    self.last_refresh[key]=0.0
+                else:
+                    self.last_refresh[key]=now
+                self.errors.pop(key,None)
+                self.last_success_utc[key]=datetime.now(timezone.utc).isoformat()
+                self.consecutive_failures[key]=0
+                print(
+                    "TRIAID_MARKET_DATA_AUTO_REFRESH",
+                    market_id,mode,
+                    result.get("source_latest_ts"),
+                    result.get("points"),
+                    observed.get("recorded"),
+                    observed.get("reason"),
+                )
+                if decision_result is not None:
+                    print(
+                        "TRIAID_DECISION_AUTOMATION",
+                        market_id,mode,
+                        decision_result.get("action"),
+                    )
+            except Exception as exc:
+                self.errors[key]=f"{type(exc).__name__}:{exc}"
+                self.consecutive_failures[key]=self.consecutive_failures.get(key,0)+1
+                # Retry quickly during an active session instead of waiting a full normal interval.
+                self.last_refresh[key]=max(0.0,now-min(interval_seconds,30))
+                print(
+                    "TRIAID_MARKET_DATA_AUTO_RECOVERY",
+                    market_id,mode,
+                    self.consecutive_failures[key],
+                    self.errors[key],
+                )
+
     async def run(self)->None:
+        self.started_at_utc=datetime.now(timezone.utc).isoformat()
         while True:
             now=time.monotonic()
+            self.last_loop_heartbeat_utc=datetime.now(timezone.utc).isoformat()
             for market_id in ("US","CN"):
-                phase=session_phase(market_id)
-                if self.last_phase.get(market_id)!=phase:
-                    for key in [k for k in self.last_refresh if k.startswith(f"{market_id}:")]:
-                        self.last_refresh[key]=0.0
-                    self.last_phase[market_id]=phase
-                    print("TRIAID_MARKET_PHASE",market_id,phase)
-                capabilities=self.engine.market_data_capabilities(market_id)[market_id]
-                if market_id=="CN" and phase=="PREOPEN":
-                    local_now=datetime.now(ZoneInfo("Asia/Shanghai"))
-                    day=local_now.date().isoformat()
-                    if local_now.time()>=dt_time(9,25) and self.auction_shadow_day.get("CN")!=day:
-                        try:
-                            probe=await asyncio.to_thread(self.engine.market_data_auction_shadow_probe,"CN")
-                            event={
-                                **probe,
-                                "observed_at":datetime.now(timezone.utc).isoformat(),
-                                "trade_date":day,
-                            }
-                            self.engine.store.append_jsonl("auction_shadow_events.jsonl",event)
-                            self.auction_shadow_latest["CN"]=event
-                            self.auction_shadow_day["CN"]=day
-                            print("TRIAID_ZERO_COST_AUCTION_SHADOW",probe.get("available_symbols"),probe.get("total_symbols"),probe.get("all_symbols_available"))
-                        except Exception as exc:
-                            self.errors["CN:AUCTION_SHADOW"]=f"{type(exc).__name__}:{exc}"
-                for mode,interval_seconds in self.refresh_plan(market_id).items():
-                    if not capabilities.get(mode,{}).get("supported",False):
-                        continue
-                    key=f"{market_id}:{mode}"
-                    if now-self.last_refresh.get(key,0.0)<interval_seconds:
-                        continue
-                    try:
-                        result=await asyncio.to_thread(self.engine.refresh_market_data,market_id,mode)
-                        snapshot=await asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False)
-                        observed=await asyncio.to_thread(self.engine.record_market_observation,snapshot)
-                        decision_result=None
-                        if self.decision_scheduler is not None:
-                            decision_result=await asyncio.to_thread(
-                                self.decision_scheduler.after_refresh,
-                                market_id,
-                                mode,
-                                snapshot,
-                                observed,
-                            )
-                        if observed.get("reason")=="STALE_SOURCE_TIMESTAMP":
-                            self.last_refresh[key]=0.0
-                        else:
-                            self.last_refresh[key]=now
-                        self.errors.pop(key,None)
-                        print(
-                            "TRIAID_MARKET_DATA_AUTO_REFRESH",
-                            market_id,mode,
-                            result.get("source_latest_ts"),
-                            result.get("points"),
-                            observed.get("recorded"),
-                            observed.get("reason"),
-                        )
-                        if decision_result is not None:
-                            print(
-                                "TRIAID_DECISION_AUTOMATION",
-                                market_id,mode,
-                                decision_result.get("action"),
-                            )
-                    except Exception as exc:
-                        self.errors[key]=f"{type(exc).__name__}:{exc}"
-                        self.last_refresh[key]=now
+                try:
+                    await self._run_market_cycle(market_id,now)
+                    self.last_market_cycle_utc[market_id]=datetime.now(timezone.utc).isoformat()
+                    self.errors.pop(f"{market_id}:AUTOMATION_LOOP",None)
+                except Exception as exc:
+                    key=f"{market_id}:AUTOMATION_LOOP"
+                    self.errors[key]=f"{type(exc).__name__}:{exc}"
+                    self.consecutive_failures[key]=self.consecutive_failures.get(key,0)+1
+                    self.last_market_cycle_utc[market_id]=datetime.now(timezone.utc).isoformat()
+                    print(
+                        "TRIAID_MARKET_AUTOMATION_RECOVERED_EXCEPTION",
+                        market_id,
+                        self.consecutive_failures[key],
+                        self.errors[key],
+                    )
+                    # Fault isolation: one market or phase failure must never stop the other market
+                    # or terminate the long-running automation loop.
+                    continue
             await asyncio.sleep(30)
 
     @staticmethod
@@ -293,5 +342,16 @@ class MarketDataAutomation:
                 else None
             ),
             "zero_cost_auction_shadow":dict(self.auction_shadow_latest),
+            "self_healing":{
+                "enabled":True,
+                "started_at_utc":self.started_at_utc,
+                "last_loop_heartbeat_utc":self.last_loop_heartbeat_utc,
+                "last_market_cycle_utc":dict(self.last_market_cycle_utc),
+                "last_success_utc":dict(self.last_success_utc),
+                "consecutive_failures":dict(self.consecutive_failures),
+                "supervisor_restarts":self.supervisor_restarts,
+                "refresh_timeout_seconds":self.refresh_timeout_seconds,
+                "policy":"MARKET_FAULT_ISOLATION; FAST_RETRY_ON_REFRESH_FAILURE; SUPERVISOR_RESTART_ON_TASK_EXIT",
+            },
             "hub":self.engine.market_data_status(),
         }
