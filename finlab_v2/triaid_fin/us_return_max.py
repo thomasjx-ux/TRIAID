@@ -21,12 +21,12 @@ USD_CAPITAL_SLEEVES=(100_000.0,1_000_000.0,10_000_000.0,100_000_000.0)
 class USReturnMaxRoute:
     """US return-maximization route with executable capital-capacity sleeves.
 
-    The route intentionally differs from the CN recovery-wave route:
-    - primary selection maximizes the current multi-window annualized historical state-return estimate net of modeled route switching cost across admissible active strategies;
-    - ties are broken deterministically by lower modeled switching cost, risk, uncertainty, then ID;
-    - no recovery/drawdown thesis is required;
-    - the frozen winner is expanded to executable ETF exposures;
-    - four USD sleeves share the same signal and differ only by starting capital.
+    Market-specific execution differs from CN, but the objective does not:
+    - maximize realizable net return after modeled switching and execution costs;
+    - risk, liquidity, capacity and concentration are hard feasibility constraints, not co-objectives;
+    - exact net-score ties use lower modeled switching cost and deterministic strategy ID only;
+    - portfolio member count emerges from the return ranking and hard concentration cap;
+    - four USD sleeves share the same objective and differ only by capital-specific capacity.
     """
 
     version="us-return-max-route@0.5.0"
