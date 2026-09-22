@@ -31,16 +31,24 @@ CROSS_ASSET={
 FRED_SERIES={
     "HY_OAS":"BAMLH0A0HYM2",
     "YIELD_CURVE_10Y2Y":"T10Y2Y",
+    "YIELD_CURVE_10Y3M":"T10Y3M",
     "NFCI":"NFCI",
     "FED_FUNDS":"FEDFUNDS",
+    "FED_FUNDS_DAILY":"DFF",
+    "TREASURY_2Y":"DGS2",
+    "TREASURY_5Y":"DGS5",
+    "TREASURY_10Y":"DGS10",
+    "TREASURY_30Y":"DGS30",
+    "REAL_YIELD_10Y":"DFII10",
+    "FED_BALANCE_SHEET":"WALCL",
     "CPI":"CPIAUCSL",
     "UNEMPLOYMENT":"UNRATE",
 }
 
 
 class LongCycleHypothesisExperiment:
-    version="us-long-cycle-hypothesis@0.2.1"
-    protocol_version="secular-hypothesis-protocol@0.1.0"
+    version="us-long-cycle-hypothesis@0.3.0"
+    protocol_version="secular-hypothesis-protocol@0.2.0"
     latest_file="us_long_cycle_hypothesis_latest.json"
     history_file="us_long_cycle_hypothesis_history.jsonl"
 
@@ -236,6 +244,20 @@ class LongCycleHypothesisExperiment:
                 "observations":len(sample),
                 "percentile":cls._percentile(sample,latest_value),
             }
+        def prior(days:int)->float|None:
+            cutoff=latest_date-timedelta(days=int(days))
+            candidates=[float(v) for d,v in rows if d<=cutoff]
+            return candidates[-1] if candidates else None
+        changes={}
+        pct_changes={}
+        for days in (30,90,180,365):
+            p=prior(days)
+            changes[str(days)]=latest_value-p if p is not None else None
+            pct_changes[str(days)]=(
+                latest_value/p-1.0
+                if p is not None and abs(float(p))>1e-12
+                else None
+            )
         return {
             "name":name,
             "series_id":series_id,
@@ -247,6 +269,64 @@ class LongCycleHypothesisExperiment:
             "change_12_observations":(
                 latest_value-rows[-13][1] if len(rows)>=13 else None
             ),
+            "change_calendar_days":changes,
+            "pct_change_calendar_days":pct_changes,
+        }
+
+
+    @classmethod
+    def _rates_policy_snapshot(cls,macro:dict)->dict:
+        def latest(name:str)->float|None:
+            value=(macro.get(name) or {}).get("latest_value")
+            return float(value) if value is not None else None
+        def change(name:str,days:int)->float|None:
+            value=((macro.get(name) or {}).get("change_calendar_days") or {}).get(str(days))
+            return float(value) if value is not None else None
+        def pct_change(name:str,days:int)->float|None:
+            value=((macro.get(name) or {}).get("pct_change_calendar_days") or {}).get(str(days))
+            return float(value) if value is not None else None
+
+        curve2=latest("YIELD_CURVE_10Y2Y")
+        curve3=latest("YIELD_CURVE_10Y3M")
+        real10=latest("REAL_YIELD_10Y")
+        two=latest("TREASURY_2Y")
+        ten=latest("TREASURY_10Y")
+        policy=latest("FED_FUNDS_DAILY")
+        return {
+            "treasury_curve":{
+                "2y":two,
+                "5y":latest("TREASURY_5Y"),
+                "10y":ten,
+                "30y":latest("TREASURY_30Y"),
+                "10y2y":curve2,
+                "10y3m":curve3,
+            },
+            "real_rates":{
+                "10y_real_yield":real10,
+                "10y_real_yield_20y_percentile":cls._fred_percentile(macro,"REAL_YIELD_10Y",20),
+                "10y_real_yield_change_90d":change("REAL_YIELD_10Y",90),
+            },
+            "policy":{
+                "fed_funds_daily":policy,
+                "fed_funds_change_90d":change("FED_FUNDS_DAILY",90),
+                "2y_policy_repricing_proxy_abs_30d":(
+                    abs(change("TREASURY_2Y",30))
+                    if change("TREASURY_2Y",30) is not None
+                    else None
+                ),
+                "note":"2Y Treasury change is a policy-expectations proxy, not OIS/Fed Funds futures.",
+            },
+            "balance_sheet":{
+                "walcl_level":latest("FED_BALANCE_SHEET"),
+                "walcl_pct_change_180d":pct_change("FED_BALANCE_SHEET",180),
+            },
+            "curve_state":{
+                "10y2y_inverted":bool(curve2<0.0) if curve2 is not None else None,
+                "10y3m_inverted":bool(curve3<0.0) if curve3 is not None else None,
+                "10y2y_change_180d":change("YIELD_CURVE_10Y2Y",180),
+                "10y3m_change_180d":change("YIELD_CURVE_10Y3M",180),
+            },
+            "semantics":"Rates/policy variables are descriptive state evidence. High rates, inversion, easing or steepening do not have a fixed bullish/bearish sign outside the surrounding regime.",
         }
 
     @staticmethod
@@ -556,6 +636,7 @@ class LongCycleHypothesisExperiment:
             "downturn_confirmation":self._downturn_hypothesis(horizons,assets,macro),
             "stretch_vulnerability":self._stretch_hypothesis(horizons,assets),
         }
+        rates_policy=self._rates_policy_snapshot(macro)
 
         payload={
             "version":self.version,
@@ -571,6 +652,7 @@ class LongCycleHypothesisExperiment:
             "assets":assets,
             "horizon_summary":horizons,
             "macro":macro,
+            "rates_policy":rates_policy,
             "hypotheses":hypotheses,
             "errors":errors,
             "data_completeness":{
@@ -580,6 +662,7 @@ class LongCycleHypothesisExperiment:
                 "cross_assets_requested":len(CROSS_ASSET),
                 "macro_series":sum(1 for x in FRED_SERIES if x in macro),
                 "macro_series_requested":len(FRED_SERIES),
+                "rates_policy_series_requested":8,
                 "valuation_model_connected":False,
                 "earnings_revision_model_connected":False,
             },
@@ -592,6 +675,7 @@ class LongCycleHypothesisExperiment:
             },
             "known_limits":[
                 "ETF histories for HYG/TLT/GLD are shorter than 30 years; unavailable horizons remain unavailable rather than imputed.",
+                "OIS/Fed Funds futures and dedicated Treasury volatility (MOVE) feeds are not yet connected; 2Y Treasury repricing is only a proxy for policy expectations.",
                 "Valuation and analyst earnings-revision feeds are not yet connected to this experiment.",
                 "Macro series are descriptive evidence and do not establish causality by themselves.",
                 "Historical/model evidence is not a calibrated future-return forecast.",
