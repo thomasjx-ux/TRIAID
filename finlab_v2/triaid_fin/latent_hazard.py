@@ -4,6 +4,7 @@ import bisect
 import hashlib
 import json
 import math
+import time
 from datetime import date, datetime, timedelta, timezone
 from statistics import mean, pstdev
 
@@ -19,7 +20,7 @@ CRASH_EXCLUSION_SESSIONS=250
 
 
 class LatentHazardExperiment:
-    version="latent-hazard-discovery@0.1.0"
+    version="latent-hazard-discovery@0.1.1"
     protocol_version="point-in-time-hazard-protocol@0.1.0"
     latest_file="latent_hazard_latest.json"
     history_file="latent_hazard_history.jsonl"
@@ -34,6 +35,19 @@ class LatentHazardExperiment:
     @classmethod
     def _hash(cls,payload:dict)->str:
         return hashlib.sha256(cls._canonical(payload).encode("utf-8")).hexdigest()
+
+
+    @staticmethod
+    def _fred_with_retry(series_id:str,attempts:int=3)->list[tuple[date,float]]:
+        errors=[]
+        for attempt in range(max(1,int(attempts))):
+            try:
+                return LongCycleHypothesisExperiment._fred_series(series_id,timeout=30)
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}:{exc}")
+                if attempt+1<attempts:
+                    time.sleep(1.5*(attempt+1))
+        raise RuntimeError(f"fred_retry_exhausted:{series_id}:{' | '.join(errors)}")
 
     @staticmethod
     def _series_map(series:dict)->dict[date,float]:
@@ -289,7 +303,7 @@ class LatentHazardExperiment:
             "YIELD_CURVE_10Y2Y":"T10Y2Y",
         }.items():
             try:
-                fred[name]=LongCycleHypothesisExperiment._fred_series(series_id)
+                fred[name]=self._fred_with_retry(series_id)
             except Exception as exc:
                 errors[f"FRED:{name}"]=f"{type(exc).__name__}:{exc}"
 
