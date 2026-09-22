@@ -28,6 +28,11 @@ CROSS_ASSET={
     "LONG_TREASURY":"TLT",
     "GOLD":"GLD",
 }
+MARKET_EXPECTATION_SERIES={
+    "MOVE_INDEX":{"symbol":"^MOVE","transform":"identity"},
+    "FED_FUNDS_FUTURE":{"symbol":"ZQ=F","transform":"imm_implied_rate"},
+    "SOFR_1M_FUTURE":{"symbol":"SR1=F","transform":"imm_implied_rate"},
+}
 FRED_SERIES={
     "HY_OAS":"BAMLH0A0HYM2",
     "YIELD_CURVE_10Y2Y":"T10Y2Y",
@@ -47,8 +52,8 @@ FRED_SERIES={
 
 
 class LongCycleHypothesisExperiment:
-    version="us-long-cycle-hypothesis@0.3.0"
-    protocol_version="secular-hypothesis-protocol@0.2.0"
+    version="us-long-cycle-hypothesis@0.4.0"
+    protocol_version="secular-hypothesis-protocol@0.3.0"
     latest_file="us_long_cycle_hypothesis_latest.json"
     history_file="us_long_cycle_hypothesis_history.jsonl"
 
@@ -275,7 +280,7 @@ class LongCycleHypothesisExperiment:
 
 
     @classmethod
-    def _rates_policy_snapshot(cls,macro:dict)->dict:
+    def _rates_policy_snapshot(cls,macro:dict,market_expectations:dict|None=None)->dict:
         def latest(name:str)->float|None:
             value=(macro.get(name) or {}).get("latest_value")
             return float(value) if value is not None else None
@@ -292,6 +297,10 @@ class LongCycleHypothesisExperiment:
         two=latest("TREASURY_2Y")
         ten=latest("TREASURY_10Y")
         policy=latest("FED_FUNDS_DAILY")
+        market_expectations=market_expectations or {}
+        move=market_expectations.get("MOVE_INDEX") or {}
+        zq=market_expectations.get("FED_FUNDS_FUTURE") or {}
+        sr1=market_expectations.get("SOFR_1M_FUTURE") or {}
         return {
             "treasury_curve":{
                 "2y":two,
@@ -320,6 +329,21 @@ class LongCycleHypothesisExperiment:
                 "walcl_level":latest("FED_BALANCE_SHEET"),
                 "walcl_pct_change_180d":pct_change("FED_BALANCE_SHEET",180),
             },
+            "market_expectations":{
+                "move_level":move.get("latest_value"),
+                "move_historical_percentile":move.get("historical_percentile"),
+                "move_change_30d":((move.get("change_calendar_days") or {}).get("30")),
+                "fed_funds_futures_implied_rate":zq.get("latest_value"),
+                "fed_funds_futures_repricing_30d":((zq.get("change_calendar_days") or {}).get("30")),
+                "sofr_1m_futures_implied_rate":sr1.get("latest_value"),
+                "sofr_1m_futures_repricing_30d":((sr1.get("change_calendar_days") or {}).get("30")),
+                "nearby_futures_basis_abs":(
+                    abs(float(sr1.get("latest_value"))-float(zq.get("latest_value")))
+                    if sr1.get("latest_value") is not None and zq.get("latest_value") is not None
+                    else None
+                ),
+                "source_note":"Yahoo continuous nearby futures are used as research proxies. Contract rolls can affect changes; this is not a full FedWatch/OIS curve.",
+            },
             "curve_state":{
                 "10y2y_inverted":bool(curve2<0.0) if curve2 is not None else None,
                 "10y3m_inverted":bool(curve3<0.0) if curve3 is not None else None,
@@ -327,6 +351,44 @@ class LongCycleHypothesisExperiment:
                 "10y3m_change_180d":change("YIELD_CURVE_10Y3M",180),
             },
             "semantics":"Rates/policy variables are descriptive state evidence. High rates, inversion, easing or steepening do not have a fixed bullish/bearish sign outside the surrounding regime.",
+        }
+
+
+    @classmethod
+    def _market_expectation_report(cls,name:str,spec:dict)->dict:
+        series=cls._fetch_yahoo_full(str(spec["symbol"]),timeout=30)
+        rows=[]
+        for ts,raw in zip(series["ts"],series["close"]):
+            value=float(raw)
+            if str(spec.get("transform"))=="imm_implied_rate":
+                value=100.0-value
+            rows.append((datetime.fromtimestamp(int(ts),timezone.utc).date(),value,float(raw)))
+        latest_date,latest_value,latest_raw=rows[-1]
+        def prior(days:int):
+            cutoff=latest_date-timedelta(days=int(days))
+            candidates=[(d,v,r) for d,v,r in rows if d<=cutoff]
+            return candidates[-1] if candidates else None
+        changes={}
+        for days in (30,90,180,365):
+            p=prior(days)
+            changes[str(days)]=(latest_value-float(p[1])) if p else None
+        history=[float(v) for _,v,_ in rows]
+        return {
+            "name":name,
+            "symbol":spec["symbol"],
+            "latest_date":latest_date.isoformat(),
+            "latest_value":latest_value,
+            "latest_raw_price":latest_raw,
+            "first_date":rows[0][0].isoformat(),
+            "observations":len(rows),
+            "historical_percentile":cls._percentile(history,latest_value),
+            "change_calendar_days":changes,
+            "transform":spec.get("transform"),
+            "semantics":(
+                "IMM-style futures implied rate = 100 minus futures price."
+                if spec.get("transform")=="imm_implied_rate"
+                else "Index level."
+            ),
         }
 
     @staticmethod
@@ -599,6 +661,13 @@ class LongCycleHypothesisExperiment:
         ):
             return previous
 
+        market_expectations={}
+        for name,spec in MARKET_EXPECTATION_SERIES.items():
+            try:
+                market_expectations[name]=self._market_expectation_report(name,spec)
+            except Exception as exc:
+                errors[f"market_expectation:{name}"]=f"{type(exc).__name__}:{exc}"
+
         macro={}
         for name,series_id in FRED_SERIES.items():
             try:
@@ -636,7 +705,7 @@ class LongCycleHypothesisExperiment:
             "downturn_confirmation":self._downturn_hypothesis(horizons,assets,macro),
             "stretch_vulnerability":self._stretch_hypothesis(horizons,assets),
         }
-        rates_policy=self._rates_policy_snapshot(macro)
+        rates_policy=self._rates_policy_snapshot(macro,market_expectations)
 
         payload={
             "version":self.version,
@@ -652,6 +721,7 @@ class LongCycleHypothesisExperiment:
             "assets":assets,
             "horizon_summary":horizons,
             "macro":macro,
+            "market_expectations":market_expectations,
             "rates_policy":rates_policy,
             "hypotheses":hypotheses,
             "errors":errors,
@@ -663,6 +733,8 @@ class LongCycleHypothesisExperiment:
                 "macro_series":sum(1 for x in FRED_SERIES if x in macro),
                 "macro_series_requested":len(FRED_SERIES),
                 "rates_policy_series_requested":8,
+                "market_expectation_series":len(market_expectations),
+                "market_expectation_series_requested":len(MARKET_EXPECTATION_SERIES),
                 "valuation_model_connected":False,
                 "earnings_revision_model_connected":False,
             },
@@ -675,7 +747,7 @@ class LongCycleHypothesisExperiment:
             },
             "known_limits":[
                 "ETF histories for HYG/TLT/GLD are shorter than 30 years; unavailable horizons remain unavailable rather than imputed.",
-                "OIS/Fed Funds futures and dedicated Treasury volatility (MOVE) feeds are not yet connected; 2Y Treasury repricing is only a proxy for policy expectations.",
+                "MOVE plus nearby continuous Fed Funds and 1-Month SOFR futures are connected as research proxies. A full contract-by-contract OIS/FedWatch probability curve is not yet connected, and continuous futures can contain roll effects.",
                 "Valuation and analyst earnings-revision feeds are not yet connected to this experiment.",
                 "Macro series are descriptive evidence and do not establish causality by themselves.",
                 "Historical/model evidence is not a calibrated future-return forecast.",
