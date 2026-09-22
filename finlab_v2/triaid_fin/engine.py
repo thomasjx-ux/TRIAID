@@ -720,8 +720,22 @@ class EvolutionLabEngine:
     def prospective_experiment_detail(self,experiment_id:str)->dict:
         return self.prospective_experiment.get(experiment_id)
 
-    def latest_decision_run(self,market_id:str)->RunRecord|None:
+    @staticmethod
+    def primary_experiment_mode(market_id:str)->str:
         market_id=market_id.upper()
+        if market_id=="CN":
+            return "CN_RETURN_MAX_CAPACITY"
+        if market_id=="US":
+            return "US_RETURN_MAX_CAPACITY"
+        raise ValueError(f"unsupported market_id: {market_id}")
+
+    def latest_decision_run(
+        self,
+        market_id:str,
+        primary_only:bool=True,
+    )->RunRecord|None:
+        market_id=market_id.upper()
+        primary_mode=self.primary_experiment_mode(market_id) if primary_only else None
         rows=[
             r for r in self.all_runs()
             if r.market.market_id.upper()==market_id
@@ -729,6 +743,10 @@ class EvolutionLabEngine:
             and r.triaid_decision is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
             and self._complete_daily_evidence_run(r)
+            and (
+                primary_mode is None
+                or str((r.market.metadata or {}).get("experiment_mode") or "").upper()==primary_mode
+            )
         ]
         return rows[-1] if rows else None
 
@@ -736,6 +754,57 @@ class EvolutionLabEngine:
         run=self.create_pending_live_run(market_id,"OFFICIAL_EVIDENCE")
         self.execute_live(run.run_id,market_id,"OFFICIAL_EVIDENCE")
         return self.get_run(run.run_id)
+
+    def ensure_primary_reference(self,market_id:str)->dict:
+        market_id=market_id.upper()
+        primary_mode=self.primary_experiment_mode(market_id)
+        existing=self.latest_decision_run(market_id,primary_only=True)
+        if existing is not None:
+            return {
+                "market_id":market_id,
+                "primary_mode":primary_mode,
+                "created":False,
+                "run_id":existing.run_id,
+                "status":existing.status,
+                "as_of":existing.market.as_of,
+                "snapshot_id":existing.market.snapshot_id,
+                "reason":"PRIMARY_REFERENCE_ALREADY_PRESENT",
+            }
+
+        run=self.run_live_research(market_id)
+        reference=self.latest_decision_run(market_id,primary_only=True)
+        if reference is None:
+            return {
+                "market_id":market_id,
+                "primary_mode":primary_mode,
+                "created":False,
+                "run_id":run.run_id,
+                "status":run.status,
+                "as_of":run.market.as_of,
+                "snapshot_id":run.market.snapshot_id,
+                "reason":"PRIMARY_REFERENCE_NOT_EVIDENCE_READY",
+            }
+
+        with self._lock:
+            stored=self._runs.get(reference.run_id)
+            if stored is not None:
+                stored.market.metadata=dict(stored.market.metadata or {})
+                stored.market.metadata["primary_reference_bootstrap"]=True
+                stored.market.metadata["primary_reference_bootstrap_reason"]="ROUTE_MIGRATION_OR_EMPTY_PRIMARY_LEDGER"
+                stored.market.metadata["primary_reference_mode"]=primary_mode
+                self._save_run(stored)
+                reference=stored
+
+        return {
+            "market_id":market_id,
+            "primary_mode":primary_mode,
+            "created":True,
+            "run_id":reference.run_id,
+            "status":reference.status,
+            "as_of":reference.market.as_of,
+            "snapshot_id":reference.market.snapshot_id,
+            "reason":"PRIMARY_REFERENCE_CREATED",
+        }
 
     def recompute_transition_research(
         self,

@@ -308,6 +308,7 @@ try:
             as_of="2026-09-18",
             snapshot_id="SELFTEST:1",
             regime="risk_on_trend",
+            metadata={"experiment_mode":"US_RETURN_MAX_CAPACITY"},
         ),
         strategy_states=[
             state("P00_BUY_HOLD",0.12,0.18,0.02,recent=[0.001*((i%7)-3) for i in range(80)]),
@@ -407,6 +408,18 @@ try:
     cn_stress=engine.get_run(cn_stress_run.run_id)
     assert cn_stress.strategy_group.diagnostics["optimizer"]=="adversarial-worst-pool-v1"
     assert cn_stress.strategy_group.diagnostics["experiment_mode"]=="CN_WORST_POOL_RESCUE"
+
+    # Primary-reference selection must never be hijacked by a later stress run.
+    assert engine.primary_experiment_mode("CN")=="CN_RETURN_MAX_CAPACITY"
+    assert engine.primary_experiment_mode("US")=="US_RETURN_MAX_CAPACITY"
+    assert engine.latest_decision_run("CN").run_id==cn_decision.run_id
+    assert engine.latest_decision_run("CN",primary_only=False).run_id==cn_stress.run_id
+    cn_primary_receipt=engine.ensure_primary_reference("CN")
+    assert cn_primary_receipt["created"] is False
+    assert cn_primary_receipt["run_id"]==cn_decision.run_id
+    us_primary_receipt=engine.ensure_primary_reference("US")
+    assert us_primary_receipt["created"] is False
+    assert us_primary_receipt["run_id"]==decision.run_id
 
     verified=engine.submit_outcome(
         run.run_id,
