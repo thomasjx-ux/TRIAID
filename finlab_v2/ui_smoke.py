@@ -12,6 +12,10 @@ assert "triaid_weight" in html
 assert "JSON.stringify(d,null,2)" not in html
 assert "const el=id=>document.getElementById(id);" in html
 assert "UI data error:" in html
+assert "function fmtPrice(x,currency)" in html
+assert "String.fromCharCode(36)" in html
+assert "return prefix+v.toFixed(digits);" in html
+assert "return (currency==='USD'?'" not in html
 assert 'id="hoverTip"' in html
 assert 'class="has-tip"' in html
 assert "const TIP={" in html
