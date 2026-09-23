@@ -202,13 +202,24 @@ class RiskWarningSystem:
         hk_rates=cls._composite(current,"HK_RATES_EARLY_WARNING")
         bridge=cls._factor_pct(current,"HK_BRIDGE_DIFFERENTIAL_60")
         hk_us=cls._factor_pct(current,"CORR_HK_US_60")
-        stress=(current.get("features") or {}).get("CROSS_MARKET_STRESS_COUNT_10PCT")
-        stress_ratio=cls._clamp01(float(stress or 0.0)/3.0)
+        corr_mean=cls._factor_pct(current,"CROSS_MARKET_CORR_MEAN_60")
+        features=current.get("features") or {}
+        stress=features.get("CROSS_MARKET_STRESS_COUNT_10PCT")
+        stress_share=features.get("CROSS_MARKET_STRESS_SHARE_10PCT")
+        if stress_share is None:
+            available_market_count=max(
+                1,
+                sum(1 for key in features if str(key).endswith("_DRAWDOWN_STRESS_252")),
+            )
+            stress_ratio=cls._clamp01(float(stress or 0.0)/available_market_count)
+        else:
+            stress_ratio=cls._clamp01(stress_share)
+        generic_link=max(cls._clamp01(corr_mean),cls._clamp01(hk_us),cls._clamp01(bridge))
         base=(
-            0.45*cls._clamp01(systemic.get("score"))
-            +0.25*cls._clamp01(hk_rates.get("score"))
+            0.50*cls._clamp01(systemic.get("score"))
             +0.20*stress_ratio
-            +0.10*max(cls._clamp01(bridge),cls._clamp01(hk_us))
+            +0.15*generic_link
+            +0.15*cls._clamp01(hk_rates.get("score"))
         )
         if bool(systemic.get("triggered")):
             base=max(base,0.80)
@@ -228,10 +239,17 @@ class RiskWarningSystem:
                 "triggered_factors":hk_rates.get("triggered_factors") or [],
             },
             {
-                "id":"CROSS_MARKET_STRESS_COUNT_10PCT",
-                "label_zh":"三市场10%压力数量",
-                "value":stress,
+                "id":"CROSS_MARKET_STRESS_SHARE_10PCT",
+                "label_zh":"跨市场10%压力占比",
+                "value":stress_share,
+                "count":stress,
                 "normalized":stress_ratio,
+            },
+            {
+                "id":"CROSS_MARKET_CORR_MEAN_60",
+                "label_zh":"跨市场60日平均相关性",
+                "percentile":corr_mean,
+                "value":features.get("CROSS_MARKET_CORR_MEAN_60"),
             },
             {
                 "id":"HK_BRIDGE_DIFFERENTIAL_60",
