@@ -340,6 +340,7 @@ class EvolutionLabEngine:
         exclude_run_id:str|None=None,
         experiment_mode:str|None=None,
         account_id:str="GLOBAL",
+        strategy_pool_id:str="GLOBAL",
     ):
         mode=str(experiment_mode or "").upper()
         rows=[
@@ -347,6 +348,7 @@ class EvolutionLabEngine:
             if r.run_id!=exclude_run_id
             and r.market.market_id.upper()==market_id.upper()
             and str(r.account_id or "GLOBAL")==str(account_id or "GLOBAL")
+            and str(r.strategy_pool_id or "GLOBAL")==str(strategy_pool_id or "GLOBAL")
             and r.strategy_group is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
             and self._complete_daily_evidence_run(r)
@@ -370,12 +372,22 @@ class EvolutionLabEngine:
                 run_id,
                 current_mode,
                 request_account_id,
+                (
+                    request.strategy_pool.pool_id
+                    if request.strategy_pool
+                    else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL")
+                ),
             )
             previous_state_rows=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==request.market.market_id.upper()
                 and str(r.account_id or "GLOBAL")==str(request_account_id or "GLOBAL")
+                and str(r.strategy_pool_id or "GLOBAL")==str(
+                    request.strategy_pool.pool_id
+                    if request.strategy_pool
+                    else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL")
+                )
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_states
                 and self._complete_daily_evidence_run(r)
