@@ -227,7 +227,8 @@ def strategy_ids_for_market(
         row.strategy_id
         for row in build_definitions()
         if (
-            "*" in {str(x).upper() for x in row.market_support}
+            row.strategy_id in POLICY_IDS
+            or "*" in {str(x).upper() for x in row.market_support}
             or key in {str(x).upper() for x in row.market_support}
         )
     )
