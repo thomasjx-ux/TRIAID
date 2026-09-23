@@ -16,6 +16,7 @@ from .sina_us_data import SinaUSMarketDataProvider
 from .tencent_cn_data import TencentCNMarketDataProvider
 from .tushare_auction import TushareETFAuctionProvider
 from .provider_registry import ProviderRegistry
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 from .trading_calendar import official_session_phase
 
 
@@ -251,6 +252,7 @@ class MarketDataHub:
         routing.setdefault("HK:QUOTE_L1",None)
         return {
             "registry":registry,
+            "registered_markets":list(market_ids()),
             "bar_provider":{
                 "provider":"market_specific",
                 "configured":True,
@@ -286,7 +288,7 @@ class MarketDataHub:
         }
 
     def product_capabilities(self,market_id:str|None=None)->dict:
-        markets=[market_id.upper()] if market_id else ["US","CN","HK"]
+        markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         out={}
         for market in markets:
             if market=="US":
@@ -371,10 +373,31 @@ class MarketDataHub:
                     "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
                     "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
                 }
+            if market not in out:
+                def _route_product(mode:str)->dict:
+                    providers=self.registry.providers_for(f"{market}:{mode}")
+                    provider=providers[0] if providers else None
+                    return {
+                        "available":bool(provider and getattr(provider,"configured",True)),
+                        "provider":getattr(provider,"version",None) if provider else None,
+                        "grade":"research" if provider else "not_connected",
+                    }
+                out[market]={
+                    "BAR_DAILY":_route_product("DAILY"),
+                    "BAR_INTRADAY":_route_product("INTRADAY"),
+                    "QUOTE_L1":_route_product("QUOTE_L1"),
+                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "PREOPEN_EXTENDED":_route_product("PREOPEN"),
+                    "PREOPEN_AUCTION":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "SECTOR_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "STOCK_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
+                    "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
+                }
         return out
 
     def auction_shadow_probe(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
-        market=market_id.upper()
+        market=normalize_market_id(market_id)
         if market!="CN":
             return {
                 "market_id":market,
@@ -410,7 +433,7 @@ class MarketDataHub:
         }
 
     def latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
-        market=market_id.upper()
+        market=normalize_market_id(market_id)
         if market!="US":
             return {
                 "available":False,
@@ -439,9 +462,11 @@ class MarketDataHub:
         }
 
     def instrument_series(self,market_id:str,symbol:str,mode:str="DAILY")->dict:
-        market=market_id.upper();mode=mode.upper()
-        if market not in {"US","CN","HK"}:
-            raise MarketDataError(f"unsupported_market:{market}")
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise MarketDataError(f"unsupported_market:{market_id}") from exc
+        mode=mode.upper()
         if mode not in MODE_CONFIGS:
             raise MarketDataError(f"unsupported_mode:{mode}")
         cfg=MODE_CONFIGS[mode]
@@ -604,14 +629,18 @@ class MarketDataHub:
         )
 
     def capabilities(self,market_id:str|None=None)->dict:
-        markets=[market_id.upper()] if market_id else ["US","CN","HK"]
+        markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         result={}
         for market in markets:
             modes={}
             for name,cfg in MODE_CONFIGS.items():
-                supported=True
-                note=""
-                quality=cfg.quality
+                providers=self.registry.providers_for(f"{market}:{name}")
+                supported=bool(
+                    providers
+                    and any(bool(getattr(provider,"configured",True)) for provider in providers)
+                )
+                note="" if supported else "No configured provider route is registered for this market/mode."
+                quality=cfg.quality if supported else "not_connected"
                 if market=="HK" and name=="PREOPEN":
                     supported=False
                     quality="not_connected"
@@ -644,7 +673,10 @@ class MarketDataHub:
         *,
         force:bool=False,
     )->ProviderPanel:
-        market=market_id.upper()
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise MarketDataError(f"unsupported_market:{market_id}") from exc
         mode=mode.upper()
         if mode not in MODE_CONFIGS:
             raise MarketDataError(f"unsupported_mode:{mode}")
@@ -694,7 +726,7 @@ class MarketDataHub:
 
         def freshness_key(p:ProviderPanel):
             if mode=="DAILY":
-                tz=ZoneInfo("America/New_York" if market=="US" else "Asia/Hong_Kong" if market=="HK" else "Asia/Shanghai")
+                tz=ZoneInfo(MARKET_REGISTRY.get(market).timezone)
                 return datetime.fromtimestamp(int(p.source_latest_ts),tz).date().toordinal()
             return int(p.source_latest_ts)
 
