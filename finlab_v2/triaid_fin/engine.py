@@ -91,17 +91,20 @@ class EvolutionLabEngine:
             self.store.save_run(run)
 
     def _prune_manual_previews(self,max_per_market:int=5)->None:
-        for market_id in market_ids():
-            previews=sorted(
-                [
-                    r for r in self._runs.values()
-                    if r.market.market_id.upper()==market_id
-                    and str(r.account_id or "GLOBAL")==account.account_id
-                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
-                    and r.status!="FETCHING_DATA"
-                ],
-                key=lambda r:r.created_at,
+        buckets:dict[tuple[str,str,str],list[RunRecord]]={}
+        for row in self._runs.values():
+            if str((row.market.metadata or {}).get("run_scope") or "")!="MANUAL_PREVIEW":
+                continue
+            if row.status=="FETCHING_DATA":
+                continue
+            key=(
+                str(row.market.market_id).upper(),
+                str(row.account_id or "GLOBAL"),
+                str(row.strategy_pool_id or "GLOBAL"),
             )
+            buckets.setdefault(key,[]).append(row)
+        for previews in buckets.values():
+            previews.sort(key=lambda row:row.created_at)
             for row in previews[:-max_per_market]:
                 self._runs.pop(row.run_id,None)
 
