@@ -93,9 +93,12 @@ if prospective:
     check("prospective_evidence_eligible",prospective.get("evidence_eligible") is not False,prospective.get("evidence_eligible"))
     check("prospective_no_weight_action",prospective.get("applied_to_weights") is False,prospective.get("applied_to_weights"))
 
-check("strategy_count_us",len(engine.strategy_population.definitions("US"))==29,len(engine.strategy_population.definitions("US")))
-check("strategy_count_cn",len(engine.strategy_population.definitions("CN"))==33,len(engine.strategy_population.definitions("CN")))
-check("strategy_count_hk",len(engine.strategy_population.definitions("HK"))==29,len(engine.strategy_population.definitions("HK")))
+us_count=len(engine.strategy_population.strategy_cards("zh","US"))
+cn_count=len(engine.strategy_population.strategy_cards("zh","CN"))
+hk_count=len(engine.strategy_population.strategy_cards("zh","HK"))
+check("strategy_count_us",us_count==29,us_count)
+check("strategy_count_cn",cn_count==33,cn_count)
+check("strategy_count_hk",hk_count==29,hk_count)
 check("market_list_exact",s.get("markets")==["US","CN","HK"],s.get("markets"))
 
 required_ui=[
