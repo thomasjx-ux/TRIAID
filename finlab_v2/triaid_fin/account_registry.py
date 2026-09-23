@@ -7,9 +7,13 @@ from .market_registry import normalize_market_id
 
 
 class AccountRegistry:
+    version = "account-registry@0.2.0"
+    filename = "account_registry.json"
+
     def __init__(self) -> None:
         self._accounts: dict[str, AccountProfile] = {}
         self._pools: dict[str, StrategyPoolSpec] = {}
+        self._store = None
 
     def register_pool(self, pool: StrategyPoolSpec, *, replace: bool = False) -> StrategyPoolSpec:
         key = pool.pool_id.strip()
@@ -70,8 +74,30 @@ class AccountRegistry:
         denied = set(pool.denied_strategy_ids)
         return tuple(x for x in rows if x not in denied)
 
+    def load_from_store(self, store) -> dict:
+        self._store = store
+        payload = store.load_json(self.filename, default={}) or {}
+        for row in (payload.get("strategy_pools") or {}).values():
+            try:
+                self.register_pool(StrategyPoolSpec.model_validate(row), replace=True)
+            except Exception:
+                continue
+        for row in (payload.get("accounts") or {}).values():
+            try:
+                self.register_account(AccountProfile.model_validate(row), replace=True)
+            except Exception:
+                continue
+        return self.snapshot()
+
+    def persist(self) -> dict:
+        payload = self.snapshot()
+        if self._store is not None:
+            self._store.save_json(self.filename, payload)
+        return payload
+
     def snapshot(self) -> dict:
         return {
+            "version": self.version,
             "accounts": {k: v.model_dump(mode="json") for k, v in self._accounts.items()},
             "strategy_pools": {k: v.model_dump(mode="json") for k, v in self._pools.items()},
         }
@@ -94,12 +120,18 @@ ACCOUNT_REGISTRY.register_account(
 )
 
 
-def register_strategy_pool(pool: StrategyPoolSpec, *, replace: bool = False) -> StrategyPoolSpec:
-    return ACCOUNT_REGISTRY.register_pool(pool, replace=replace)
+def register_strategy_pool(pool: StrategyPoolSpec, *, replace: bool = False, persist: bool = True) -> StrategyPoolSpec:
+    row=ACCOUNT_REGISTRY.register_pool(pool, replace=replace)
+    if persist:
+        ACCOUNT_REGISTRY.persist()
+    return row
 
 
-def register_account(account: AccountProfile, *, replace: bool = False) -> AccountProfile:
-    return ACCOUNT_REGISTRY.register_account(account, replace=replace)
+def register_account(account: AccountProfile, *, replace: bool = False, persist: bool = True) -> AccountProfile:
+    row=ACCOUNT_REGISTRY.register_account(account, replace=replace)
+    if persist:
+        ACCOUNT_REGISTRY.persist()
+    return row
 
 
 def account_strategy_ids(
