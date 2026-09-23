@@ -8,7 +8,7 @@ from .store import RunStore
 
 
 class CrossMarketRiskControlExperiment:
-    version="cross-market-risk-control@0.2.0"
+    version="cross-market-risk-control@0.3.0"
     latest_file="cross_market_risk_control_latest.json"
     history_file="cross_market_risk_control_history.jsonl"
 
@@ -256,11 +256,22 @@ class CrossMarketRiskControlExperiment:
             k:v for k,v in market_errors.items()
             if str(k).startswith("HK:") and any(x in str(k) for x in ("INTRADAY","REALTIME"))
         }
+        cache=market_data_status.get("cache") or {}
+        hk_hf_cache={
+            k:v for k,v in cache.items()
+            if k in {"HK:INTRADAY","HK:REALTIME"}
+        }
+        hk_hf_degraded_cache={
+            k:list((v or {}).get("degraded_symbols") or [])
+            for k,v in hk_hf_cache.items()
+            if (v or {}).get("degraded_symbols")
+        }
         data_quality={
             "risk_evidence_coverage":warning_coverage,
             "market_data_errors":market_errors,
-            "hk_high_frequency_degraded":bool(hk_hf_errors),
+            "hk_high_frequency_degraded":bool(hk_hf_errors or hk_hf_degraded_cache),
             "hk_high_frequency_errors":hk_hf_errors,
+            "hk_high_frequency_degraded_panels":hk_hf_degraded_cache,
             "evidence_critical_daily_data_affected":False,
             "evidence_boundary":"Daily/long-history evidence remains strict. HK high-frequency sparse defensive data may degrade independently and must not be interpolated into formal evidence.",
         }
