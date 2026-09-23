@@ -119,6 +119,7 @@ def structural_checks()->list[dict]:
     check("liveness_endpoint_present",'@app.get("/health/live")' in app,None)
     check("readiness_audit_gate_present","TRIAID_RELEASE_AUDIT_REQUIRED" in app and "release_audit" in app,None)
     check("audit_status_api_present",'@app.get("/api/audit/status")' in app,None)
+    check("railway_git_identity_contract","RAILWAY_GIT_COMMIT_SHA" in app and "identity_verified" in app,None)
     check("runtime_smoke_uses_liveness",'/health/live' in post,None)
     gateway=ROOT.parent/"gateway"/"gateway.py"
     if gateway.exists():
@@ -210,7 +211,15 @@ def runtime_checks()->list[dict]:
     check("markets_exact",status.get("markets")==["US","CN","HK"],status.get("markets"))
     check("strategy_registry_count",status.get("strategy_registry_count")==33,status.get("strategy_registry_count"))
     deployment=status.get("deployment") or {}
-    check("source_revision_declared",bool(deployment.get("source_revision") or deployment.get("runtime_revision")),deployment)
+    railway_sha=deployment.get("railway_git_commit_sha")
+    declared_sha=deployment.get("declared_source_revision")
+    runtime_sha=deployment.get("runtime_revision")
+    check("railway_git_commit_sha_present",bool(railway_sha),deployment)
+    check("declared_source_revision_present",bool(declared_sha),deployment)
+    check("runtime_revision_present",bool(runtime_sha),deployment)
+    check("declared_source_matches_railway",bool(railway_sha and declared_sha and railway_sha==declared_sha),deployment)
+    check("runtime_revision_matches_railway",bool(railway_sha and runtime_sha and railway_sha==runtime_sha),deployment)
+    check("deployment_identity_verified",deployment.get("identity_verified") is True,deployment)
 
     backend=storage.get("backend") or {}
     backend_name=backend.get("backend") if isinstance(backend,dict) else backend
@@ -271,6 +280,15 @@ def finish(mode:str,rows:list[dict])->int:
         "passed_check_count":len(rows)-len(failed),
         "failed_check_count":len(failed),
         "failed_checks":[row.get("name") for row in failed],
+        "source_identity":{
+            "railway_git_commit_sha":os.getenv("RAILWAY_GIT_COMMIT_SHA","").strip() or None,
+            "declared_source_revision":(
+                os.getenv("TRIAID_DEPLOY_REVISION","").strip()
+                or os.getenv("TRIAID_DEPLOY_REV","").strip()
+                or None
+            ),
+            "runtime_revision":os.getenv("TRIAID_V2_REV","").strip() or None,
+        },
         "checks":rows,
         "completed_at_unix":time.time(),
     }
