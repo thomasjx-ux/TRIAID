@@ -76,6 +76,9 @@ assert 'id="riskTermRows"' in html
 assert 'id="riskCurveContractRows"' in html
 assert 'id="riskHistoryRows"' in html
 assert 'id="riskControlRows"' in html
+assert 'id="riskDataQuality"' in html
+assert 'id="riskDataGaps"' in html
+assert "数据完整性与降级状态" in html
 assert "renderRiskControl" in html
 assert "/api/risk-control/latest" in html
 assert "三市场风控 Shadow 实验" in html
