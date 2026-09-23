@@ -16,7 +16,7 @@ from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
-from .market_registry import market_ids
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
@@ -189,10 +189,15 @@ class EvolutionLabEngine:
 
     def create_run(self,request:RunRequest,run_id:str|None=None)->RunRecord:
         run_id=run_id or f"{request.market.market_id}-{uuid4().hex[:12]}"
+        account_id=(request.account.account_id if request.account else (request.decision_context.account_id if request.decision_context else "GLOBAL"))
+        strategy_pool_id=(request.strategy_pool.pool_id if request.strategy_pool else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL"))
         run=RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
             market=request.market,
+            account_id=account_id,
+            strategy_pool_id=strategy_pool_id,
+            decision_context=request.decision_context,
             strategy_states=list(request.strategy_states),
         )
         with self._lock:
@@ -926,14 +931,11 @@ class EvolutionLabEngine:
 
     @staticmethod
     def primary_experiment_mode(market_id:str)->str:
-        market_id=market_id.upper()
-        if market_id=="CN":
-            return "CN_RETURN_MAX_CAPACITY"
-        if market_id=="US":
-            return "US_RETURN_MAX_CAPACITY"
-        if market_id=="HK":
-            return "HK_RETURN_MAX_CAPACITY"
-        raise ValueError(f"unsupported market_id: {market_id}")
+        market=normalize_market_id(market_id)
+        mode=str(MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or "").upper()
+        if not mode:
+            raise ValueError(f"primary experiment adapter not registered for market_id: {market}")
+        return mode
 
     def latest_decision_run(
         self,
@@ -1394,7 +1396,7 @@ class EvolutionLabEngine:
             if created_at and r.created_at>created_at
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
-            and str(r.market.market_id).upper() in {"US","CN","HK"}
+            and str(r.market.market_id).upper() in set(market_ids())
             and str((r.market.metadata or {}).get("experiment_mode") or "").upper()
                 == self.primary_experiment_mode(str(r.market.market_id).upper())
             and r.run_id not in known_ids
@@ -1435,7 +1437,7 @@ class EvolutionLabEngine:
         def replay_by_market(rows:list[RunRecord])->dict:
             return {
                 market:replay([r for r in rows if str(r.market.market_id).upper()==market])
-                for market in ("US","CN","HK")
+                for market in market_ids()
             }
 
         dev_result=replay(dev)
@@ -1453,10 +1455,10 @@ class EvolutionLabEngine:
                 and result["candidate_mean"]>=result["parent_mean"]-1e-12
             )
 
-        replay_pass=all(nondegrading(dev_by_market[m],1) for m in ("US","CN","HK"))
-        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in ("US","CN","HK"))
+        replay_pass=all(nondegrading(dev_by_market[m],1) for m in market_ids())
+        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in market_ids())
         shadow_min_per_market=5
-        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN","HK"))
+        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in market_ids())
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
             and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
