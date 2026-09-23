@@ -280,7 +280,9 @@ try:
     assert providers["registry"]["chains"]["US:DAILY"]==["sina_us_primary","yahoo_bars"]
     assert providers["registry"]["chains"]["US:INTRADAY"]==["sina_us_primary","yahoo_bars"]
     assert providers["registry"]["chains"]["CN:DAILY"]==["tencent_equity_primary","yahoo_bars"]
-    assert providers["registry"]["chains"]["CN:REALTIME"]==["tencent_equity_primary","yahoo_bars"]\n    assert providers["registry"]["chains"]["HK:DAILY"]==["tencent_equity_primary","yahoo_bars"]\n    assert providers["registry"]["chains"]["HK:REALTIME"]==["tencent_equity_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["CN:REALTIME"]==["tencent_equity_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["HK:DAILY"]==["tencent_equity_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["HK:REALTIME"]==["tencent_equity_primary","yahoo_bars"]
     assert providers["registry"]["chains"]["US:PREOPEN"]==["yahoo_bars"]
     assert products["US"]["BAR_DAILY"]["available"] is True
     assert products["US"]["BAR_INTRADAY"]["available"] is True
