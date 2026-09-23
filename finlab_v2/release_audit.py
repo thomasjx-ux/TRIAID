@@ -50,6 +50,7 @@ BUILD_CASES=[
     "ui_smoke.py",
     "market_switch_fastpath_smoke.py",
     "market_ui_readability_smoke.py",
+    "calendar_sync_config_smoke.py",
     "production_smoke_contract_static.py",
     "deployment_reproducibility_smoke.py",
     "manual_preview_guard_smoke.py",
