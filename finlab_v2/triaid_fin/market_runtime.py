@@ -12,7 +12,7 @@ from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.6.0"
+    version="market-data-automation@0.7.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
@@ -233,6 +233,10 @@ class MarketDataAutomation:
                         asyncio.to_thread(self.engine.hazard_prospective_resolve),
                         timeout=max(240,self.refresh_timeout_seconds),
                     )
+                    risk_warning=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.risk_warning_run,True),
+                        timeout=max(120,self.refresh_timeout_seconds),
+                    )
                     self.hazard_research_latest={
                         "experiment_id":latent.get("experiment_id"),
                         "as_of":latent.get("as_of"),
@@ -242,6 +246,13 @@ class MarketDataAutomation:
                         "policy_curve_usable":((policy or {}).get("data_quality") or {}).get("term_curve_usable"),
                         "prospective_ledger_id":frozen.get("ledger_id"),
                         "updated_outcomes":resolved.get("updated_outcomes"),
+                        "risk_warning_id":risk_warning.get("warning_id"),
+                        "risk_pressure_index":(risk_warning.get("overall") or {}).get("risk_pressure_index"),
+                        "risk_band":(risk_warning.get("overall") or {}).get("risk_band"),
+                        "risk_20d":((risk_warning.get("horizon_estimates") or {}).get("20") or {}).get("risk_pressure_index"),
+                        "risk_60d":((risk_warning.get("horizon_estimates") or {}).get("60") or {}).get("risk_pressure_index"),
+                        "risk_120d":((risk_warning.get("horizon_estimates") or {}).get("120") or {}).get("risk_pressure_index"),
+                        "risk_250d":((risk_warning.get("horizon_estimates") or {}).get("250") or {}).get("risk_pressure_index"),
                     }
                     self.hazard_research_day=day
                     self.errors.pop("US:LATENT_HAZARD",None)
@@ -253,6 +264,8 @@ class MarketDataAutomation:
                         self.hazard_research_latest.get("current_state"),
                         self.hazard_research_latest.get("policy_curve_usable"),
                         self.hazard_research_latest.get("updated_outcomes"),
+                        self.hazard_research_latest.get("risk_pressure_index"),
+                        self.hazard_research_latest.get("risk_band"),
                     )
                 except Exception as exc:
                     self.errors["US:HAZARD_PROSPECTIVE"]=f"{type(exc).__name__}:{exc}"
