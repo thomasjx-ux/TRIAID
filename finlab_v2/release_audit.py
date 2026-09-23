@@ -322,7 +322,7 @@ def runtime_checks()->list[dict]:
         ):
             check("ui_marker:"+marker,marker in home,None if marker in home else "missing")
         check("ui_no_raw_json_dump","JSON.stringify(d,null,2)" not in home,None)
-        for marker in ('data-clock-market="US"','data-clock-market="CN"','data-clock-market="HK"','id="marketHero"'):
+        for marker in ('id="homeSummary"','id="homeSummaryPurpose"','id="homeSummaryDecision"','id="homeSummaryValidation"','id="homeSummaryRisk"','data-clock-market="US"','data-clock-market="CN"','data-clock-market="HK"','id="marketHero"'):
             check("ui_market_identity_marker:"+marker,marker in home,None if marker in home else "missing")
         risk_pos=home.find('id="riskWarningPanel"')
         specialty_positions=[
