@@ -54,6 +54,7 @@ BUILD_CASES=[
     "ui_copy_quality_smoke.py",
     "information_architecture_smoke.py",
     "all_market_page_layout_smoke.py",
+    "compact_status_overview_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
     "runtime_env_config_smoke.py",
