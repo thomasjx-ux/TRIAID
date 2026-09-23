@@ -524,8 +524,11 @@ class LatentHazardExperiment:
         for market,label in registered_primary.items():
             row=(indexes.get(market) or {}).get(label)
             if row is None:
-                raise RuntimeError(f"primary_index_unavailable:{market}:{label}:{errors}")
+                errors[f"{market}:{label}:PRIMARY"]="primary_index_unavailable"
+                continue
             primary[market]=row
+        if len(primary)<2:
+            raise RuntimeError(f"insufficient_primary_markets:{sorted(primary)}:{errors}")
 
         dates,prices=self._aligned(primary)
         if len(dates)<2000:
