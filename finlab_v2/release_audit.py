@@ -57,6 +57,7 @@ BUILD_CASES=[
     "compact_status_overview_smoke.py",
     "empty_posterior_layout_smoke.py",
     "all_table_surface_smoke.py",
+    "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
     "runtime_env_config_smoke.py",
@@ -101,6 +102,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/live-indicators/US",
     "/api/market-data/live-indicators/CN",
     "/api/market-data/live-indicators/HK",
+    "/api/experiments/cn/prospective/status",
     "/",
 ]
 
@@ -328,6 +330,12 @@ def runtime_checks()->list[dict]:
     }
     check("risk_table_three_market_rows",isinstance(risk_table_summary["three_market_rows"],int) and risk_table_summary["three_market_rows"]>=3,risk_table_summary)
     print("TRIAID_TABLE_RUNTIME_AUDIT_SUMMARY",json.dumps({"markets":table_runtime_summary,"risk":risk_table_summary},ensure_ascii=False,separators=(",",":")),flush=True)
+
+    cn_prospective_status=payloads.get("/api/experiments/cn/prospective/status") or {}
+    check("cn_prospective_status_payload",isinstance(cn_prospective_status,dict),type(cn_prospective_status).__name__)
+    check("cn_prospective_protocol_version",str(cn_prospective_status.get("version") or "")=="cn-prospective-controls@0.3.0",cn_prospective_status)
+    check("cn_prospective_mode_is_auxiliary",str(cn_prospective_status.get("experiment_mode") or "")=="CN_WORST_POOL_RESCUE",cn_prospective_status)
+    print("TRIAID_CN_PROSPECTIVE_STATUS",json.dumps(cn_prospective_status,ensure_ascii=False,separators=(",",":")),flush=True)
 
     deployment=status.get("deployment") or {}
     railway_sha=deployment.get("railway_git_commit_sha")
