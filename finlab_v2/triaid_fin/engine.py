@@ -1406,6 +1406,7 @@ class EvolutionLabEngine:
             recovery=self.recovery_wave_ledger.daily_report("CN")
             if recovery:
                 summary["recovery_wave"]=recovery
+            summary["prospective_experiment_status"]=self.prospective_experiment.status()
             prospective=self.prospective_experiment.daily_report()
             if prospective:
                 try:
