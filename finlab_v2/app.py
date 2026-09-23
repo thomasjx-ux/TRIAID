@@ -2496,6 +2496,94 @@ function riskScaleTip(score,label){
    ? '用途：决定风险层需要常规观察、加密监控、专项复核、Shadow收紧还是人工冻结升级。这不是股灾概率，也不会单独触发自动交易。'
    : 'Use: decide whether the risk layer calls for normal monitoring, tighter monitoring, focused review, shadow tightening or a manual promotion freeze. This is not crash probability and does not independently trigger trading.');
 }
+function riskDriverSummary(d){
+ if(!d||typeof d!=='object')return '';
+ const name=lang==='zh'?(d.label_zh||d.id||'-'):(d.id||d.label_zh||'-');
+ const bits=[];
+ if(d.triggered!==undefined)bits.push((lang==='zh'?'触发 ':'triggered ')+(d.triggered?'YES':'NO'));
+ if(d.historically_statistically_supported!==undefined)bits.push((lang==='zh'?'历史支持 ':'historical support ')+(d.historically_statistically_supported?'YES':'NO'));
+ if(d.state)bits.push((lang==='zh'?'状态 ':'state ')+d.state);
+ if(d.score!==undefined&&d.score!==null&&Number.isFinite(Number(d.score)))bits.push((lang==='zh'?'强度 ':'score ')+(Number(d.score)*100).toFixed(0)+'/100');
+ if(d.percentile!==undefined&&d.percentile!==null&&Number.isFinite(Number(d.percentile)))bits.push((lang==='zh'?'历史分位 ':'hist pct ')+(Number(d.percentile)*100).toFixed(0)+'%');
+ if(d.value!==undefined&&d.value!==null&&Number.isFinite(Number(d.value)))bits.push((lang==='zh'?'当前值 ':'value ')+Number(d.value).toFixed(Math.abs(Number(d.value))<1?4:2));
+ if(d.alert_count!==undefined&&d.alert_count!==null)bits.push((lang==='zh'?'命中 ':'hits ')+d.alert_count+'/'+(d.min_hits??'-'));
+ if(d.count!==undefined&&d.count!==null)bits.push((lang==='zh'?'数量 ':'count ')+d.count);
+ if(d.usable!==undefined)bits.push((lang==='zh'?'可用 ':'usable ')+(d.usable?'YES':'NO'));
+ return name+(bits.length?' · '+bits.join(' · '):'');
+}
+function riskSubscoreTip(key,score,report){
+ const labels={
+  structural:lang==='zh'?'长期结构脆弱':'Structural vulnerability',
+  rates_policy:lang==='zh'?'利率/政策压力':'Rates / policy pressure',
+  transmission:lang==='zh'?'跨市场传导':'Cross-market transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'Credit / liquidity',
+  market_deterioration:lang==='zh'?'价格结构恶化':'Market deterioration'
+ };
+ const impacts={
+  structural:lang==='zh'?'影响：主要抬高120日和250日中长期风险，用来判断当前高收益/高估值环境是否缺少长期安全垫。':'Impact: mainly raises 120d/250d risk and tests whether the current high-return/high-valuation regime lacks a long-run cushion.',
+  rates_policy:lang==='zh'?'影响：这是利率与政策预期重新定价压力；高位时重点影响久期、估值和高杠杆资产，是当前是否需要加强Shadow防御测试的重要输入。':'Impact: captures rates/policy repricing pressure; high readings matter most for duration, valuation and levered assets and determine whether shadow defensive tests should be strengthened.',
+  transmission:lang==='zh'?'影响：判断压力是否已经从单一市场扩散成三市场联动。单市场风险高但传导低，和系统性扩散是两种完全不同的状态。':'Impact: tests whether stress has spread from one market into a three-market transmission state. High single-market stress with low transmission is materially different from systemic spread.',
+  credit_liquidity:lang==='zh'?'影响：判断风险是否开始进入融资、信用利差和市场流动性层。这个维度上升时，纸面可交易策略更容易出现容量和成交折损。':'Impact: tests whether stress has reached funding, credit spreads and market liquidity. Rising readings increase the chance that paper strategies lose capacity or execution quality.',
+  market_deterioration:lang==='zh'?'影响：反映三市场价格本身是否已经出现回撤、负动量和波动恶化，是“宏观风险是否已经落到价格上”的确认层。':'Impact: reflects whether drawdown, negative momentum and volatility deterioration are already visible in prices; it is the confirmation layer for whether macro stress has reached markets.'
+ };
+ const next={
+  structural:lang==='zh'?'下一步：看长期拉伸是否持续，以及多年下行确认是否开始增强；只有两者持续改善，才视为结构风险真正下降。':'Next: watch whether long-run stretch persists and whether secular-downturn confirmation strengthens; structural risk only truly eases when both improve.',
+  rates_policy:lang==='zh'?'下一步：重点盯2Y美债90日变化、Fed Funds期货30日重定价、MOVE和政策重定价联合状态。若这些同步回落，风险可降级；若继续高位并叠加跨市场传导/信用压力，则升级。':'Next: watch 2Y 90d moves, 30d Fed Funds futures repricing, MOVE and the policy-repricing composite. Synchronous normalization supports de-escalation; persistence plus transmission/credit stress supports escalation.',
+  transmission:lang==='zh'?'下一步：看跨市场相关性、压力市场占比和港股桥梁效应是否继续增强。若相关性回落且压力不扩散，可降级；若多市场同步恶化，则升级。':'Next: watch cross-market correlation, stressed-market share and the HK bridge. Falling correlation without spread supports de-escalation; synchronized deterioration supports escalation.',
+  credit_liquidity:lang==='zh'?'下一步：看信用利差、金融条件和流动性指标是否从“未确认”转为同步恶化。没有信用/流动性确认时，不把宏观压力直接等同于系统性风险。':'Next: watch whether credit spreads, financial conditions and liquidity shift from unconfirmed to synchronized deterioration. Without credit/liquidity confirmation, do not equate macro pressure with systemic risk.',
+  market_deterioration:lang==='zh'?'下一步：看US/CN/HK的回撤、63日动量和波动是否从局部变成一致恶化。价格层若改善，即使宏观压力仍高，也说明传导尚未完全落地。':'Next: watch whether US/CN/HK drawdown, 63d momentum and volatility move from local to synchronized deterioration. Price improvement despite macro stress means transmission is not fully realized.'
+ };
+ const detail=((report||{}).detail||{})[key]||[];
+ const evidence=Array.isArray(detail)?detail.map(riskDriverSummary).filter(Boolean).slice(0,5):[];
+ const lines=[
+  (labels[key]||key)+' '+Number(score).toFixed(1)+'/100 · '+riskBandText(score),
+  (lang==='zh'?'为什么：':'Why: ')+(evidence.length?evidence.join('；'):(lang==='zh'?'当前没有可展示的分项证据。':'No component evidence is available.')),
+  impacts[key]||'',
+  next[key]||'',
+  lang==='zh'?'边界：这是风险证据层，不是亏损概率；不会单独触发自动交易或直接修改生产权重。':'Boundary: this is an evidence-pressure layer, not loss probability; it cannot independently trigger trading or production-weight changes.'
+ ].filter(Boolean);
+ return lines.join(String.fromCharCode(10));
+}
+function riskOverallTip(score,report){
+ const drivers=(report?.main_drivers||[]).map(x=>{
+  const name=lang==='zh'?(x.label_zh||x.id):x.id;
+  const sev=x.severity==null?'':(' '+Math.round(Number(x.severity)*100)+'/100');
+  return name+sev;
+ }).slice(0,4);
+ const blockers=(report?.missing_confirmations||[]).map(x=>lang==='zh'?(x.label_zh||x.id):x.id).slice(0,3);
+ const de=(report?.deescalation_conditions||[]).map(x=>lang==='zh'?(x.meaning_zh||x.condition):x.condition).slice(0,3);
+ const lines=[
+  (lang==='zh'?'综合风险 ':'Overall risk ')+Number(score).toFixed(1)+'/100 · '+riskBandText(score),
+  (lang==='zh'?'主要推高因素：':'Main drivers: ')+(drivers.length?drivers.join('；'):'-'),
+  (lang==='zh'?'尚未确认：':'Still unconfirmed: ')+(blockers.length?blockers.join('；'):'-'),
+  (lang==='zh'?'怎么用：看“推高因素”是否继续扩散，同时看“尚未确认项”会不会转为确认；只有两边同时恶化，系统性风险证据才真正增强。':'How to use: watch whether drivers broaden and whether currently unconfirmed dimensions become confirmed; systemic evidence strengthens only when both happen.'),
+  (lang==='zh'?'解除看什么：':'De-escalation: ')+(de.length?de.join('；'):'-'),
+  lang==='zh'?'边界：不自动改生产权重，也不是股灾概率。':'Boundary: does not automatically change production weights and is not crash probability.'
+ ];
+ return lines.join(String.fromCharCode(10));
+}
+function riskHorizonTip(h,entry,report){
+ const n=Number(entry?.risk_pressure_index);
+ const weights=entry?.weights||{};
+ const ss=report?.subscores||{};
+ const names={
+  structural:lang==='zh'?'结构':'structural',
+  rates_policy:lang==='zh'?'利率/政策':'rates/policy',
+  transmission:lang==='zh'?'传导':'transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'credit/liquidity',
+  market_deterioration:lang==='zh'?'价格恶化':'market deterioration'
+ };
+ const contributions=Object.keys(weights).map(k=>{
+  const w=Number(weights[k]||0),s=Number((ss[k]||{}).score_0_100||0);
+  return {k,c:w*s,w,s};
+ }).sort((a,b)=>b.c-a.c).slice(0,3);
+ const lines=[
+  (lang==='zh'?h+'日风险 ':h+'d risk ')+n.toFixed(1)+'/100 · '+riskBandText(n),
+  (lang==='zh'?'这段风险主要由：':'Main contributors: ')+contributions.map(x=>(names[x.k]||x.k)+' '+x.s.toFixed(1)+'/100 × '+Math.round(x.w*100)+'%').join('；'),
+  lang==='zh'?'怎么用：不同期限权重不同，所以不要拿20日和250日直接横向比较高低；要看哪个风险源在该期限占主导，再决定追踪短期价格、政策重定价还是长期结构。':'How to use: horizon weights differ, so do not compare 20d and 250d mechanically; identify which source dominates that horizon and monitor short-term price stress, policy repricing or long-run structure accordingly.'
+ ];
+ return lines.join(String.fromCharCode(10));
+}
 function setRiskScoreNode(id,score,suffix,label,baseClass=''){
  const node=el(id),n=Number(score);
  if(!node)return;
@@ -2637,16 +2725,20 @@ function renderRiskWarning(report){
   : '<span>Color scale:</span><span class="risk-band low">LOW 0–24.9</span><span class="risk-band elevated">ELEVATED 25–44.9</span><span class="risk-band high">HIGH 45–64.9</span><span class="risk-band severe">SEVERE 65–79.9</span><span class="risk-band critical">CRITICAL 80–100</span>';
  el('riskWarningMeta').textContent=(lang==='zh'?'状态日期 ':'As of ')+(report.as_of||'-')+' · '+(lang==='zh'?'预警ID ':'Warning ')+(report.warning_id||'-');
  setRiskScoreNode('riskOverallScore',score,'',lang==='zh'?'当前综合风险':'Current overall risk','risk-score');
+ const overallTip=riskOverallTip(score,report);
+ el('riskOverallScore').dataset.tip=overallTip;
  el('riskOverallBand').textContent=bandText;
  el('riskOverallBand').className='risk-band '+bandClass+' has-tip';
- el('riskOverallBand').dataset.tip=riskScaleTip(score,lang==='zh'?'当前综合风险':'Current overall risk');
+ el('riskOverallBand').dataset.tip=overallTip;
  setRiskScoreNode('riskOverallMini',score,' / 100',lang==='zh'?'当前综合风险':'Current overall risk','rv');
+ el('riskOverallMini').dataset.tip=overallTip;
  const conf=report.confidence||{};
  el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples_tested??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
  ['20','60','120','250'].forEach(h=>{
    const x=hs[h]||{};
    const n=Number(x.risk_pressure_index);
    setRiskScoreNode('risk'+h,n,'/100',(lang==='zh'?h+'日风险压力':h+'d risk pressure'),'rv');
+   el('risk'+h).dataset.tip=riskHorizonTip(h,x,report);
    const hBand=String(x.risk_band||riskBandText(n)).toLowerCase();
    el('risk'+h+'Band').textContent=lang==='zh'?(x.risk_band_zh||x.risk_band||riskBandText(n)):(x.risk_band||riskBandText(n));
    el('risk'+h+'Band').className='small risk-band-inline '+hBand;
@@ -2662,6 +2754,7 @@ function renderRiskWarning(report){
  Object.entries(subMap).forEach(([k,id])=>{
    const n=Number((ss[k]||{}).score_0_100);
    setRiskScoreNode(id,n,'/100',subLabels[k],'');
+   el(id).dataset.tip=riskSubscoreTip(k,n,report);
  });
  el('riskOverallLabel').textContent=lang==='zh'?'当前综合风险':'Current overall risk';
  el('riskStructuralLabel').textContent=lang==='zh'?'长期结构脆弱':'Structural vulnerability';
