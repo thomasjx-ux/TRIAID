@@ -127,10 +127,18 @@ assert "previewRunIds" in html
 assert "&run_id=" in html
 assert "cards.filter(x=>x.selected)" in html
 assert "cards.filter(x=>!x.selected)" in html
+assert html.index('id="stageMarket"') < html.index('id="stageDecision"')
+assert html.index('id="stageDecision"') < html.index('id="stageValidation"')
+assert html.index('id="stageValidation"') < html.index('id="stageRoute"')
+assert html.index('id="stageRoute"') < html.index('id="stageRisk"')
+assert html.index('id="stageRisk"') < html.index('id="stageEvolution"')
+assert html.index('id="dailyTitle"') < html.index('id="liveTitle"')
 assert html.index('id="liveTitle"') < html.index('id="strategyTitle"')
-assert html.index('id="strategyTitle"') < html.index('id="dailyTitle"')
-assert html.index('id="dailyTitle"') < html.index('id="overviewTitle"')
-assert html.index('id="overviewTitle"') < html.index('id="curveTitle"')
+assert html.index('id="strategyTitle"') < html.index('id="resultTitle"')
+assert html.index('id="resultTitle"') < html.index('id="curveTitle"')
+assert html.index('id="curveTitle"') < html.index('id="riskWarningPanel"')
+assert html.index('id="riskWarningPanel"') < html.index('id="evolutionTitle"')
+assert html.index('id="evolutionTitle"') < html.index('id="systemOpsPanel"')
 
 s=status()
 assert s["architecture_version"]=="fin-evolution-lab@0.14.0"
