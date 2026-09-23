@@ -31,7 +31,8 @@ PRIMARY_INDEX={
     "CN":"SHANGHAI_COMPOSITE",
     "HK":"HANG_SENG",
 }
-DATA_SOURCE_REVISION="market-provider-split@0.1.0"\nCANONICAL_EPISODES={
+DATA_SOURCE_REVISION="market-provider-split@0.1.0"
+CANONICAL_EPISODES={
     "ASIAN_FINANCIAL_CRISIS_1997_98":{
         "start":"1997-06-01","end":"1999-01-31",
         "description":"Asian financial crisis and regional equity stress.",
