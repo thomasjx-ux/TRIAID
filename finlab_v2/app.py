@@ -1768,6 +1768,42 @@ function statusTip(status){
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
+const uiFetchCache=new Map();
+let refreshSeq=0,liveSeq=0;
+async function jsonCached(url,ttlMs=12000){
+ const now=Date.now(),hit=uiFetchCache.get(url);
+ if(hit&&hit.data!==undefined&&now-hit.at<ttlMs)return hit.data;
+ if(hit&&hit.promise)return hit.promise;
+ const prior=hit&&hit.data!==undefined?hit.data:undefined;
+ const priorAt=hit?.at||0;
+ const promise=json(url).then(data=>{
+   uiFetchCache.set(url,{data,at:Date.now(),promise:null});
+   return data;
+ }).catch(e=>{
+   if(prior!==undefined)uiFetchCache.set(url,{data:prior,at:priorAt,promise:null});
+   else uiFetchCache.delete(url);
+   throw e;
+ });
+ uiFetchCache.set(url,{data:prior,at:priorAt,promise});
+ return promise;
+}
+async function jsonOrNullCached(url,ttlMs=12000){try{return await jsonCached(url,ttlMs)}catch(e){return null}}
+function clearMarketCache(m){
+ for(const key of [...uiFetchCache.keys()]){
+   if(key.includes('market_id='+m)||key.includes('/'+m)||key==='/api/status'||key==='/api/evolution'||key.includes('/api/risk-'))uiFetchCache.delete(key);
+ }
+}
+function warmMarketCache(m){
+ const urls=[
+   '/api/daily?market_id='+m,
+   '/api/strategies?market_id='+m+'&lang='+lang,
+   '/api/curves?market_id='+m,
+   '/api/runs?market_id='+m+'&limit=100',
+   '/api/market-data/strategy-context/'+m
+ ];
+ urls.forEach(url=>jsonCached(url,url.includes('strategy-context')?60000:15000).catch(()=>null));
+}
+function warmAllMarkets(){['US','CN','HK'].forEach(warmMarketCache)}
 function localClockFromEpoch(ts){
  if(ts===null||ts===undefined)return '-';
  try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
@@ -1785,13 +1821,13 @@ function setPulse(id,on,warn=false){
 }
 async function refreshLiveWindows(){
  const m=el('market').value;
+ const seq=++liveSeq;
  try{
-  const [idx,act,strategyCtx]=await Promise.all([
-   json('/api/market-data/live-indicators/'+m),
-   json('/api/market-data/activity/'+m+'?limit=80'),
-   json('/api/market-data/strategy-context/'+m)
+  const [idx,act]=await Promise.all([
+   jsonCached('/api/market-data/live-indicators/'+m,2000),
+   jsonCached('/api/market-data/activity/'+m+'?limit=80',2500)
   ]);
-  strategyMarketContext[m]=strategyCtx;
+  if(seq!==liveSeq||el('market').value!==m)return;
   const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
   setPulse('marketPulse',fresh,idx.available&&!fresh);
   el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
@@ -1819,7 +1855,14 @@ async function refreshLiveWindows(){
     '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
     esc(e.message||'')+'</div>';
   }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+
+  // Strategy context is tooltip enrichment only. It must never block the
+  // visible market switch path.
+  jsonCached('/api/market-data/strategy-context/'+m,60000)
+    .then(ctx=>{strategyMarketContext[m]=ctx;})
+    .catch(()=>{});
  }catch(e){
+  if(seq!==liveSeq||el('market').value!==m)return;
   setPulse('marketPulse',false,true);setPulse('activityPulse',false,true);
   el('indexMeta').textContent='Live data error: '+e.message;
   el('scheduleMeta').textContent='Activity error: '+e.message;
@@ -1836,7 +1879,7 @@ function applyMarketScope(){
      : 'Hong Kong now has an independent strategy research route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded independently. Research only; no broker execution.')
   : '';
 }
-function onMarketChange(){applyMarketScope();refreshAll();refreshLiveWindows()}
+function onMarketChange(){applyMarketScope();warmMarketCache(el('market').value);refreshAll();refreshLiveWindows()}
 async function runNow(){
  const m=el('market').value;
  const x=await json('/api/live/run/'+m,{method:'POST'});
@@ -1854,6 +1897,7 @@ async function pollRun(id,market){
    const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
    if(!['CREATED','FETCHING_DATA'].includes(x.status)){
     if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
+    clearMarketCache(market);
     await refreshAll();
     return;
    }
@@ -2187,16 +2231,18 @@ function renderRecoveryWave(report){
 }
 async function refreshAll(){
  const m=el('market').value;
+ const seq=++refreshSeq;
  const previewId=previewRunIds[m];
  try{
   const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
   const [s,d,cards,curves,evo,runs,previewRun,riskWarning,riskControl]=await Promise.all([
-   json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
-   json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
+   jsonCached('/api/status',15000),jsonCached('/api/daily?market_id='+m,12000),jsonCached(cardsUrl,12000),
+   jsonCached('/api/curves?market_id='+m,12000),jsonCached('/api/evolution',15000),jsonCached('/api/runs?market_id='+m+'&limit=100',12000),
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null),
-   jsonOrNull('/api/risk-warning/latest'),
-   jsonOrNull('/api/risk-control/latest')
+   jsonOrNullCached('/api/risk-warning/latest',10000),
+   jsonOrNullCached('/api/risk-control/latest',10000)
   ]);
+  if(seq!==refreshSeq||el('market').value!==m)return;
   const isCN=m==='CN';
   const isHK=m==='HK';
   const primaryMode=isCN?'CN_RETURN_MAX_CAPACITY':isHK?'HK_RETURN_MAX_CAPACITY':null;
@@ -2327,7 +2373,7 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows()}
-applyText();applyMarketScope();refreshAll();refreshLiveWindows();setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
+applyText();applyMarketScope();refreshAll();refreshLiveWindows();setTimeout(warmAllMarkets,300);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
 </script>
 </body>
 </html>
