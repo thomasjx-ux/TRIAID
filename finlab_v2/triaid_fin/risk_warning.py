@@ -281,6 +281,8 @@ class RiskWarningSystem:
         for market in market_ids():
             dd_name=f"{market}_DRAWDOWN_STRESS_252"
             mom_name=f"{market}_NEGATIVE_MOMENTUM_63"
+            if dd_name not in features and mom_name not in features and mom_name not in pcts:
+                continue
             dd=float(features.get(dd_name) or 0.0)
             mom=float(pcts.get(mom_name) or 0.0)
             dds.append(cls._clamp01(dd/0.20))
