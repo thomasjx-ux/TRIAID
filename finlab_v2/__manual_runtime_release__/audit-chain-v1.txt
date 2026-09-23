@@ -1,7 +1,7 @@
 TRIAID FIN canonical audit release trigger
-revision=c4afa71eafe0f8c95730ab2070c990d056d7f003
-purpose=N-market multi-account architecture + unified Railway/GitHub release audit
+revision=83a820925758631e7e4bc004fb2ee59d3051663a
+purpose=N-market multi-account architecture + extensible runtime audit
 watch_path=/finlab_v2/__manual_runtime_release__/**
 runtime_identity=RAILWAY_GIT_COMMIT_SHA_authoritative
-trigger_sequence=3
+trigger_sequence=4
 date=2026-09-23
