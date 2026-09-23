@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - backend-full-audit-20260921
+      - arch/n-market-multi-account-ci2
     paths:
       - "finlab_v2/**"
       - ".github/workflows/finlab-v2-audit.yml"
