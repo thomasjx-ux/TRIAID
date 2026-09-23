@@ -63,7 +63,7 @@ checks={
         "deescalation_conditions",
     )),
     "risk_footer_tells_reading_order":"先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日" in app,
-    "hk_scope_help_is_comparison_specific":"不能拿美股/A股权重或结果横向替代" in app,
+    "hk_scope_help_is_comparison_specific":"不能借用美股/A股权重、容量或结果补齐港股结论" in app,
 }
 
 failed=[k for k,v in checks.items() if not v]
