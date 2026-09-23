@@ -20,7 +20,7 @@ class TencentCNMarketDataProvider:
     """
 
     name="tencent-cn-hk-market-data"
-    version="tencent-cn-hk-market-data@0.3.0"
+    version="tencent-cn-hk-market-data@0.4.0"
 
     @property
     def configured(self)->bool:
@@ -49,7 +49,7 @@ class TencentCNMarketDataProvider:
         req=urllib.request.Request(
             url+"?"+query,
             headers={
-                "User-Agent":"Mozilla/5.0 TRIAID-FIN-V2-TENCENT/0.3",
+                "User-Agent":"Mozilla/5.0 TRIAID-FIN-V2-TENCENT/0.4",
                 "Referer":"https://gu.qq.com/",
                 "Accept":"application/json,text/plain,*/*",
             },
@@ -142,6 +142,48 @@ class TencentCNMarketDataProvider:
             "volume":[r[2] for r in rows],
         }
 
+    @staticmethod
+    def _aggregate_one_minute_to_five(
+        rows:list[tuple[int,float,float]],
+        tz:ZoneInfo,
+    )->list[tuple[int,float,float]]:
+        """Build strict completed 5-minute bars from 1-minute observations.
+
+        Buckets are labelled by the conventional 5-minute end clock
+        (09:31..09:35 -> 09:35, ..., 11:56..12:00 -> 12:00).
+        A bucket is emitted only when it contains five distinct source minutes.
+        The isolated 09:30 opening print therefore never becomes a fake 5m bar.
+        """
+        buckets={}
+        for stamp,price,volume in rows:
+            dt=datetime.fromtimestamp(int(stamp),tz)
+            minute_of_day=dt.hour*60+dt.minute
+            end_minute=((minute_of_day+4)//5)*5
+            end_day=dt.date()
+            if end_minute>=24*60:
+                end_minute-=24*60
+                from datetime import timedelta
+                end_day=end_day+timedelta(days=1)
+            end_dt=datetime(
+                end_day.year,end_day.month,end_day.day,
+                end_minute//60,end_minute%60,
+                tzinfo=tz,
+            )
+            key=int(end_dt.timestamp())
+            bucket=buckets.setdefault(key,{})
+            bucket[int(stamp)]=(float(price),max(0.0,float(volume)))
+
+        out=[]
+        for end_ts,points in sorted(buckets.items()):
+            if len(points)!=5:
+                continue
+            ordered=sorted(points.items())
+            close=float(ordered[-1][1][0])
+            volume=sum(float(item[1][1]) for item in ordered)
+            if close>0 and math.isfinite(close):
+                out.append((int(end_ts),close,max(0.0,volume)))
+        return out
+
     def _five_minute(self,symbol:str,min_points:int,timeout:int):
         code=self._symbol(symbol)
         payload=self._get(
@@ -153,17 +195,42 @@ class TencentCNMarketDataProvider:
         rows=node.get("m5") or []
         tz=self._tz(symbol)
         parsed=[]
+        future_cutoff=int(datetime.now(tz).timestamp())+90
         for raw in rows:
             if not isinstance(raw,list) or len(raw)<6:
                 continue
             try:
                 price=float(raw[2]);vol=float(raw[5] or 0.0)
                 stamp=self._minute_ts(str(raw[0]),tz)
+                if stamp>future_cutoff:
+                    continue
             except Exception:
                 continue
             if price>0 and math.isfinite(price):
                 parsed.append((stamp,price,max(0.0,vol)))
-        parsed.sort(key=lambda x:x[0])
+
+        # HK native m5 can lag the minute feed. Preserve native historical m5,
+        # but replace today's completed bars with strict aggregation from the
+        # same Tencent 1m source used by REALTIME. This keeps provider/time
+        # semantics consistent and avoids a cross-provider Yahoo fallback.
+        if self._is_hk(symbol):
+            one_minute=self._one_minute(symbol,1,timeout)
+            derived=self._aggregate_one_minute_to_five(one_minute,tz)
+            if derived:
+                today=datetime.now(tz).date()
+                parsed=[
+                    row for row in parsed
+                    if datetime.fromtimestamp(int(row[0]),tz).date()!=today
+                ]
+                parsed.extend(
+                    row for row in derived
+                    if datetime.fromtimestamp(int(row[0]),tz).date()==today
+                )
+
+        # Deduplicate timestamps deterministically with the most recently
+        # assembled row winning (derived HK bars override native current-day m5).
+        by_ts={int(row[0]):row for row in parsed}
+        parsed=[by_ts[key] for key in sorted(by_ts)]
         if len(parsed)<min_points:
             raise TencentCNDataError(f"insufficient_5m:{symbol}:{len(parsed)}<{min_points}")
         return parsed
