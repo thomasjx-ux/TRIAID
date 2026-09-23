@@ -929,8 +929,16 @@ canvas{width:100%;height:270px;background:#fff;border:1px solid var(--line);bord
 .curve-plot-wrap{margin-top:0}
 .tablewrap{overflow:auto;max-height:690px;border:1px solid var(--line);border-radius:12px;background:#fff}
 table{width:100%;border-collapse:collapse;background:#fff}
+table.table-medium{min-width:820px}
+table.table-wide{min-width:1080px}
+table.table-xwide{min-width:1480px}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #edf0f3;font-size:13px;vertical-align:top}
-th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fbff}.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef1f5;font-size:11px}
+th{background:#f8fafc;position:sticky;top:0;z-index:2}
+table.freeze-first th:first-child,table.freeze-first td:first-child{position:sticky;left:0;z-index:1;background:#fff;box-shadow:1px 0 0 #edf0f3}
+table.freeze-first th:first-child{z-index:3;background:#f8fafc}
+table.freeze-first tr.selected td:first-child{background:#f6fbff}
+.table-empty td,.table-empty-cell{color:#748091;background:#fbfcfe!important;font-size:12px;line-height:1.45;padding:12px 14px!important}
+.selected{background:#f6fbff}.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef1f5;font-size:11px}
 .num{white-space:nowrap;font-variant-numeric:tabular-nums}.reason{min-width:320px;line-height:1.45}.strategy-name{font-weight:650}.strategy-hover{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#b8c2cf;text-underline-offset:3px}.market-tip-icon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;border:1px solid #9aa8ba;border-radius:50%;font-size:10px;font-weight:700;color:#5f6f84;cursor:help;vertical-align:1px;background:#fff}
 .delta{font-weight:700}.corebox{display:flex;gap:12px;flex-wrap:wrap}.corebox .card{flex:1;min-width:240px}
 .small{font-size:12px}.nowrap{white-space:nowrap}
@@ -2139,6 +2147,13 @@ function tableHeaderTipMeta(label){
 }
 function tableHeaderTip(label){return tableHeaderTipMeta(label).text}
 function applyTableHeaderTooltips(root=document){
+ root.querySelectorAll('table').forEach(table=>{
+  const count=table.querySelectorAll('thead th').length;
+  table.classList.remove('table-medium','table-wide','table-xwide','freeze-first');
+  if(count>=10)table.classList.add('table-xwide','freeze-first');
+  else if(count>=8)table.classList.add('table-wide','freeze-first');
+  else if(count>=6)table.classList.add('table-medium');
+ });
  root.querySelectorAll('table th').forEach(th=>{
   const label=(th.dataset.headerLabel||th.textContent||'').trim();
   if(!label)return;
@@ -2153,7 +2168,27 @@ function applyTableHeaderTooltips(root=document){
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function fmtMoney(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return '¥'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function fmtUsd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return "$"+v.toLocaleString(undefined,{maximumFractionDigits:0})}
-function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return (v>0?'+':'')+v.toFixed(2)+'%'}
+function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return Number.isFinite(v)?((v>0?'+':'')+v.toFixed(2)+'%'):'-'}
+function fmtRiskWithUnit(x,unit,digits=4){const n=Number(x);return Number.isFinite(n)?n.toFixed(digits)+(unit||''):'—'}
+function tableEmptyRow(colspan,zh,en){return '<tr class="table-empty"><td class="table-empty-cell" colspan="'+colspan+'">'+esc(lang==='zh'?zh:en)+'</td></tr>'}
+function lifecycleLabel(status){
+ const s=String(status||'').toUpperCase();
+ const zh={ACTIVE:'正式',SHADOW:'Shadow验证',REDUCED:'降权',FROZEN:'冻结',CANDIDATE:'候选',RESEARCH:'研究',RETIRED:'退出',PREVIEW_READY:'预览'};
+ const en={ACTIVE:'Active',SHADOW:'Shadow',REDUCED:'Reduced',FROZEN:'Frozen',CANDIDATE:'Candidate',RESEARCH:'Research',RETIRED:'Retired',PREVIEW_READY:'Preview'};
+ return (lang==='zh'?zh:en)[s]||s||'—';
+}
+function riskStageLabel(stage){
+ const s=String(stage||'').toUpperCase();
+ const zh={WATCH_ONLY:'观察',NORMAL_OBSERVATION:'常规观察',SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧',SHADOW_DEFENSIVE_BIAS:'Shadow防御',DATA_UNAVAILABLE:'数据不足'};
+ const en={WATCH_ONLY:'Watch only',NORMAL_OBSERVATION:'Normal',SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow tighten',SHADOW_DEFENSIVE_BIAS:'Shadow defensive',DATA_UNAVAILABLE:'Data unavailable'};
+ return (lang==='zh'?zh:en)[s]||s||'—';
+}
+function chainStateLabel(state){
+ const s=String(state||'').toUpperCase();
+ const zh={ACTIVE:'已激活',ELEVATED:'升高',STRESSED:'承压',DETERIORATING:'恶化',NOT_CONFIRMED:'未确认',PARTIAL:'部分确认',HIGH_STRETCH_EVIDENCE:'高拉伸证据',NORMAL:'正常',INACTIVE:'未激活'};
+ const en={ACTIVE:'Active',ELEVATED:'Elevated',STRESSED:'Stressed',DETERIORATING:'Deteriorating',NOT_CONFIRMED:'Not confirmed',PARTIAL:'Partial',HIGH_STRETCH_EVIDENCE:'High-stretch evidence',NORMAL:'Normal',INACTIVE:'Inactive'};
+ return (lang==='zh'?zh:en)[s]||s.replaceAll('_',' ')||'—';
+}
 function cls(x){return x>1e-12?'good':x<-1e-12?'bad':''}
 function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtPrice(x,currency){
@@ -2881,8 +2916,8 @@ function renderRiskControl(report){
     '<td>'+riskCellHtml(fmtPct(x.negative_momentum_63),momPct,lang==='zh'?'63日负向动量异常程度':'63d negative-momentum abnormality')+'</td>'+
     '<td>'+riskCellHtml((x.negative_momentum_percentile==null?'-':fmtPct(x.negative_momentum_percentile)),momPct,lang==='zh'?'动量异常历史分位':'Momentum abnormality percentile')+'</td>'+
     '<td>'+riskCellHtml(fmtPct(x.volatility_63),volPct,lang==='zh'?'63日波动历史分位':'63d volatility percentile')+'</td>'+
-    '<td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'">'+esc(stage)+'</td></tr>';
- }).join('');
+    '<td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'" title="'+esc(stage)+'">'+esc(riskStageLabel(stage))+'</td></tr>';
+ }).join('') || tableEmptyRow(6,'当前没有可用的三市场联动状态。','No three-market linked state is currently available.');
  el('riskDynamicsTitle').textContent=lang==='zh'?'动力链 / 传导路径':'Dynamics / transmission chain';
  el('riskDynamicsRows').innerHTML=(report.dynamics_chain||[]).map(x=>{
    const state=String(x.state||'-');
@@ -2890,11 +2925,18 @@ function renderRiskControl(report){
    const score=Number(x.score);
    const normalized=Number.isFinite(score)?(score<=1?score*100:score):null;
    const shown=Number.isFinite(score)?score.toFixed(score<=1?2:1):'-';
-   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'">'+esc(state)+'</td><td>'+riskCellHtml(shown,normalized,lang==='zh'?'动力链节点风险强度':'Dynamics-node risk intensity')+'</td><td>'+esc((x.evidence||[]).join(' · ')||'-')+'</td></tr>';
- }).join('');
+   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'" title="'+esc(state)+'">'+esc(chainStateLabel(state))+'</td><td>'+riskCellHtml(shown,normalized,lang==='zh'?'动力链节点风险强度':'Dynamics-node risk intensity')+'</td><td>'+esc((x.evidence||[]).join(' · ')||(lang==='zh'?'暂无补充证据':'No additional evidence'))+'</td></tr>';
+ }).join('') || tableEmptyRow(4,'当前没有可展示的动力链节点。','No dynamics-chain node is currently available.');
  el('riskMacroTitle').textContent=lang==='zh'?'利率、政策、信用与流动性':'Rates, policy, credit and liquidity';
  const macro=report.rates_policy_credit_snapshot||{};
- const macroLabels={
+ const macroLabels=lang==='zh'?{
+  US_TREASURY_2Y_LEVEL:'2年期美债收益率',US_TREASURY_10Y_LEVEL:'10年期美债收益率',US_TREASURY_30Y_LEVEL:'30年期美债收益率',
+  US_REAL_YIELD_10Y_LEVEL:'10年期实际利率',US_TREASURY_2Y_RISE_90D:'2年期美债 90日变化',US_TREASURY_10Y_RISE_90D:'10年期美债 90日变化',
+  US_REAL_YIELD_10Y_RISE_90D:'10年期实际利率 90日变化',FED_POLICY_RATE_LEVEL:'联邦基金政策利率',FED_FUNDS_FUTURES_IMPLIED_RATE:'Fed Funds期货隐含利率',
+  FED_FUNDS_FUTURES_REPRICING_ABS_30D:'Fed Funds期货 30日重定价',MOVE_LEVEL:'MOVE债券波动指数',MOVE_RISE_30D:'MOVE 30日变化',MOVE_RISE_90D:'MOVE 90日变化',
+  YIELD_CURVE_INVERSION:'10Y−2Y倒挂压力',YIELD_CURVE_10Y3M_INVERSION:'10Y−3M倒挂压力',
+  FINANCIAL_CONDITIONS_NFCI:'NFCI金融条件',HY_CREDIT_SPREAD_LEVEL:'高收益债信用利差'
+ }:{
   US_TREASURY_2Y_LEVEL:'2Y Treasury',US_TREASURY_10Y_LEVEL:'10Y Treasury',US_TREASURY_30Y_LEVEL:'30Y Treasury',
   US_REAL_YIELD_10Y_LEVEL:'10Y Real Yield',US_TREASURY_2Y_RISE_90D:'2Y Δ90d',US_TREASURY_10Y_RISE_90D:'10Y Δ90d',
   US_REAL_YIELD_10Y_RISE_90D:'10Y Real Δ90d',FED_POLICY_RATE_LEVEL:'Fed Funds',FED_FUNDS_FUTURES_IMPLIED_RATE:'Fed Funds Futures',
@@ -2905,22 +2947,22 @@ function renderRiskControl(report){
  el('riskMacroRows').innerHTML=Object.entries(macro).filter(([k])=>!k.endsWith('_LONG_CYCLE')).map(([k,v])=>{
    const pct=v.point_in_time_percentile==null?null:Number(v.point_in_time_percentile)*100;
    return '<tr><td>'+esc(macroLabels[k]||k)+'</td><td>'+fmtRiskNumber(v.value,4)+'</td><td>'+riskCellHtml((v.point_in_time_percentile==null?'-':fmtPct(v.point_in_time_percentile)),pct,lang==='zh'?'该风险因子的历史状态分位':'Historical state percentile for this risk factor')+'</td></tr>';
- }).join('');
+ }).join('') || tableEmptyRow(3,'当前没有可用的利率/政策/信用/流动性快照。','No rates/policy/credit/liquidity snapshot is currently available.');
  el('riskTermTitle').textContent=lang==='zh'?'Fed Funds / SOFR 期限曲线':'Fed Funds / SOFR term curves';
  const tc=report.term_curve||{}, metrics=tc.metrics||{};
  const curveNames={fed_funds:'Fed Funds',sofr_1m:'SOFR 1M',sofr_3m:'SOFR 3M'};
  el('riskTermRows').innerHTML=Object.entries(curveNames).map(([k,label])=>{
   const x=metrics[k]||{};
-  return '<tr><td>'+label+'</td><td>'+esc(x.contracts??'-')+'</td><td>'+fmtRiskNumber(x.front_implied_rate,4)+'%</td><td>'+fmtRiskNumber(x.back_implied_rate,4)+'%</td><td>'+fmtRiskNumber(x.front_to_back_change,4)+'pp</td></tr>';
+  return '<tr><td>'+label+'</td><td>'+esc(x.contracts??'—')+'</td><td>'+fmtRiskWithUnit(x.front_implied_rate,'%',4)+'</td><td>'+fmtRiskWithUnit(x.back_implied_rate,'%',4)+'</td><td>'+fmtRiskWithUnit(x.front_to_back_change,'pp',4)+'</td></tr>';
  }).join('');
  el('riskCurveDetailTitle').textContent=lang==='zh'?'展开期限合约明细':'Show contract-level term curve';
  const curveRows=[];
  Object.entries(curveNames).forEach(([k,label])=>(tc[k]||[]).forEach(x=>curveRows.push({label,...x})));
- el('riskCurveContractRows').innerHTML=curveRows.map(x=>'<tr><td>'+esc(x.label)+'</td><td>'+esc(x.contract_month||'-')+'</td><td>'+esc(x.symbol||'-')+'</td><td>'+fmtRiskNumber(x.price,4)+'</td><td>'+fmtRiskNumber(x.implied_rate,4)+'%</td></tr>').join('');
+ el('riskCurveContractRows').innerHTML=curveRows.map(x=>'<tr><td>'+esc(x.label)+'</td><td>'+esc(x.contract_month||'—')+'</td><td>'+esc(x.symbol||'—')+'</td><td>'+fmtRiskNumber(x.price,4)+'</td><td>'+fmtRiskWithUnit(x.implied_rate,'%',4)+'</td></tr>').join('') || tableEmptyRow(5,'当前没有可展示的期限合约点。','No contract-level term-curve points are currently available.');
  el('riskHistoryTableTitle').textContent=lang==='zh'?'历史危机回溯与统计支持':'Historical crash recurrence and statistical support';
  const hv=report.historical_validation||{};
  const supported=hv.statistically_supported_composites||[];
- el('riskHistoryRows').innerHTML=supported.map(x=>'<tr><td>'+esc(x.composite||'-')+'</td><td>'+esc(x.lead_trading_days??'-')+'d</td><td>'+fmtPct(x.event_hit_rate)+'</td><td>'+fmtPct(x.control_false_positive_rate)+'</td><td>'+fmtPct(x.hit_rate_lift)+'</td><td>'+fmtRiskNumber(x.fisher_p_value,4)+'</td><td>'+fmtRiskNumber(x.bh_q_value,4)+'</td><td>'+fmtPct(x.leave_one_event_out_min_hit_rate)+'</td></tr>').join('') || '<tr><td colspan="8">-</td></tr>';
+ el('riskHistoryRows').innerHTML=supported.map(x=>'<tr><td>'+esc(x.composite||'—')+'</td><td>'+esc(x.lead_trading_days??'—')+(x.lead_trading_days==null?'':'d')+'</td><td>'+fmtPct(x.event_hit_rate)+'</td><td>'+fmtPct(x.control_false_positive_rate)+'</td><td>'+fmtPct(x.hit_rate_lift)+'</td><td>'+fmtRiskNumber(x.fisher_p_value,4)+'</td><td>'+fmtRiskNumber(x.bh_q_value,4)+'</td><td>'+fmtPct(x.leave_one_event_out_min_hit_rate)+'</td></tr>').join('') || tableEmptyRow(8,'当前没有达到统计支持门槛的联合状态；候选信号仍保留在研究层，不应显示成“已验证”。','No composite state currently meets the statistical-support threshold; candidate signals remain research-only.');
  el('riskDataQualityTitle').textContent=lang==='zh'?'数据完整性与降级状态':'Data completeness and degradation';
  const dq=report.data_quality||{}, cov=dq.risk_evidence_coverage||{}, gaps=cov.known_gaps||[];
  el('riskDataQuality').textContent=(lang==='zh'?'历史证据覆盖等级 ':'Evidence coverage ')+(cov.coverage_grade||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(cov.term_curve_usable?'OK':'NOT READY')+' · '+(lang==='zh'?'港股高频 ':'HK high-frequency ')+(dq.hk_high_frequency_degraded?'DEGRADED':'OK')+' · '+(lang==='zh'?'正式日线证据受影响 ':'daily evidence affected ')+(dq.evidence_critical_daily_data_affected?'YES':'NO');
@@ -2934,8 +2976,8 @@ function renderRiskControl(report){
  el('riskControlRows').innerHTML=(report.three_market_state||[]).map(x=>{
   const q=x.shadow_candidate_constraints||{},stage=String(x.risk_control_stage||'-');
   const stageScore=stage==='SHADOW_DEFENSIVE_BIAS'?80:stage==='SHADOW_TIGHTEN_RISK_CONSTRAINTS'?65:stage==='WATCH_ONLY'?45:stage==='NORMAL_OBSERVATION'?0:null;
-  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'">'+esc(stage)+'</td><td>'+riskCellHtml(fmtPct(q.risky_exposure_multiplier),stageScore,lang==='zh'?'该阶段的Shadow风险资产敞口倍率候选':'Shadow risky-exposure multiplier for this stage')+'</td><td>'+riskCellHtml(fmtPct(q.defensive_exposure_floor),stageScore,lang==='zh'?'该阶段的Shadow防御敞口底线候选':'Shadow defensive-floor candidate for this stage')+'</td><td>'+(x.applied_to_production?'YES':'NO')+'</td></tr>';
- }).join('');
+  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'" title="'+esc(stage)+'">'+esc(riskStageLabel(stage))+'</td><td>'+riskCellHtml(fmtPct(q.risky_exposure_multiplier),stageScore,lang==='zh'?'该阶段的Shadow风险资产敞口倍率候选':'Shadow risky-exposure multiplier for this stage')+'</td><td>'+riskCellHtml(fmtPct(q.defensive_exposure_floor),stageScore,lang==='zh'?'该阶段的Shadow防御敞口底线候选':'Shadow defensive-floor candidate for this stage')+'</td><td>'+(x.applied_to_production?(lang==='zh'?'是':'YES'):(lang==='zh'?'否':'NO'))+'</td></tr>';
+ }).join('') || tableEmptyRow(5,'当前没有可用的三市场 Shadow 风控实验状态。','No three-market shadow risk-control state is currently available.');
  const pv=report.prospective_validation||{};
  el('riskLedgerDetail').textContent=(lang==='zh'?'风控实验账本 ':'Risk-control ledger ')+(pv.ledger_id||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-');
  applyTableHeaderTooltips();
@@ -3172,7 +3214,7 @@ function renderProspective(report){
     '<td class="num '+cls(Number(x.realized_cumulative_return||0))+'">'+fmtPct(x.realized_cumulative_return)+'</td>'+
     '<td class="num">'+(x.realized_rank_so_far??'-')+'</td>'+
     '<td class="reason">'+esc(reason)+'</td></tr>';
- }).join('');
+ }).join('') || tableEmptyRow(8,'当前前瞻实验还没有冻结策略排序。','The current prospective experiment does not yet have a frozen strategy ranking.');
  const pool=rows.map(x=>x.strategy_id);
  el('prospectiveDailyHead').innerHTML='<tr><th>'+(lang==='zh'?'交易日':'Trading day')+'</th>'+
    pool.map(sid=>'<th>'+strategyLabelHtml(strategyNameIndex.CN[sid]||sid,sid)+'</th>').join('')+
@@ -3220,7 +3262,7 @@ function renderRecoveryWave(report){
    const rationale=lang==='zh'?x.rationale_zh:x.rationale_en;
    return '<tr>'+
     '<td><span class="strategy-name">'+esc(labels[x.symbol]||x.symbol)+'</span><br><span class="small muted">'+esc(x.symbol)+'</span></td>'+
-    '<td><span class="tag">'+esc(x.action||'-')+'</span></td>'+
+    '<td><span class="tag" title="'+esc(x.action||'')+'">'+esc(lang==='zh'?({INCREASE:'加仓',HOLD:'维持',REDUCE:'减仓',AVOID:'回避'}[String(x.action||'').toUpperCase()]||x.action||'—'):(x.action||'—'))+'</span></td>'+
     '<td class="num triaid">'+fmtPct(x.target_weight)+'</td>'+
     '<td class="num '+cls(Number(x.suggested_weight_change||0))+'">'+signedPct(x.suggested_weight_change)+'</td>'+
     '<td class="num '+cls(Number(x.drawdown_252||0))+'">'+fmtPct(x.drawdown_252)+'</td>'+
@@ -3443,22 +3485,22 @@ async function refreshAll(preferStale=false){
    const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
    return '<tr class="selected">'+
     '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
-    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'" title="'+esc(x.lifecycle||'')+'">'+esc(lifecycleLabel(x.lifecycle))+'</span></td>'+
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
     '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
     '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
     '<td class="reason">'+esc(explanation)+'</td></tr>';
-  }).join('');
+  }).join('') || tableEmptyRow(8,'当前没有冻结入选策略。请结合候选池查看为什么没有策略满足入选条件。','No strategy is currently in the frozen selected set. Check the candidate pool for exclusion reasons.');
   el('candidateRows').innerHTML=candidateCards.map(x=>{
    return '<tr>'+
     '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
-    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'">'+esc(x.lifecycle||'-')+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'" title="'+esc(x.lifecycle||'')+'">'+esc(lifecycleLabel(x.lifecycle))+'</span></td>'+
     '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
-    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · '))+'</td></tr>';
-  }).join('');
+    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · ')||(lang==='zh'?'当前没有补充说明':'No additional explanation'))+'</td></tr>';
+  }).join('') || tableEmptyRow(5,'当前没有未入选候选策略。','There are no unselected candidate strategies.');
   const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
   el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
     (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
