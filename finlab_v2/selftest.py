@@ -275,13 +275,13 @@ try:
     assert storage["backend"]["volume"]["expected_mount_is_mounted"] is False
     assert storage["backend"]["persistence_probe"]["confirmed_across_deployments"] is False
     assert providers["registry"]["version"]=="provider-registry@0.2.0"
-    assert providers["registry"]["routes"]["US:DAILY"]=="research_bars"
+    assert providers["registry"]["routes"]["US:DAILY"]=="sina_us_primary"
     assert providers["registry"]["routes"]["US:QUOTE_L1"]=="us_l1_quotes"
-    assert providers["registry"]["chains"]["US:DAILY"]==["research_bars","sina_us_backup"]
-    assert providers["registry"]["chains"]["US:INTRADAY"]==["research_bars","sina_us_backup"]
-    assert providers["registry"]["chains"]["CN:DAILY"]==["research_bars","tencent_cn_backup"]
-    assert providers["registry"]["chains"]["CN:REALTIME"]==["research_bars","tencent_cn_backup"]
-    assert providers["registry"]["chains"]["US:PREOPEN"]==["research_bars"]
+    assert providers["registry"]["chains"]["US:DAILY"]==["sina_us_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["US:INTRADAY"]==["sina_us_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["CN:DAILY"]==["tencent_equity_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["CN:REALTIME"]==["tencent_equity_primary","yahoo_bars"]\n    assert providers["registry"]["chains"]["HK:DAILY"]==["tencent_equity_primary","yahoo_bars"]\n    assert providers["registry"]["chains"]["HK:REALTIME"]==["tencent_equity_primary","yahoo_bars"]
+    assert providers["registry"]["chains"]["US:PREOPEN"]==["yahoo_bars"]
     assert products["US"]["BAR_DAILY"]["available"] is True
     assert products["US"]["BAR_INTRADAY"]["available"] is True
     assert products["US"]["ORDERBOOK_L2"]["available"] is False
