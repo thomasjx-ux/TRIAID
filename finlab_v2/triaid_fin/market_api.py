@@ -5,7 +5,7 @@ import secrets
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
-from .market_registry import market_ids, normalize_market_id
+from .market_registry import MARKET_REGISTRY, MarketSpec, market_ids, normalize_market_id, register_market
 from .trading_calendar import calendar_status, trading_day_info
 
 
@@ -40,6 +40,44 @@ def build_market_data_router(engine,automation,calendar_sync=None)->APIRouter:
     @router.get("/status")
     def market_data_status_api()->dict:
         return automation.status()
+
+    @router.get("/registry")
+    def market_registry_api()->dict:
+        return MARKET_REGISTRY.snapshot()
+
+    @router.post("/registry")
+    def market_registry_upsert_api(
+        payload:dict=Body(...),
+        _admin:None=Depends(_require_admin_token),
+    )->dict:
+        try:
+            spec=MarketSpec(
+                market_id=str(payload["market_id"]),
+                benchmark=str(payload["benchmark"]),
+                assets=tuple(payload.get("assets") or ()),
+                risk_assets=tuple(payload.get("risk_assets") or ()),
+                defensive_assets=tuple(payload.get("defensive_assets") or ()),
+                currency=str(payload.get("currency") or "USD"),
+                reference_capital=float(payload.get("reference_capital") or 1.0),
+                base_cost_bps=float(payload.get("base_cost_bps") or 0.0),
+                impact_coefficient_bps=float(payload.get("impact_coefficient_bps") or 0.0),
+                max_participation_adv=float(payload.get("max_participation_adv") or 0.01),
+                timezone=str(payload.get("timezone") or "UTC"),
+                aliases=tuple(payload.get("aliases") or ()),
+                balanced_risk_weight=float(payload.get("balanced_risk_weight") or 0.60),
+                research_indexes=tuple(tuple(x) for x in (payload.get("research_indexes") or ())),
+                primary_index_label=payload.get("primary_index_label"),
+                session_schedule={
+                    str(k):tuple(tuple(x) for x in v)
+                    for k,v in (payload.get("session_schedule") or {}).items()
+                },
+                metadata=dict(payload.get("metadata") or {}),
+                enabled=bool(payload.get("enabled",True)),
+            )
+            row=register_market(spec,replace=True,persist=True)
+            return {"registered":True,"market":row.market_id,"registry":MARKET_REGISTRY.snapshot()}
+        except (KeyError,TypeError,ValueError) as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
 
     @router.get("/capabilities")
     def market_data_capabilities_api(market_id:str|None=None)->dict:
