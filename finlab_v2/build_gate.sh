@@ -17,6 +17,7 @@ python core_evolution_validation_smoke.py
 python backend_audit_regression.py
 python us_return_max_smoke.py
 python strategy_contract_smoke.py
+python n_market_multi_account_smoke.py
 python production_smoke_contract_static.py
 python ui_smoke.py
 python manual_preview_guard_smoke.py
