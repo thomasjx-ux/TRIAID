@@ -191,6 +191,9 @@ class MarketDataHub:
             self.provider,
             routes=("US:PREOPEN","US:REALTIME"),
         )
+        # Compatibility alias retained for tests and callers that explicitly
+        # re-route a capability to the generic research bar provider.
+        self.registry.register("research_bars",self.provider)
         self.registry.register(
             "sina_us_primary",
             self.sina_us,
