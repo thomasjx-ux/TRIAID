@@ -31,7 +31,7 @@ PRIMARY_INDEX={
     "CN":"SHANGHAI_COMPOSITE",
     "HK":"HANG_SENG",
 }
-CANONICAL_EPISODES={
+DATA_SOURCE_REVISION="market-provider-split@0.1.0"\nCANONICAL_EPISODES={
     "ASIAN_FINANCIAL_CRISIS_1997_98":{
         "start":"1997-06-01","end":"1999-01-31",
         "description":"Asian financial crisis and regional equity stress.",
@@ -367,6 +367,7 @@ class CrossMarketCrashExperiment:
             previous
             and previous.get("as_of")==as_of
             and previous.get("version")==self.version
+            and previous.get("data_source_revision")==DATA_SOURCE_REVISION
             and not force
         ):
             return previous
@@ -393,6 +394,7 @@ class CrossMarketCrashExperiment:
         payload={
             "version":self.version,
             "protocol_version":self.protocol_version,
+            "data_source_revision":DATA_SOURCE_REVISION,
             "as_of":as_of,
             "generated_at":datetime.now(timezone.utc).isoformat(),
             "shadow_only":True,
