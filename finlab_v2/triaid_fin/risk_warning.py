@@ -41,7 +41,7 @@ HORIZON_WEIGHTS={
 
 
 class RiskWarningSystem:
-    version="risk-warning@0.1.0"
+    version="risk-warning@0.2.0"
     latest_file="risk_warning_latest.json"
     history_file="risk_warning_history.jsonl"
 
@@ -435,7 +435,16 @@ class RiskWarningSystem:
             "policy_curve":bool(policy_curve),
             "prospective":bool(prospective),
         }
-        data_coverage=sum(1 for x in source_presence.values() if x)/len(source_presence)
+        source_presence_ratio=sum(1 for x in source_presence.values() if x)/len(source_presence)
+        latent_completeness=latent.get("data_completeness") or {}
+        latent_errors=dict(latent_completeness.get("errors") or {})
+        term_curve_usable=bool((policy_curve.get("data_quality") or {}).get("term_curve_usable"))
+        if source_presence_ratio<1.0:
+            coverage_grade="DEGRADED"
+        elif latent_errors or not term_curve_usable:
+            coverage_grade="PARTIAL"
+        else:
+            coverage_grade="FULL"
 
         component_dates=[
             str(x)
@@ -598,10 +607,16 @@ class RiskWarningSystem:
             "prospective_validation":prospective_validation,
             "confidence":confidence,
             "data_coverage":{
-                "ratio":round(data_coverage,3),
+                "source_presence_ratio":round(source_presence_ratio,3),
+                "coverage_grade":coverage_grade,
                 "sources":source_presence,
-                "term_curve_usable":bool((policy_curve.get("data_quality") or {}).get("term_curve_usable")),
-                "guard":"If coverage is incomplete, the risk-pressure score may understate missing dimensions and must not be interpreted as reassuring.",
+                "term_curve_usable":term_curve_usable,
+                "latent_data_completeness":latent_completeness,
+                "known_gaps":[
+                    {"source":key,"error":value}
+                    for key,value in sorted(latent_errors.items())
+                ],
+                "guard":"Module presence is not the same as complete internal coverage. Known missing series are surfaced explicitly; missing dimensions must not be interpreted as reassuring or as zero risk.",
             },
             "escalation_conditions":escalation,
             "deescalation_conditions":deescalation,
