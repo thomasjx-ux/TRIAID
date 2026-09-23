@@ -1922,7 +1922,7 @@ function statusTip(status){
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
 const uiFetchCache=new Map();
-let refreshSeq=0,liveSeq=0;
+let refreshSeq=0,liveSeq=0,marketSwitchSeq=0;
 async function jsonCached(url,ttlMs=12000){
  const now=Date.now(),hit=uiFetchCache.get(url);
  if(hit&&hit.data!==undefined&&now-hit.at<ttlMs)return hit.data;
@@ -1940,6 +1940,14 @@ async function jsonCached(url,ttlMs=12000){
  uiFetchCache.set(url,{data:prior,at:priorAt,promise});
  return promise;
 }
+async function jsonCachedStale(url,ttlMs=12000){
+ const now=Date.now(),hit=uiFetchCache.get(url);
+ if(hit&&hit.data!==undefined){
+   if(now-hit.at>=ttlMs&&!hit.promise)jsonCached(url,ttlMs).catch(()=>null);
+   return hit.data;
+ }
+ return jsonCached(url,ttlMs);
+}
 async function jsonOrNullCached(url,ttlMs=12000){try{return await jsonCached(url,ttlMs)}catch(e){return null}}
 function clearMarketCache(m){
  for(const key of [...uiFetchCache.keys()]){
@@ -1951,12 +1959,15 @@ function warmMarketCache(m){
    '/api/daily?compact=true&market_id='+m,
    '/api/strategies?market_id='+m+'&lang='+lang,
    '/api/curves?market_id='+m,
-   '/api/runs?market_id='+m+'&limit=100',
-   '/api/market-data/strategy-context/'+m
+   '/api/runs?market_id='+m+'&limit=100'
  ];
- urls.forEach(url=>jsonCached(url,url.includes('strategy-context')?60000:15000).catch(()=>null));
+ urls.forEach(url=>jsonCached(url,30000).catch(()=>null));
 }
-function warmAllMarkets(){['US','CN','HK'].forEach(warmMarketCache)}
+function warmAllMarkets(){
+ const selected=el('market').value;
+ const queue=['US','CN','HK'].filter(m=>m!==selected);
+ queue.forEach((m,i)=>setTimeout(()=>warmMarketCache(m),1200+(i*1400)));
+}
 const MARKET_UI={
  US:{zh:'美股 / US',en:'US Equities',timezone:'America/New_York',routeZh:'Return-Max 主路线，纳入容量与模型执行成本；风险资产 SPY / QQQ / IWM，防御资产 TLT / GLD。',routeEn:'Return-Max primary route with capacity and modeled execution cost; SPY / QQQ / IWM are risk assets and TLT / GLD are defensive assets.'},
  CN:{zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.'},
@@ -2105,7 +2116,16 @@ function applyMarketScope(){
      : 'Hong Kong now has an independent strategy research route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded independently. Research only; no broker execution.')
   : '';
 }
-function onMarketChange(){applyMarketScope();renderMarketIdentity();warmMarketCache(el('market').value);refreshAll();refreshLiveWindows()}
+function onMarketChange(){
+ const seq=++marketSwitchSeq;
+ applyMarketScope();
+ renderMarketIdentity();
+ requestAnimationFrame(()=>{
+   if(seq!==marketSwitchSeq)return;
+   refreshAll(true);
+   refreshLiveWindows();
+ });
+}
 async function runNow(){
  const m=el('market').value;
  const x=await json('/api/live/run/'+m,{method:'POST'});
@@ -2455,15 +2475,16 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
  }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
 }
-async function refreshAll(){
+async function refreshAll(preferStale=false){
  const m=el('market').value;
  const seq=++refreshSeq;
  const previewId=previewRunIds[m];
  try{
   const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const marketGet=preferStale?jsonCachedStale:jsonCached;
   const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
-   jsonCached('/api/ui/core',60000),jsonCached('/api/daily?compact=true&market_id='+m,12000),jsonCached(cardsUrl,12000),
-   jsonCached('/api/curves?market_id='+m,12000),jsonCached('/api/evolution',15000),jsonCached('/api/runs?market_id='+m+'&limit=100',12000),
+   jsonCachedStale('/api/ui/core',60000),marketGet('/api/daily?compact=true&market_id='+m,30000),marketGet(cardsUrl,30000),
+   marketGet('/api/curves?market_id='+m,30000),jsonCachedStale('/api/evolution',30000),marketGet('/api/runs?market_id='+m+'&limit=100',30000),
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
   if(seq!==refreshSeq||el('market').value!==m)return;
@@ -2603,7 +2624,7 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,300);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
+applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
 </script>
 </body>
 </html>
