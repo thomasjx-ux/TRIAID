@@ -47,6 +47,7 @@ class EvolutionLabEngine:
 
     def __init__(self) -> None:
         self.store=RunStore()
+        MARKET_REGISTRY.load_from_store(self.store)
         self.account_registry=ACCOUNT_REGISTRY
         self.account_registry.load_from_store(self.store)
         self.observations=MarketObservationStore(self.store)
@@ -154,6 +155,7 @@ class EvolutionLabEngine:
         return {
             "architecture":self.architecture_version,
             "account_registry":self.account_registry.version,
+            "market_registry":MARKET_REGISTRY.version,
             "objective_constitution":OBJECTIVE_CONSTITUTION_VERSION,
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
