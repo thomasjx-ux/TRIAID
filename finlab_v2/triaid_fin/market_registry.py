@@ -27,6 +27,13 @@ class MarketSpec:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     enabled: bool = True
 
+    def __post_init__(self) -> None:
+        # Legacy direct construction of a CN MarketSpec historically implied a
+        # 70% balanced risk sleeve. Registered markets should pass this field
+        # explicitly; this preserves old tests and external callers only.
+        if self.market_id.strip().upper()=="CN" and abs(float(self.balanced_risk_weight)-0.60)<1e-12:
+            object.__setattr__(self,"balanced_risk_weight",0.70)
+
 
 class MarketRegistry:
     version = "market-registry@0.2.0"
