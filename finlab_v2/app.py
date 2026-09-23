@@ -5,10 +5,11 @@ import json
 import os
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
@@ -255,8 +256,39 @@ app.include_router(build_market_data_router(engine,market_automation,calendar_sy
 app.include_router(build_decision_router(decision_scheduler))
 
 
-@app.get("/health")
-def health()->dict:
+def release_audit_status()->dict:
+    required=os.getenv("TRIAID_RELEASE_AUDIT_REQUIRED","1").lower() not in {"0","false","off","no"}
+    path=Path(os.getenv("TRIAID_RELEASE_AUDIT_RECEIPT_PATH","/tmp/triaid_release_audit.json"))
+    if not required:
+        return {"required":False,"state":"DISABLED","passed":True,"receipt_path":str(path)}
+    if not path.exists():
+        return {"required":True,"state":"PENDING","passed":False,"receipt_path":str(path)}
+    try:
+        receipt=json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "required":True,
+            "state":"INVALID",
+            "passed":False,
+            "receipt_path":str(path),
+            "error":f"{type(exc).__name__}:{exc}",
+        }
+    passed=bool(receipt.get("passed"))
+    return {
+        "required":True,
+        "state":"PASS" if passed else "FAIL",
+        "passed":passed,
+        "receipt_path":str(path),
+        "audit":receipt.get("audit"),
+        "required_check_count":receipt.get("required_check_count"),
+        "passed_check_count":receipt.get("passed_check_count"),
+        "failed_check_count":receipt.get("failed_check_count"),
+        "failed_checks":receipt.get("failed_checks") or [],
+    }
+
+
+@app.get("/health/live")
+def health_live()->dict:
     storage=engine.store.backend.status()
     probe=storage.get("persistence_probe") or {}
     volume=storage.get("volume") or {}
@@ -280,6 +312,17 @@ def health()->dict:
             app.state,"startup_maintenance_receipt",None
         ),
     }
+
+
+@app.get("/health")
+def health():
+    payload=health_live()
+    audit=release_audit_status()
+    payload["release_audit"]=audit
+    payload["ok"]=bool(audit.get("passed"))
+    if not payload["ok"]:
+        return JSONResponse(status_code=503,content=payload)
+    return payload
 
 
 @app.get("/api/status")
