@@ -93,6 +93,21 @@ class TencentCNMarketDataProvider:
         qfq_rows=node.get("qfqday") or []
         raw_rows=node.get("day") or []
         rows=qfq_rows or raw_rows
+
+        # Tencent index series may not expose qfqday through the fqkline
+        # endpoint. Fall back to the unadjusted kline endpoint rather than
+        # treating a valid index as missing.
+        if not rows:
+            payload=self._get(
+                "https://web.ifzq.gtimg.cn/appstock/app/kline/kline",
+                {"param":f"{code},day,,,{max(int(count),int(min_points)+20)}"},
+                timeout,
+            )
+            node=(payload.get("data") or {}).get(code) or {}
+            qfq_rows=[]
+            raw_rows=node.get("day") or []
+            rows=raw_rows
+
         raw_close_by_day={
             str(x[0]):float(x[2])
             for x in raw_rows
