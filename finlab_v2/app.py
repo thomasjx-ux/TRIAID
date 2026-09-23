@@ -119,6 +119,7 @@ async def bootstrap_long_horizon_research()->None:
             frozen=await asyncio.to_thread(engine.hazard_prospective_freeze,latent,policy_curve)
             resolved=await asyncio.to_thread(engine.hazard_prospective_resolve)
             risk_warning=await asyncio.to_thread(engine.risk_warning_run,True)
+            risk_control=await asyncio.to_thread(engine.risk_control_run,True)
             print(
                 "TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_PASS",
                 frozen.get("ledger_id"),
@@ -133,6 +134,13 @@ async def bootstrap_long_horizon_research()->None:
                 (risk_warning.get("overall") or {}).get("risk_pressure_index"),
                 (risk_warning.get("overall") or {}).get("risk_band"),
                 json.dumps(risk_warning.get("horizon_estimates") or {},sort_keys=True),
+            )
+            print(
+                "TRIAID_RISK_CONTROL_BACKGROUND_PASS",
+                risk_control.get("experiment_id"),
+                risk_control.get("as_of"),
+                (risk_control.get("risk_control_experiment") or {}).get("stage"),
+                json.dumps(risk_control.get("three_market_state") or [],sort_keys=True),
             )
         except Exception as exc:
             print("TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
@@ -512,6 +520,29 @@ def risk_warning_history(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> list[dict]:
     return engine.risk_warning_history(limit)
+
+
+@app.get("/api/risk-control/status")
+def risk_control_status() -> dict:
+    return engine.risk_control_status()
+
+
+@app.get("/api/risk-control/latest")
+def risk_control_latest() -> dict:
+    row=engine.risk_control_latest()
+    if row is None:
+        try:
+            row=engine.risk_control_run(False)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
+    return row
+
+
+@app.get("/api/risk-control/history")
+def risk_control_history(
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[dict]:
+    return engine.risk_control_history(limit)
 
 
 @app.get("/api/recovery-wave/status")
