@@ -53,7 +53,8 @@ COMPOSITE_RULES={
     },
     "SYSTEMIC_TRANSMISSION":{
         "factors":(
-            "HK_NEGATIVE_MOMENTUM_63",
+            "CROSS_MARKET_STRESS_SHARE_10PCT",
+            "CROSS_MARKET_CORR_MEAN_60",
             "CROSS_MARKET_STRESS_COUNT_10PCT",
             "CORR_HK_US_60",
             "MOVE_LEVEL",
