@@ -15,7 +15,7 @@ HOP_BY_HOP={
     "proxy-authorization","te","trailer","transfer-encoding","upgrade",
 }
 
-HOMEPAGE_BROKEN=b"return (currency==='USD'?'\\nfunction strategyLabelHtml"
+HOMEPAGE_BROKEN=b"return (currency==='USD'?'\\n}\\nfunction strategyLabelHtml"
 HOMEPAGE_FIXED=(
     b"let prefix='';\\n"
     b" if(currency==='USD')prefix=String.fromCharCode(36);\\n"
