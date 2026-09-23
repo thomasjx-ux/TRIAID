@@ -38,7 +38,8 @@ checks={
     "system_ops_collapsed_by_default":'<details class="ops-details" id="systemOpsPanel">' in html,
     "deep_risk_collapsed_by_default":'<details class="evidence-details" id="riskDeepEvidence">' in html,
     "flow_copy_present":"当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属路线与可实现性 → 三市场风险 → Core进化" in html,
-    "flow_labels_are_bilingual":"function applyFlowLabels()" in html and "Current TRIAID decision" in html and "Core evolution" in html,
+    "flow_labels_are_bilingual":"function applyFlowLabels()" in html and "US Generic-Core Control Decision" in html and "CN Return-First Decision" in html and "HK Return-First Decision" in html and "Core evolution" in html,
+    "all_markets_have_route_summary":'id="marketRouteOverview"' in html and 'id="hkRoutePanel"' in html,
 }
 
 failed=[k for k,v in checks.items() if not v]
