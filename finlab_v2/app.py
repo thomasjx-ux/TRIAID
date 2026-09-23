@@ -5,8 +5,10 @@ import json
 import os
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -18,8 +20,8 @@ from triaid_fin.account_api import build_account_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
-from triaid_fin.market_registry import market_ids, normalize_market_id
-from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION
+from triaid_fin.market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION, official_session_phase, trading_day_info
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
 
 engine=EvolutionLabEngine()
@@ -481,6 +483,36 @@ def ui_core_status()->dict:
     }
 
 
+@app.get("/api/ui/market-clocks")
+def ui_market_clocks()->dict:
+    now_utc=datetime.now(ZoneInfo("UTC"))
+    rows=[]
+    for market_id in market_ids():
+        spec=MARKET_REGISTRY.get(market_id)
+        local_now=now_utc.astimezone(ZoneInfo(spec.timezone))
+        info=trading_day_info(market_id,local_now)
+        phase=official_session_phase(market_id,local_now)
+        rows.append({
+            "market_id":market_id,
+            "timezone":spec.timezone,
+            "local_iso":local_now.isoformat(),
+            "session_phase":phase,
+            "is_open":phase=="OPEN",
+            "calendar_known":bool(info.get("calendar_known")),
+            "is_trading_day":bool(info.get("is_trading_day")),
+            "early_close":bool(info.get("early_close")),
+            "early_close_time":info.get("early_close_time"),
+            "benchmark":spec.benchmark,
+            "currency":spec.currency,
+            "assets":list(spec.assets),
+            "primary_experiment_mode":str(spec.metadata.get("primary_experiment_mode") or ""),
+        })
+    return {
+        "server_utc":now_utc.isoformat(),
+        "markets":rows,
+    }
+
+
 @app.get("/api/curves")
 def curves(market_id: str | None = None) -> list[dict]:
     return engine.curves(market_id)
@@ -897,6 +929,26 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .cmdtime{color:#7f93aa}.cmdkind{color:#7fc7ff}.cmdmode{color:#ffd37f}
 .live-meta{font-size:11px;color:#748091;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .has-tip{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#aeb7c4;text-underline-offset:4px}.tip-mark::after{content:' ⓘ';font-size:10px;color:#7f8c9e;text-decoration:none;white-space:nowrap}
+tbody tr:hover td{background:#f8fbff}
+.market-clock-strip{display:grid;grid-template-columns:repeat(3,minmax(190px,1fr));gap:10px;margin:12px 0}
+.market-clock-card{appearance:none;width:100%;text-align:left;border:1px solid var(--line);border-radius:12px;background:#f5f6f8;padding:11px 12px;cursor:pointer;color:inherit}
+.market-clock-card:hover{border-color:#b8c4d4;background:#fafcff}
+.market-clock-card.selected{border-color:#6f94c9;box-shadow:0 0 0 2px rgba(23,105,224,.08)}
+.market-clock-card.open{background:#eef8f2;border-color:#b9dfc9}
+.market-clock-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.market-clock-name{font-size:13px;font-weight:750}.market-clock-phase{font-size:11px;color:#6f7b8a}
+.market-clock-time{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:5px}
+.market-clock-date{font-size:11px;color:#748091;margin-top:2px}
+.market-dot{width:9px;height:9px;border-radius:50%;background:#aeb7c4;display:inline-block;margin-right:6px;vertical-align:0}
+.market-clock-card.open .market-dot{background:#138a4b;box-shadow:0 0 0 4px rgba(19,138,75,.10)}
+.market-hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin:10px 0 18px}
+.market-hero h2{margin:2px 0 4px;font-size:22px}.market-kicker{font-size:11px;color:#748091;text-transform:uppercase;letter-spacing:.06em}
+.market-route{font-size:13px;line-height:1.5;color:#445164}.market-hero-side{text-align:right;min-width:230px}
+.market-session-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#eef1f5;color:#66717f;font-size:12px;font-weight:750}
+.market-session-badge.open{background:#e7f6ed;color:#138a4b}
+.market-hero-meta{font-size:11px;color:#748091;margin-top:7px;line-height:1.5}
+.market-section-note{font-size:12px;color:#748091;margin:-6px 0 10px}
+@media(max-width:760px){.market-clock-strip{grid-template-columns:1fr}.market-hero{display:block}.market-hero-side{text-align:left;min-width:0;margin-top:10px}}
 #hoverTip{position:fixed;display:none;z-index:9999;max-width:430px;padding:9px 11px;border-radius:8px;background:#172033;color:#fff;font-size:12px;line-height:1.5;white-space:pre-line;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:none}
 .riskpanel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin:16px 0}
 .riskhead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
@@ -930,127 +982,40 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
     <div class="toolbar">
       <select id="market" onchange="onMarketChange()"><option value="US">美股 / US</option><option value="CN">A股 / CN</option><option value="HK">港股 / HK</option></select>
       <button class="primary" onclick="runNow()" id="runBtn">立即执行</button>
-      <button onclick="runAll()" id="runAllBtn">执行两个市场</button>
+      <button onclick="runAll()" id="runAllBtn">预览三个市场</button>
       <button onclick="toggleLang()">中文 / English</button>
     </div>
   </div>
   <div class="statusline" id="runStatus">Ready</div>
   <div class="statusline" id="marketScopeStatus" style="display:none"></div>
 
-  <section class="riskpanel" id="riskWarningPanel">
-    <div class="riskhead">
-      <div>
-        <h2 id="riskWarningTitle">TRIAID 三市场联动风险中心</h2>
-        <div class="risk-meta" id="riskWarningMeta">等待风险状态</div>
-        <div class="risk-center-banner" id="riskCenterScope">独立于下方美股 / A股 / 港股单市场页面：这里始终联合分析三个市场，并作为风控 shadow 实验输入，不是第四个市场。</div>
-      </div>
-      <div>
-        <div class="risk-overall"><span class="risk-score" id="riskOverallScore">-</span><span>/100</span><span class="risk-band" id="riskOverallBand">-</span></div>
-        <div class="risk-meta" id="riskConfidence">-</div>
-      </div>
-    </div>
-    <div class="riskgrid">
-      <div class="riskcell"><span class="label" id="riskOverallLabel">当前综合风险</span><div class="rv" id="riskOverallMini">-</div></div>
-      <div class="riskcell"><span class="label">20日</span><div class="rv" id="risk20">-</div><div class="small muted" id="risk20Band">-</div></div>
-      <div class="riskcell"><span class="label">60日</span><div class="rv" id="risk60">-</div><div class="small muted" id="risk60Band">-</div></div>
-      <div class="riskcell"><span class="label">120日</span><div class="rv" id="risk120">-</div><div class="small muted" id="risk120Band">-</div></div>
-      <div class="riskcell"><span class="label">250日</span><div class="rv" id="risk250">-</div><div class="small muted" id="risk250Band">-</div></div>
-    </div>
-    <div class="risk-subgrid">
-      <div class="risk-sub"><span class="label" id="riskStructuralLabel">长期结构脆弱</span><b id="riskStructural">-</b></div>
-      <div class="risk-sub"><span class="label" id="riskRatesLabel">利率/政策压力</span><b id="riskRates">-</b></div>
-      <div class="risk-sub"><span class="label" id="riskTransmissionLabel">跨市场传导</span><b id="riskTransmission">-</b></div>
-      <div class="risk-sub"><span class="label" id="riskCreditLabel">信用/流动性</span><b id="riskCredit">-</b></div>
-      <div class="risk-sub"><span class="label" id="riskMarketLabel">价格结构恶化</span><b id="riskMarket">-</b></div>
-    </div>
-    <div class="risk-center-grid">
-      <div class="riskbox">
-        <h3 id="riskThreeMarketTitle">三市场联动状态</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>市场</th><th>252日回撤压力</th><th>63日负动量</th><th>动量异常分位</th><th>63日波动</th><th>风控实验阶段</th></tr></thead>
-            <tbody id="riskThreeMarketRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskDynamicsTitle">动力链 / 传导路径</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>环节</th><th>状态</th><th>强度</th><th>主要证据</th></tr></thead>
-            <tbody id="riskDynamicsRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskMacroTitle">利率、政策、信用与流动性</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>指标</th><th>当前值</th><th>历史状态分位</th></tr></thead>
-            <tbody id="riskMacroRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskTermTitle">Fed Funds / SOFR 期限曲线</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>曲线</th><th>真实合约点</th><th>前端隐含利率</th><th>远端隐含利率</th><th>远端−前端</th></tr></thead>
-            <tbody id="riskTermRows"></tbody>
-          </table>
-        </div>
-        <details style="margin-top:8px">
-          <summary id="riskCurveDetailTitle" style="cursor:pointer;color:#5f6b7a">展开期限合约明细</summary>
-          <div class="tablewrap risk-center-table" style="margin-top:8px">
-            <table>
-              <thead><tr><th>曲线</th><th>合约月</th><th>代码</th><th>价格</th><th>隐含利率</th></tr></thead>
-              <tbody id="riskCurveContractRows"></tbody>
-            </table>
-          </div>
-        </details>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskHistoryTableTitle">历史危机回溯与统计支持</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>联合状态</th><th>领先期</th><th>危机命中</th><th>正常误报</th><th>Lift</th><th>p</th><th>q</th><th>稳健性</th></tr></thead>
-            <tbody id="riskHistoryRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <details class="riskbox">
-        <summary id="riskDataQualityTitle" style="cursor:pointer;font-weight:700">数据完整性与降级状态</summary>
-        <div class="small" id="riskDataQuality" style="margin-top:8px">-</div>
-        <ul class="risklist" id="riskDataGaps"></ul>
-      </details>
-      <div class="riskbox">
-        <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
-        <div class="risknote" id="riskControlMeta">-</div>
-        <div class="tablewrap risk-center-table" style="margin-top:8px">
-          <table>
-            <thead><tr><th>市场</th><th>实验阶段</th><th>风险敞口倍率候选</th><th>防御敞口底线候选</th><th>是否已作用生产权重</th></tr></thead>
-            <tbody id="riskControlRows"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+  <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
+    <button type="button" class="market-clock-card selected" data-clock-market="US" onclick="selectMarket('US')" data-tip="美股纽约时间。仅官方交易时段显示绿色，盘前、盘后、周末及交易所休市日显示灰色。">
+      <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>美股 / US</span><span class="market-clock-phase" id="clockPhaseUS">-</span></div>
+      <div class="market-clock-time" id="clockTimeUS">--:--:--</div><div class="market-clock-date" id="clockDateUS">America/New_York</div>
+    </button>
+    <button type="button" class="market-clock-card" data-clock-market="CN" onclick="selectMarket('CN')" data-tip="A股上海时间。仅上交所/深交所连续交易时段显示绿色，午间休市、盘前、收盘后及休市日显示灰色。">
+      <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>A股 / CN</span><span class="market-clock-phase" id="clockPhaseCN">-</span></div>
+      <div class="market-clock-time" id="clockTimeCN">--:--:--</div><div class="market-clock-date" id="clockDateCN">Asia/Shanghai</div>
+    </button>
+    <button type="button" class="market-clock-card" data-clock-market="HK" onclick="selectMarket('HK')" data-tip="港股香港时间。仅港交所连续交易时段显示绿色，午间休市、盘前、收盘后及休市日显示灰色。">
+      <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>港股 / HK</span><span class="market-clock-phase" id="clockPhaseHK">-</span></div>
+      <div class="market-clock-time" id="clockTimeHK">--:--:--</div><div class="market-clock-date" id="clockDateHK">Asia/Hong_Kong</div>
+    </button>
+  </div>
 
-    <div class="riskdetailgrid">
-      <div class="riskbox"><h3 id="riskDriversTitle">主要风险驱动</h3><ul class="risklist" id="riskDrivers"></ul></div>
-      <div class="riskbox"><h3 id="riskBlockersTitle">尚未确认 / 风险阻断项</h3><ul class="risklist" id="riskBlockers"></ul></div>
+  <section class="market-hero" id="marketHero">
+    <div>
+      <div class="market-kicker" id="selectedMarketKicker">当前市场</div>
+      <h2 id="selectedMarketName">美股 / US</h2>
+      <div class="market-route" id="selectedMarketRoute">正在读取当前市场主路线…</div>
     </div>
-    <details style="margin-top:10px">
-      <summary id="riskDetailsTitle" style="cursor:pointer;color:#5f6b7a">展开完整证据与验证状态</summary>
-      <div class="riskdetailgrid">
-        <div class="riskbox"><h3 id="riskHistoricalTitle">历史支持</h3><div class="small" id="riskHistorical">-</div></div>
-        <div class="riskbox"><h3 id="riskProspectiveTitle">前瞻验证</h3><div class="small" id="riskProspective">-</div><div class="small muted" id="riskLedgerDetail" style="margin-top:6px">-</div></div>
-        <div class="riskbox"><h3 id="riskEscalationTitle">升级条件</h3><ul class="risklist" id="riskEscalation"></ul></div>
-        <div class="riskbox"><h3 id="riskDeescalationTitle">降级条件</h3><ul class="risklist" id="riskDeescalation"></ul></div>
-      </div>
-      <div class="risknote" id="riskSourceStatus">-</div>
-      <div class="risknote" id="riskSemantics">风险指数是状态/证据压力评分，不是股灾概率；风险预警层不自动改变组合权重。</div>
-    </details>
+    <div class="market-hero-side">
+      <span class="market-session-badge" id="selectedMarketSession">-</span>
+      <div class="market-hero-meta" id="selectedMarketMeta">-</div>
+    </div>
   </section>
+  <div class="market-section-note" id="marketSectionNote">以下先展示当前所选市场的结果、行情、策略池和该市场专属实验。三市场联动风险中心放在单市场内容之后。</div>
 
   <h2 id="resultTitle">TRIAID 结果比较</h2>
   <div class="compare">
@@ -1304,6 +1269,122 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       </table>
     </div>
   </div>
+
+  <div class="market-section-note" id="crossMarketRiskNote">以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。</div>
+  <section class="riskpanel" id="riskWarningPanel">
+    <div class="riskhead">
+      <div>
+        <h2 id="riskWarningTitle">TRIAID 三市场联动风险中心</h2>
+        <div class="risk-meta" id="riskWarningMeta">等待风险状态</div>
+        <div class="risk-center-banner" id="riskCenterScope">独立于下方美股 / A股 / 港股单市场页面：这里始终联合分析三个市场，并作为风控 shadow 实验输入，不是第四个市场。</div>
+      </div>
+      <div>
+        <div class="risk-overall"><span class="risk-score" id="riskOverallScore">-</span><span>/100</span><span class="risk-band" id="riskOverallBand">-</span></div>
+        <div class="risk-meta" id="riskConfidence">-</div>
+      </div>
+    </div>
+    <div class="riskgrid">
+      <div class="riskcell"><span class="label" id="riskOverallLabel">当前综合风险</span><div class="rv" id="riskOverallMini">-</div></div>
+      <div class="riskcell"><span class="label">20日</span><div class="rv" id="risk20">-</div><div class="small muted" id="risk20Band">-</div></div>
+      <div class="riskcell"><span class="label">60日</span><div class="rv" id="risk60">-</div><div class="small muted" id="risk60Band">-</div></div>
+      <div class="riskcell"><span class="label">120日</span><div class="rv" id="risk120">-</div><div class="small muted" id="risk120Band">-</div></div>
+      <div class="riskcell"><span class="label">250日</span><div class="rv" id="risk250">-</div><div class="small muted" id="risk250Band">-</div></div>
+    </div>
+    <div class="risk-subgrid">
+      <div class="risk-sub"><span class="label" id="riskStructuralLabel">长期结构脆弱</span><b id="riskStructural">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskRatesLabel">利率/政策压力</span><b id="riskRates">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskTransmissionLabel">跨市场传导</span><b id="riskTransmission">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskCreditLabel">信用/流动性</span><b id="riskCredit">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskMarketLabel">价格结构恶化</span><b id="riskMarket">-</b></div>
+    </div>
+    <div class="risk-center-grid">
+      <div class="riskbox">
+        <h3 id="riskThreeMarketTitle">三市场联动状态</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>市场</th><th>252日回撤压力</th><th>63日负动量</th><th>动量异常分位</th><th>63日波动</th><th>风控实验阶段</th></tr></thead>
+            <tbody id="riskThreeMarketRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskDynamicsTitle">动力链 / 传导路径</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>环节</th><th>状态</th><th>强度</th><th>主要证据</th></tr></thead>
+            <tbody id="riskDynamicsRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskMacroTitle">利率、政策、信用与流动性</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>指标</th><th>当前值</th><th>历史状态分位</th></tr></thead>
+            <tbody id="riskMacroRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskTermTitle">Fed Funds / SOFR 期限曲线</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>曲线</th><th>真实合约点</th><th>前端隐含利率</th><th>远端隐含利率</th><th>远端−前端</th></tr></thead>
+            <tbody id="riskTermRows"></tbody>
+          </table>
+        </div>
+        <details style="margin-top:8px">
+          <summary id="riskCurveDetailTitle" style="cursor:pointer;color:#5f6b7a">展开期限合约明细</summary>
+          <div class="tablewrap risk-center-table" style="margin-top:8px">
+            <table>
+              <thead><tr><th>曲线</th><th>合约月</th><th>代码</th><th>价格</th><th>隐含利率</th></tr></thead>
+              <tbody id="riskCurveContractRows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskHistoryTableTitle">历史危机回溯与统计支持</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>联合状态</th><th>领先期</th><th>危机命中</th><th>正常误报</th><th>Lift</th><th>p</th><th>q</th><th>稳健性</th></tr></thead>
+            <tbody id="riskHistoryRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <details class="riskbox">
+        <summary id="riskDataQualityTitle" style="cursor:pointer;font-weight:700">数据完整性与降级状态</summary>
+        <div class="small" id="riskDataQuality" style="margin-top:8px">-</div>
+        <ul class="risklist" id="riskDataGaps"></ul>
+      </details>
+      <div class="riskbox">
+        <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
+        <div class="risknote" id="riskControlMeta">-</div>
+        <div class="tablewrap risk-center-table" style="margin-top:8px">
+          <table>
+            <thead><tr><th>市场</th><th>实验阶段</th><th>风险敞口倍率候选</th><th>防御敞口底线候选</th><th>是否已作用生产权重</th></tr></thead>
+            <tbody id="riskControlRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="riskdetailgrid">
+      <div class="riskbox"><h3 id="riskDriversTitle">主要风险驱动</h3><ul class="risklist" id="riskDrivers"></ul></div>
+      <div class="riskbox"><h3 id="riskBlockersTitle">尚未确认 / 风险阻断项</h3><ul class="risklist" id="riskBlockers"></ul></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary id="riskDetailsTitle" style="cursor:pointer;color:#5f6b7a">展开完整证据与验证状态</summary>
+      <div class="riskdetailgrid">
+        <div class="riskbox"><h3 id="riskHistoricalTitle">历史支持</h3><div class="small" id="riskHistorical">-</div></div>
+        <div class="riskbox"><h3 id="riskProspectiveTitle">前瞻验证</h3><div class="small" id="riskProspective">-</div><div class="small muted" id="riskLedgerDetail" style="margin-top:6px">-</div></div>
+        <div class="riskbox"><h3 id="riskEscalationTitle">升级条件</h3><ul class="risklist" id="riskEscalation"></ul></div>
+        <div class="riskbox"><h3 id="riskDeescalationTitle">降级条件</h3><ul class="risklist" id="riskDeescalation"></ul></div>
+      </div>
+      <div class="risknote" id="riskSourceStatus">-</div>
+      <div class="risknote" id="riskSemantics">风险指数是状态/证据压力评分，不是股灾概率；风险预警层不自动改变组合权重。</div>
+    </details>
+  </section>
 
   <h2 id="overviewTitle">当前状态</h2>
   <div class="grid">
@@ -1672,9 +1753,63 @@ function applyUiTooltips(){
 function normalizeHeaderLabel(text){
  return String(text||'').replace(/\\s+/g,'').replace(/[：:]/g,'').trim();
 }
+const TABLE_HEADER_TIPS_EXTRA={
+ zh:{
+  '市场':'该行对应的市场。US=美股，CN=A股，HK=港股。',
+  '252日回撤压力':'当前基准相对近252个交易日高点的回撤压力幅度。数值越大表示距离阶段高点越远，不是未来跌幅预测。',
+  '63日负动量':'风险模型使用的63日负向动量特征。它是历史价格状态特征，不是未来63日收益预测。',
+  '动量异常分位':'当前63日负向动量在历史状态中的分位位置。越接近100%表示当前负向动量在历史样本中越异常。',
+  '63日波动':'近63个可用交易日的年化波动状态，用于衡量价格路径不稳定程度，不等于亏损概率。',
+  '风控实验阶段':'三市场风控Shadow实验当前阶段。仅研究与约束候选，不自动修改生产权重。',
+  '环节':'跨市场动力链中的一个状态节点，例如结构脆弱、政策重定价、债券波动或市场传导。',
+  '强度':'该动力链节点对应的状态分数或分位证据，口径随节点而定。',
+  '主要证据':'触发或支持当前动力链状态的核心观测字段。',
+  '指标':'当前宏观、利率、信用或流动性观测指标。',
+  '当前值':'最新可用观测值。单位由具体指标定义，不同指标不可直接横向比较数值大小。',
+  '历史状态分位':'当前指标在可用历史样本中的状态分位，用于判断相对异常程度。',
+  '曲线':'Fed Funds 或 SOFR 等利率预期曲线类别。',
+  '真实合约点':'当前曲线中实际取得并通过质量检查的期货合约月份数量。',
+  '前端隐含利率':'曲线较近端有效合约价格换算出的隐含利率。',
+  '远端隐含利率':'曲线较远端有效合约价格换算出的隐含利率。',
+  '远端−前端':'远端隐含利率减前端隐含利率，用于描述期限曲线方向，不是政策结果预测。',
+  '合约月':'对应利率期货合约的交割月份。',
+  '代码':'外部数据源使用的合约或标识代码。',
+  '价格':'最新可用合约价格，不等同于利率本身。',
+  '隐含利率':'由期货价格按该合约规则换算的市场隐含利率。',
+  '联合状态':'由多个风险因子共同构成并冻结定义的复合状态。',
+  '领先期':'历史回溯中从该状态出现到危机观察窗口的交易日距离。',
+  '危机命中':'历史危机样本中该联合状态出现的比例。',
+  '正常误报':'非危机控制样本中同一状态出现的比例。',
+  'Lift':'危机命中率相对正常误报率的提升幅度，用于比较区分度，不是概率。',
+  'p':'Fisher精确检验的原始p值。',
+  'q':'多重比较校正后的BH q值。',
+  '稳健性':'留一事件等稳健性检查结果，用于判断结论是否依赖单个历史事件。',
+  '实验阶段':'当前Shadow风控实验状态，不代表生产组合已经执行调整。',
+  '风险敞口倍率候选':'Shadow实验提出的风险资产目标敞口倍率候选，1.00表示不缩放。',
+  '防御敞口底线候选':'Shadow实验提出的最低防御资产配置比例候选。',
+  '是否已作用生产权重':'明确标记Shadow风控结果是否真正写入生产权重。当前系统设计应保持为否。',
+  'ETF':'当前研究路线使用的ETF或可交易产品标识。',
+  '目标权重':'冻结决策中该ETF的目标配置比例，不代表券商真实成交持仓。',
+  '当前实际名次':'根据已经发生的真实后验结果重新排序的当前名次，不会反向修改冻结决策。'
+ },
+ en:{
+  'Market':'Market represented by this row: US, CN A-shares, or HK equities.',
+  '252d drawdown stress':'Current benchmark drawdown pressure relative to its recent 252-session peak. It is not a forecast of future downside.',
+  '63d negative momentum':'The 63-session negative-momentum state feature used by the risk model. It is historical state evidence, not a forward return forecast.',
+  'Momentum percentile':'Historical percentile of the current negative-momentum state.',
+  '63d volatility':'Annualized volatility state over the latest 63 available sessions. It measures path instability, not loss probability.',
+  'Risk-control stage':'Current stage of the three-market Shadow risk-control experiment. It does not automatically alter production weights.',
+  'Lift':'Difference in occurrence between crisis-event samples and normal controls. It is not a probability.',
+  'p':'Raw Fisher exact-test p-value.',
+  'q':'Benjamini-Hochberg multiple-testing adjusted q-value.'
+ }
+};
+
 function tableHeaderTip(label){
  const raw=String(label||'').trim();
  const key=normalizeHeaderLabel(raw);
+ const extra=(TABLE_HEADER_TIPS_EXTRA[lang]||{})[key];
+ if(extra)return extra;
  const local=TABLE_HEADER_TIPS[lang]||{};
  if(local[key])return local[key];
  const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
@@ -1772,6 +1907,13 @@ function applyText(){
  Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
  applyTableHeaderTooltips();
  applyUiTooltips();
+ if(el('selectedMarketKicker'))el('selectedMarketKicker').textContent=lang==='zh'?'当前市场':'Selected market';
+ if(el('marketSectionNote'))el('marketSectionNote').textContent=lang==='zh'
+  ?'以下先展示当前所选市场的结果、行情、策略池和该市场专属实验。三市场联动风险中心放在单市场内容之后。'
+  :'The selected market’s results, live data, strategy pool and market-specific experiments appear first. The three-market linked risk center follows later.';
+ if(el('crossMarketRiskNote'))el('crossMarketRiskNote').textContent=lang==='zh'
+  ?'以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。'
+  :'The section below is the cross-market risk layer. It always analyzes US, CN and HK jointly and does not switch with the selected market.';
 }
 function statusTip(status){
  const key=String(status||'').toLowerCase();
@@ -1815,6 +1957,71 @@ function warmMarketCache(m){
  urls.forEach(url=>jsonCached(url,url.includes('strategy-context')?60000:15000).catch(()=>null));
 }
 function warmAllMarkets(){['US','CN','HK'].forEach(warmMarketCache)}
+const MARKET_UI={
+ US:{zh:'美股 / US',en:'US Equities',timezone:'America/New_York',routeZh:'Return-Max 主路线，纳入容量与模型执行成本；风险资产 SPY / QQQ / IWM，防御资产 TLT / GLD。',routeEn:'Return-Max primary route with capacity and modeled execution cost; SPY / QQQ / IWM are risk assets and TLT / GLD are defensive assets.'},
+ CN:{zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.'},
+ HK:{zh:'港股 / HK',en:'Hong Kong Equities',timezone:'Asia/Hong_Kong',routeZh:'港股独立收益最大化路线；2800 / 2828 / 3033 为风险资产，2819 为防御资产，策略权重与后验独立记录。',routeEn:'Independent HK return-max route; 2800 / 2828 / 3033 are risk assets and 2819 is the defensive sleeve, with independent weights and posterior evidence.'}
+};
+let marketClockState={};
+function phaseText(phase){
+ const p=String(phase||'');
+ const zh={OPEN:'交易中',PREOPEN:'盘前',BREAK:'午间休市',POSTCLOSE:'盘后',CLOSED:'休市',CALENDAR_UNAVAILABLE:'日历不可用'};
+ const en={OPEN:'OPEN',PREOPEN:'PREOPEN',BREAK:'BREAK',POSTCLOSE:'POSTCLOSE',CLOSED:'CLOSED',CALENDAR_UNAVAILABLE:'CALENDAR N/A'};
+ return (lang==='zh'?zh:en)[p]||p||'-';
+}
+function selectMarket(m){
+ if(!['US','CN','HK'].includes(m))return;
+ el('market').value=m;
+ onMarketChange();
+}
+function tickMarketClocks(){
+ const now=new Date();
+ ['US','CN','HK'].forEach(m=>{
+  const meta=MARKET_UI[m];
+  const tz=marketClockState[m]?.timezone||meta.timezone;
+  try{
+   el('clockTime'+m).textContent=new Intl.DateTimeFormat([],{
+    timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+   }).format(now);
+   el('clockDate'+m).textContent=new Intl.DateTimeFormat(lang==='zh'?'zh-CN':'en-US',{
+    timeZone:tz,month:'2-digit',day:'2-digit',weekday:'short'
+   }).format(now)+' · '+tz;
+  }catch(e){}
+ });
+}
+function renderMarketIdentity(){
+ const m=el('market').value;
+ const meta=MARKET_UI[m];
+ const state=marketClockState[m]||{};
+ document.querySelectorAll('[data-clock-market]').forEach(node=>{
+  const key=node.dataset.clockMarket;
+  node.classList.toggle('selected',key===m);
+  node.classList.toggle('open',!!marketClockState[key]?.is_open);
+ });
+ el('selectedMarketName').textContent=lang==='zh'?meta.zh:meta.en;
+ el('selectedMarketRoute').textContent=lang==='zh'?meta.routeZh:meta.routeEn;
+ const phase=state.session_phase||'-';
+ el('selectedMarketSession').textContent=phaseText(phase);
+ el('selectedMarketSession').className='market-session-badge'+(state.is_open?' open':'');
+ const bench=state.benchmark||'-',mode=state.primary_experiment_mode||'-',currency=state.currency||'-';
+ el('selectedMarketMeta').textContent=(lang==='zh'
+  ? '基准 '+bench+' · 主路线 '+mode+' · 计价 '+currency
+  : 'Benchmark '+bench+' · primary route '+mode+' · currency '+currency);
+ ['US','CN','HK'].forEach(key=>{
+  const s=marketClockState[key]||{};
+  el('clockPhase'+key).textContent=phaseText(s.session_phase);
+ });
+}
+async function refreshMarketClocks(){
+ try{
+  const payload=await jsonCached('/api/ui/market-clocks',15000);
+  marketClockState=Object.fromEntries((payload.markets||[]).map(x=>[x.market_id,x]));
+  renderMarketIdentity();
+  tickMarketClocks();
+ }catch(e){
+  renderMarketIdentity();
+ }
+}
 function localClockFromEpoch(ts){
  if(ts===null||ts===undefined)return '-';
  try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
@@ -1898,7 +2105,7 @@ function applyMarketScope(){
      : 'Hong Kong now has an independent strategy research route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded independently. Research only; no broker execution.')
   : '';
 }
-function onMarketChange(){applyMarketScope();warmMarketCache(el('market').value);refreshAll();refreshLiveWindows()}
+function onMarketChange(){applyMarketScope();renderMarketIdentity();warmMarketCache(el('market').value);refreshAll();refreshLiveWindows()}
 async function runNow(){
  const m=el('market').value;
  const x=await json('/api/live/run/'+m,{method:'POST'});
@@ -2395,8 +2602,8 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,300);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels()}
+applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,300);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
 </script>
 </body>
 </html>
