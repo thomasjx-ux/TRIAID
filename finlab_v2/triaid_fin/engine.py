@@ -1296,7 +1296,10 @@ class EvolutionLabEngine:
                 for market_id in market_ids()
             },
             "strategy_registry_count":len(self.strategy_population.definitions()),
-            "markets":["US","CN","HK"],
+            "markets":list(market_ids()),
+            "evidence_markets":list(evidence_market_ids()),
+            "market_registry":MARKET_REGISTRY.snapshot(),
+            "account_registry":self.account_registry.snapshot(),
             "run_counts":counts,
             "run_scope_counts":{
                 "official_evidence":sum(1 for r in runs if self._evidence_eligible_run(r)),
