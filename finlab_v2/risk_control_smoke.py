@@ -125,7 +125,13 @@ exp=CrossMarketRiskControlExperiment(FakeStore())
 r=exp.build(
     risk_warning=risk_warning,latent=latent,long_cycle=long_cycle,
     cross_market=cross_market,policy_curve=policy_curve,prospective=prospective,
-    market_data_status={"errors":{"HK:REALTIME":{"errors":["2819.HK:sparse"]}}},
+    market_data_status={
+        "errors":{},
+        "cache":{
+            "HK:REALTIME":{"degraded_symbols":["2819.HK:sparse_alignment:1/30"]},
+            "HK:INTRADAY":{"degraded_symbols":["2819.HK:sparse_alignment:4/40"]},
+        },
+    },
     force=True,
 )
 assert r["experiment_type"]=="THREE_MARKET_RISK_CONTROL_SHADOW"
@@ -144,6 +150,8 @@ assert r["prospective_validation"]["pending_horizons"]==[20,60,120,250]
 assert "not calibrated crash probabilities" in r["semantics"]["probability_guard"]
 assert r["data_quality"]["risk_evidence_coverage"]["coverage_grade"]=="PARTIAL"
 assert r["data_quality"]["hk_high_frequency_degraded"] is True
+assert r["data_quality"]["hk_high_frequency_errors"]=={}
+assert "HK:REALTIME" in r["data_quality"]["hk_high_frequency_degraded_panels"]
 assert r["data_quality"]["evidence_critical_daily_data_affected"] is False
 
 print("TRIAID_RISK_CONTROL_SMOKE_PASS",{
