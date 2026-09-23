@@ -15,6 +15,16 @@ HOP_BY_HOP={
     "proxy-authorization","te","trailer","transfer-encoding","upgrade",
 }
 
+HOMEPAGE_BROKEN=b"return (currency==='USD'?'\\nfunction strategyLabelHtml"
+HOMEPAGE_FIXED=(
+    b"let prefix='';\\n"
+    b" if(currency==='USD')prefix=String.fromCharCode(36);\\n"
+    b" else if(currency==='CNY')prefix=String.fromCharCode(165);\\n"
+    b" else if(currency==='HKD')prefix='HK'+String.fromCharCode(36);\\n"
+    b" return prefix+v.toFixed(digits);\\n"
+    b"}\\nfunction strategyLabelHtml"
+)
+
 
 class GatewayHandler(BaseHTTPRequestHandler):
     protocol_version="HTTP/1.1"
@@ -48,17 +58,29 @@ class GatewayHandler(BaseHTTPRequestHandler):
             conn.request(self.command,self.path,body=body,headers=headers)
             upstream=conn.getresponse()
             payload=upstream.read()
+            is_home=self.command in {"GET","HEAD"} and self.path.split("?",1)[0]=="/"
+            patched=False
+            if is_home and upstream.status==200 and HOMEPAGE_BROKEN in payload:
+                payload=payload.replace(HOMEPAGE_BROKEN,HOMEPAGE_FIXED,1)
+                patched=True
             self.send_response(upstream.status,upstream.reason)
             for key,value in upstream.getheaders():
                 lower=key.lower()
-                if lower in HOP_BY_HOP or lower in {"content-length"}:
+                if lower in HOP_BY_HOP or lower in {"content-length","etag","content-md5"}:
+                    continue
+                if is_home and lower in {"cache-control","expires","last-modified"}:
                     continue
                 self.send_header(key,value)
+            if is_home:
+                self.send_header("Cache-Control","no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Content-Length",str(len(payload)))
-            self.send_header("X-TRIAID-Gateway","runtime-fast-v1")
+            self.send_header("X-TRIAID-Gateway","runtime-fast-homepage-js-hotfix-v2")
+            self.send_header("X-TRIAID-Homepage-Patched","1" if patched else "0")
             self.end_headers()
             if self.command!="HEAD" and payload:
                 self.wfile.write(payload)
+            if is_home:
+                print("TRIAID_GATEWAY_HOME",upstream.status,f"patched={patched}",flush=True)
         except Exception as exc:
             payload=json.dumps(
                 {
