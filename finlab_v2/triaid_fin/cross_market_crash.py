@@ -8,9 +8,10 @@ from statistics import mean
 
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
+from .market_registry import MARKET_REGISTRY, market_ids
 
 
-MARKET_INDEXES={
+_LEGACY_MARKET_INDEXES={
     "US":{
         "SP500":"^GSPC",
         "NASDAQ_COMPOSITE":"^IXIC",
@@ -26,11 +27,33 @@ MARKET_INDEXES={
         "HANG_SENG_CHINA_ENTERPRISES":"^HSCE",
     },
 }
-PRIMARY_INDEX={
+_LEGACY_PRIMARY_INDEX={
     "US":"SP500",
     "CN":"SHANGHAI_COMPOSITE",
     "HK":"HANG_SENG",
 }
+
+
+def _market_indexes() -> dict[str, dict[str, str]]:
+    out={}
+    for market in market_ids():
+        spec=MARKET_REGISTRY.get(market)
+        rows=dict(spec.research_indexes)
+        if not rows:
+            rows=dict(_LEGACY_MARKET_INDEXES.get(market) or {})
+        if rows:
+            out[market]=rows
+    return out
+
+
+def _primary_index() -> dict[str, str]:
+    out={}
+    for market in market_ids():
+        spec=MARKET_REGISTRY.get(market)
+        label=spec.primary_index_label or _LEGACY_PRIMARY_INDEX.get(market)
+        if label:
+            out[market]=label
+    return out
 DATA_SOURCE_REVISION="market-provider-split@0.1.0"
 CANONICAL_EPISODES={
     "ASIAN_FINANCIAL_CRISIS_1997_98":{
@@ -57,8 +80,8 @@ CANONICAL_EPISODES={
 
 
 class CrossMarketCrashExperiment:
-    version="us-cn-hk-crash-linkage@0.2.0"
-    protocol_version="cross-market-crash-linkage-protocol@0.2.0"
+    version="n-market-crash-linkage@0.3.0"
+    protocol_version="cross-market-crash-linkage-protocol@0.3.0"
     latest_file="us_cn_hk_crash_linkage_latest.json"
     history_file="us_cn_hk_crash_linkage_history.jsonl"
 
@@ -314,12 +337,12 @@ class CrossMarketCrashExperiment:
         crash_count=sum(1 for row in stats.values() if row.get("crash_20pct"))
         stress_count=sum(1 for row in stats.values() if row.get("stress_10pct"))
         available_count=sum(1 for row in stats.values() if row.get("available"))
-        if available_count>=3 and crash_count==3:
-            relation="ALL_THREE_20PCT_CRASH"
+        if available_count>=2 and crash_count==available_count:
+            relation="ALL_THREE_20PCT_CRASH" if available_count==3 else "ALL_AVAILABLE_MARKETS_20PCT_CRASH"
         elif crash_count>=2:
             relation="TWO_OR_MORE_20PCT_CRASH"
-        elif available_count>=3 and stress_count==3:
-            relation="ALL_THREE_STRESSED"
+        elif available_count>=2 and stress_count==available_count:
+            relation="ALL_THREE_STRESSED" if available_count==3 else "ALL_AVAILABLE_MARKETS_STRESSED"
         elif stress_count>=2:
             relation="TWO_OR_MORE_STRESSED"
         elif stress_count==1:
@@ -344,7 +367,9 @@ class CrossMarketCrashExperiment:
         previous=self.latest()
         errors={}
         indexes={}
-        for market,specs in MARKET_INDEXES.items():
+        market_indexes=_market_indexes()
+        primary_index=_primary_index()
+        for market,specs in market_indexes.items():
             rows={}
             for label,symbol in specs.items():
                 try:
@@ -354,7 +379,7 @@ class CrossMarketCrashExperiment:
             indexes[market]=rows
 
         primary_series={}
-        for market,label in PRIMARY_INDEX.items():
+        for market,label in primary_index.items():
             row=(indexes.get(market) or {}).get(label)
             if row is None:
                 raise RuntimeError(f"primary_index_unavailable:{market}:{label}:{errors}")
@@ -401,15 +426,14 @@ class CrossMarketCrashExperiment:
             "shadow_only":True,
             "applied_to_weights":False,
             "production_action":"NONE",
-            "markets":["US","CN","HK"],
+            "markets":sorted(primary_series),
             "primary_indexes":{
-                "US":"S&P 500 (^GSPC)",
-                "CN":"Shanghai Composite (000001.SS)",
-                "HK":"Hang Seng Index (^HSI)",
+                market:f"{label} ({(market_indexes.get(market) or {}).get(label)})"
+                for market,label in primary_index.items()
             },
             "secondary_indexes":{
                 market:list(specs)
-                for market,specs in MARKET_INDEXES.items()
+                for market,specs in market_indexes.items()
             },
             "crash_definition":{
                 "trigger":"20% peak-to-current drawdown",
@@ -427,29 +451,29 @@ class CrossMarketCrashExperiment:
             "data_completeness":{
                 **{
                     f"{market}_indexes":len(indexes.get(market) or {})
-                    for market in MARKET_INDEXES
+                    for market in market_indexes
                 },
                 **{
                     f"{market}_indexes_requested":len(specs)
-                    for market,specs in MARKET_INDEXES.items()
+                    for market,specs in market_indexes.items()
                 },
                 "primary_indexes_complete":all(
                     (indexes.get(market) or {}).get(label) is not None
-                    for market,label in PRIMARY_INDEX.items()
+                    for market,label in primary_index.items()
                 ),
                 "errors":errors,
             },
             "interpretation":{
-                "purpose":"Measure whether major US, A-share and Hong Kong equity crashes are synchronized, lead-lag linked, regionally transmitted, or predominantly local.",
+                "purpose":"Measure whether registered equity markets experience synchronized, lead-lag linked, regionally transmitted, or predominantly local crashes.",
                 "causality_guard":"Temporal lead/lag and return correlation do not establish causal transmission.",
                 "selection_guard":"Canonical episodes are disclosed in advance; automatic crash detection is also reported to reduce cherry-picking.",
-                "hong_kong_role":"Hong Kong is treated as an open, globally connected China-sensitive market that can differ materially from onshore A shares.",
+                "market_role_guard":"Market-specific interpretation belongs in registered metadata or evidence, not in the core linkage algorithm.",
                 "production_guard":"This experiment cannot change strategy weights until prospective incremental net-return value is established.",
             },
         }
         digest=self._hash(payload)
         payload["experiment_hash"]=digest
-        payload["experiment_id"]=f"USCNHK-CRASH-{as_of}-{digest[:10]}"
+        payload["experiment_id"]=f"NMARKET-CRASH-{as_of}-{digest[:10]}"
         payload["previous_experiment_id"]=previous.get("experiment_id") if previous else None
         self.store.save_json(self.latest_file,payload)
         history=self.history(5000)
