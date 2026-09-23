@@ -20,6 +20,7 @@ from .cross_market_crash import CrossMarketCrashExperiment
 from .latent_hazard import LatentHazardExperiment
 from .policy_curve import PolicyExpectationCurve
 from .hazard_prospective import HazardProspectiveLedger
+from .risk_warning import RiskWarningSystem
 from .population_state import PopulationStateTracker
 from .prospective_experiment import ProspectiveExperimentProtocol
 from .recovery_core import RecoveryWaveCore
@@ -62,6 +63,7 @@ class EvolutionLabEngine:
         self.latent_hazard=LatentHazardExperiment(self.store)
         self.policy_curve=PolicyExpectationCurve(self.store)
         self.hazard_prospective=HazardProspectiveLedger(self.store)
+        self.risk_warning=RiskWarningSystem(self.store)
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
@@ -159,6 +161,7 @@ class EvolutionLabEngine:
             "latent_hazard":self.latent_hazard.version if hasattr(self,"latent_hazard") else "latent-hazard-discovery@unknown",
             "policy_curve":self.policy_curve.version if hasattr(self,"policy_curve") else "policy-expectation-curve@unknown",
             "hazard_prospective":self.hazard_prospective.version if hasattr(self,"hazard_prospective") else "hazard-prospective-ledger@unknown",
+            "risk_warning":self.risk_warning.version if hasattr(self,"risk_warning") else "risk-warning@unknown",
             "store":self.store.version,
             "evolution":self.evolution.version,
             "execution_calibration":ExecutionCalibration.version,
@@ -796,6 +799,25 @@ class EvolutionLabEngine:
     def hazard_prospective_status(self)->dict:
         return self.hazard_prospective.status()
 
+    def risk_warning_run(self,force:bool=False)->dict:
+        return self.risk_warning.build(
+            long_cycle=self.long_cycle_hypothesis.latest(),
+            latent=self.latent_hazard.latest(),
+            cross_market=self.cross_market_crash.latest(),
+            policy_curve=self.policy_curve.latest(),
+            prospective=self.hazard_prospective.latest(),
+            force=force,
+        )
+
+    def risk_warning_latest(self)->dict|None:
+        return self.risk_warning.latest()
+
+    def risk_warning_history(self,limit:int=100)->list[dict]:
+        return self.risk_warning.history(limit)
+
+    def risk_warning_status(self)->dict:
+        return self.risk_warning.status()
+
     def prospective_experiment_status(self)->dict:
         return self.prospective_experiment.status()
 
@@ -1188,6 +1210,9 @@ class EvolutionLabEngine:
             hazard_shadow=self.hazard_prospective.latest()
             if hazard_shadow:
                 summary["hazard_prospective"]=hazard_shadow
+            risk_warning=self.risk_warning.latest()
+            if risk_warning:
+                summary["risk_warning"]=risk_warning
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
