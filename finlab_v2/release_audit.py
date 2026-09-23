@@ -40,6 +40,11 @@ BUILD_CASES=[
     "storage_runtime_fence_smoke.py",
 ]
 
+RUNTIME_BOOTSTRAPS=[
+    "hk_market_live_bootstrap.py",
+    "policy_hazard_live_bootstrap.py",
+]
+
 RUNTIME_REQUIRED_PATHS=[
     "/health/live",
     "/api/status",
@@ -138,6 +143,29 @@ def runtime_checks()->list[dict]:
 
     live=wait_liveness()
     check("process_liveness",live.get("ok") is True,live)
+
+    maintenance_deadline=time.monotonic()+120
+    maintenance=live.get("startup_maintenance_receipt") or {}
+    while maintenance.get("state") not in {"COMPLETED","FAILED","DISABLED"} and time.monotonic()<maintenance_deadline:
+        time.sleep(1)
+        _,live=http_get("/health/live",timeout=5)
+        maintenance=(live or {}).get("startup_maintenance_receipt") or {}
+    check("startup_maintenance_complete",maintenance.get("state") in {"COMPLETED","DISABLED"},maintenance)
+
+    for script in RUNTIME_BOOTSTRAPS:
+        result=run_case(script)
+        rows.append({"name":"runtime_bootstrap:"+script,"passed":result["passed"],"detail":result})
+
+    risk_deadline=time.monotonic()+180
+    for risk_path in ("/api/risk-warning/latest","/api/risk-control/latest"):
+        while time.monotonic()<risk_deadline:
+            try:
+                code,_=http_get(risk_path,timeout=10)
+                if code==200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
 
     payloads={}
     for path in RUNTIME_REQUIRED_PATHS:
