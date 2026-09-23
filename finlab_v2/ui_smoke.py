@@ -70,7 +70,7 @@ assert 'id="riskDrivers"' in html
 assert 'id="riskBlockers"' in html
 assert "renderRiskWarning" in html
 assert "/api/risk-warning/latest" in html
-assert "风险指数是0–100的状态/证据压力评分，不是股灾概率" in html
+assert "先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日" in html
 assert "TRIAID 三市场联动风险中心" in html
 assert "它不是第四个市场" in html
 assert 'id="riskThreeMarketRows"' in html
@@ -86,7 +86,8 @@ assert "数据完整性与降级状态" in html
 assert "renderRiskControl" in html
 assert "/api/risk-control/latest" in html
 assert "三市场风控 Shadow 实验" in html
-assert "港股已进入独立策略研究路线" in html
+assert "港股独立路线" in html
+assert "不能拿美股/A股权重或结果横向替代" in html
 assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
