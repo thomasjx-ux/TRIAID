@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import mean, pstdev
 from typing import Any
 
-from .store import RunStore
+from .store import RunStore\nfrom .tencent_cn_data import TencentCNMarketDataProvider
 
 
 HORIZON_YEARS=(2,3,5,7,10,15,20,25,30)
@@ -68,6 +68,18 @@ class LongCycleHypothesisExperiment:
     def _hash(cls,payload:dict)->str:
         return hashlib.sha256(cls._canonical(payload).encode("utf-8")).hexdigest()
 
+
+    @staticmethod
+    def _fetch_market_full(symbol:str,timeout:int=25)->dict:
+        upper=symbol.upper()
+        if upper.endswith((".SS",".SH",".SZ")):
+            return TencentCNMarketDataProvider().fetch_full_daily(
+                upper,
+                min_points=300,
+                timeout=timeout,
+                count=10000,
+            )
+        return LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=timeout)
 
     @staticmethod
     def _fetch_yahoo_full(symbol:str,timeout:int=25)->dict:
