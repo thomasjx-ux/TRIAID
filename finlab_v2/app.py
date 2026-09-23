@@ -924,6 +924,9 @@ button.primary{background:#172033;color:#fff;border-color:#172033}
 .prospective-kpis .item b{font-variant-numeric:tabular-nums}.prospective-note{font-size:12px;line-height:1.5;color:#5f6b7a;margin-top:10px}
 canvas{width:100%;height:270px;background:#fff;border:1px solid var(--line);border-radius:12px}
 .legend{display:flex;gap:18px;font-size:12px;margin:8px 0}.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+.curve-empty-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-height:54px;color:#5f6b7a}
+.curve-empty-state b{color:#172033;font-size:14px}.curve-empty-state span{font-size:12px;line-height:1.45}
+.curve-plot-wrap{margin-top:0}
 .tablewrap{overflow:auto;max-height:690px;border:1px solid var(--line);border-radius:12px;background:#fff}
 table{width:100%;border-collapse:collapse;background:#fff}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #edf0f3;font-size:13px;vertical-align:top}
@@ -1239,11 +1242,17 @@ tbody tr:hover td{background:#f8fbff}
   </div>
 
   <h2 id="curveTitle">连续回顾</h2>
-  <div class="legend">
-    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
-    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
+  <div id="curveEmptyState" class="curve-empty-state">
+    <b id="curveEmptyTitle">等待首个真实后验</b>
+    <span id="curveEmptyText">当前还没有可用于连续回顾的已完成后验。首个真实结果产生后，这里会自动展开基线与 TRIAID 的累计路径。</span>
   </div>
-  <canvas id="curve" width="1220" height="270"></canvas>
+  <div id="curvePlotWrap" class="curve-plot-wrap" style="display:none">
+    <div class="legend" id="curveLegend">
+      <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
+      <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
+    </div>
+    <canvas id="curve" width="1220" height="270"></canvas>
+  </div>
   </section>
 
   <section class="flow-stage" id="stageRoute">
@@ -1863,7 +1872,7 @@ const UI_TIPS={
   strategyTitle:'主表展示当前获得配置权重的策略。策略名称旁的信息标识可查看底层标的最新可用价和最近完整交易日涨跌幅。',
   dailyTitle:'当前市场总览把市场状态、运行状态、入选策略、后验结论、数据日、Core版本、入选数量和累计相对收益差放在同一块。先在这里确认当前快照是否完整，再进入下方行情和策略。',
   overviewTitle:'兼容性锚点：当前状态已并入“当前市场总览”，页面不再单独占一整块。',
-  curveTitle:'只使用已完成EVALUATED后验的运行。两条权益曲线逐期复利；累计单期超额和是各期excess_return的算术和，不等于两条权益曲线的最终差值。',
+  curveTitle:'只使用已完成EVALUATED后验的运行。没有任何已完成后验时不保留空白图表，只显示紧凑等待状态；首个真实后验产生后自动展开两条累计路径。',
   evolutionTitle:'统计已完成后验的TRIAID干预结果，并据此形成候选Core。生成Candidate不会自动晋升为生产Core。',
   baseReturnLabel:'当前结果卡的基线组合真实后验收益。A股压力实验使用登记时冻结的最差策略池；其他运行使用对应冻结基线。无后验时不显示收益。',
   triaidReturnLabel:'与基线完全同一结果期内，冻结TRIAID配置按已发生策略收益计算的后验收益。它不是当前时点预测值，也不代表券商账户实际成交收益。',
@@ -1914,7 +1923,7 @@ const UI_TIPS={
   strategyTitle:'The main table shows strategies with current allocation weight. Hover the info mark beside a strategy name for latest available underlying prices and last complete trading-day changes.',
   dailyTitle:'The current-market overview keeps regime, run state, selected strategies, posterior conclusion, data date, Core version, selection count and cumulative relative-return gap in one compact block. Use it to verify the snapshot before reading live data or strategy detail.',
   overviewTitle:'Compatibility anchor: current-state information is now merged into the Current Market Overview instead of occupying a separate block.',
-  curveTitle:'Uses only EVALUATED runs. Equity curves compound period returns; the sum of period excess returns is an arithmetic sum and is not the ending gap between the two equity curves.',
+  curveTitle:'Uses only EVALUATED runs. When no completed posterior exists, the chart collapses into a compact waiting state; it expands automatically after the first realized posterior result.',
   evolutionTitle:'Summarizes completed posterior intervention results and can form Candidate Cores. Creating a Candidate does not promote it automatically.',
   baseReturnLabel:'Realized posterior return of the baseline portfolio for the displayed completed evaluation. The CN stress route uses the worst pool frozen at registration; other runs use their corresponding frozen baseline.',
   triaidReturnLabel:'Posterior return of the frozen TRIAID allocation computed from strategy returns over exactly the same outcome period as the baseline. It is not broker-account realized P&L.',
@@ -2677,8 +2686,18 @@ async function pollRun(id,market){
  }
 }
 function drawCurve(points){
- const c=el('curve'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
- if(!points.length){g.fillStyle='#7b8593';g.font='13px system-ui';g.fillText(T[lang].noEval,18,32);return}
+ const c=el('curve'),plot=el('curvePlotWrap'),empty=el('curveEmptyState');
+ const hasPoints=Array.isArray(points)&&points.length>0;
+ if(empty)empty.style.display=hasPoints?'none':'flex';
+ if(plot)plot.style.display=hasPoints?'block':'none';
+ if(!hasPoints){
+  if(el('curveEmptyTitle'))el('curveEmptyTitle').textContent=lang==='zh'?'等待首个真实后验':'Awaiting first realized posterior';
+  if(el('curveEmptyText'))el('curveEmptyText').textContent=lang==='zh'
+   ?'当前还没有可用于连续回顾的已完成后验。首个真实结果产生后，这里会自动展开基线与 TRIAID 的累计路径。'
+   :'There is no completed posterior available for continuous review yet. After the first realized outcome, this area will automatically expand to show the baseline and TRIAID cumulative paths.';
+  return;
+ }
+ const g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
  const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);
  let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
  const X=i=>45+(c.width-70)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-55)*(hi-v)/(hi-lo);
