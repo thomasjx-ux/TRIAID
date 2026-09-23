@@ -67,6 +67,18 @@ assert 'id="riskBlockers"' in html
 assert "renderRiskWarning" in html
 assert "/api/risk-warning/latest" in html
 assert "风险指数是0–100的状态/证据压力评分，不是股灾概率" in html
+assert "TRIAID 三市场联动风险中心" in html
+assert "它不是第四个市场" in html
+assert 'id="riskThreeMarketRows"' in html
+assert 'id="riskDynamicsRows"' in html
+assert 'id="riskMacroRows"' in html
+assert 'id="riskTermRows"' in html
+assert 'id="riskCurveContractRows"' in html
+assert 'id="riskHistoryRows"' in html
+assert 'id="riskControlRows"' in html
+assert "renderRiskControl" in html
+assert "/api/risk-control/latest" in html
+assert "三市场风控 Shadow 实验" in html
 assert "港股已进入独立策略研究路线" in html
 assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
