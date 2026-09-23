@@ -12,7 +12,8 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import mean, pstdev
 from typing import Any
 
-from .store import RunStore\nfrom .tencent_cn_data import TencentCNMarketDataProvider
+from .store import RunStore
+from .tencent_cn_data import TencentCNMarketDataProvider
 
 
 HORIZON_YEARS=(2,3,5,7,10,15,20,25,30)
