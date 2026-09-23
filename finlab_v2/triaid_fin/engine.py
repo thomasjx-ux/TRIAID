@@ -9,12 +9,14 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from .audit import AuditModule
+from .account_registry import ACCOUNT_REGISTRY, register_account, register_strategy_pool
 from .alpha_evidence import AlphaEvidenceLedger
-from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
+from .contracts import AccountProfile, MarketSnapshot, OutcomeRequest, RunRecord, RunRequest, StrategyPoolSpec
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
+from .market_registry import market_ids
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
@@ -44,6 +46,8 @@ class EvolutionLabEngine:
 
     def __init__(self) -> None:
         self.store=RunStore()
+        self.account_registry=ACCOUNT_REGISTRY
+        self.account_registry.load_from_store(self.store)
         self.observations=MarketObservationStore(self.store)
         self.evolution=EvolutionModule(self.store)
         self.strategy_evolution=StrategyEvolutionModule(self.store)
@@ -85,7 +89,7 @@ class EvolutionLabEngine:
             self.store.save_run(run)
 
     def _prune_manual_previews(self,max_per_market:int=5)->None:
-        for market_id in ("US","CN","HK"):
+        for market_id in market_ids():
             previews=sorted(
                 [
                     r for r in self._runs.values()
@@ -124,8 +128,19 @@ class EvolutionLabEngine:
         return receipt
 
     def _apply_strategy_profiles(self)->None:
-        for market_id in ("US","CN","HK"):
+        for market_id in market_ids():
             self.strategy_population.configure_market(self.strategy_evolution.active(market_id))
+
+    def account_registry_status(self)->dict:
+        return self.account_registry.snapshot()
+
+    def upsert_strategy_pool(self,pool:StrategyPoolSpec)->dict:
+        row=register_strategy_pool(pool,replace=True,persist=True)
+        return row.model_dump(mode="json")
+
+    def upsert_account(self,account:AccountProfile)->dict:
+        row=register_account(account,replace=True,persist=True)
+        return row.model_dump(mode="json")
 
     def refresh_core(self)->None:
         params=self.evolution.active()
@@ -136,6 +151,7 @@ class EvolutionLabEngine:
     def module_manifest(self)->Dict[str,str]:
         return {
             "architecture":self.architecture_version,
+            "account_registry":self.account_registry.version,
             "objective_constitution":OBJECTIVE_CONSTITUTION_VERSION,
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
