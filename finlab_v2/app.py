@@ -1646,7 +1646,7 @@ function renderRiskWarning(report){
  el('riskOverallBand').className='risk-band '+bandClass;
  el('riskOverallMini').textContent=(Number.isFinite(score)?score.toFixed(1):'-')+' / 100';
  const conf=report.confidence||{};
- el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
+ el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples_tested??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
  ['20','60','120','250'].forEach(h=>{
    const x=hs[h]||{};
    const n=Number(x.risk_pressure_index);
