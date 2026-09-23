@@ -919,7 +919,7 @@ button.primary{background:#172033;color:#fff;border-color:#172033}
  .status-card{min-height:0}
 }
 .prospective-panel{display:none;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:10px}
-.prospective-panel.show{display:block}.prospective-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.prospective-panel.show{display:block}.prospective-panel.unavailable .summary,.prospective-panel.unavailable h3,.prospective-panel.unavailable .tablewrap{display:none}.prospective-panel.unavailable .prospective-note{margin-top:10px}.prospective-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .prospective-meta{font-size:12px;color:#748091;margin-top:5px}.prospective-kpis{margin-top:10px}
 .prospective-kpis .item b{font-variant-numeric:tabular-nums}.prospective-note{font-size:12px;line-height:1.5;color:#5f6b7a;margin-top:10px}
 canvas{width:100%;height:270px;background:#fff;border:1px solid var(--line);border-radius:12px}
@@ -2427,17 +2427,17 @@ const MARKET_UI={
   zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeMode:'CN_RETURN_MAX_CAPACITY',
   routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',
   routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.',
-  scopeZh:'A股页面以 CN_RETURN_MAX_CAPACITY 为主路线。策略群、冻结基线、前瞻实验、恢复波段和容量结果都只与A股自身数据比较。',
-  scopeEn:'The CN page uses CN_RETURN_MAX_CAPACITY as its primary route. Strategy groups, frozen controls, prospective tests, recovery-wave research and capacity results are compared only within CN.',
+  scopeZh:'A股页面以 CN_RETURN_MAX_CAPACITY 为主路线。策略群、冻结基线、恢复波段和容量结果只与A股自身数据比较；旧 CN_WORST_POOL_RESCUE 前瞻协议单独显示状态，不混入当前主路线。',
+  scopeEn:'The CN page uses CN_RETURN_MAX_CAPACITY as its primary route. Strategy groups, frozen controls, recovery-wave research and capacity results are CN-only; the legacy CN_WORST_POOL_RESCUE prospective protocol is shown separately and is not mixed into the current primary route.',
   decisionZh:'A股收益优先决策',decisionEn:'CN Return-First Decision',
   decisionDescZh:'先看A股收益优先策略群与 TRIAID 动态权重，再看候选池为什么没有入选。',
   decisionDescEn:'Inspect the CN return-first strategy group and TRIAID dynamic weights, then see why candidates were excluded.',
   validationZh:'A股真实后验验证',validationEn:'CN Realized Posterior Validation',
   validationDescZh:'用同一冻结时点的收益优先基线与 TRIAID 比较，并检查累计路径是否持续。',
   validationDescEn:'Compare the return-first baseline and TRIAID frozen at the same time, then test persistence on the cumulative path.',
-  routeStageZh:'A股前瞻、恢复波段与容量',routeStageEn:'CN Prospective, Recovery-Wave & Capacity',
-  routeStageDescZh:'把前瞻对照、恢复波段研究和人民币资金容量放在同一专属路线阶段，判断收益是否可实现。',
-  routeStageDescEn:'Keep prospective controls, recovery-wave research and CNY capacity in one market-specific stage to test whether the return is realizable.',
+  routeStageZh:'A股恢复波段、容量与前瞻证据状态',routeStageEn:'CN Recovery-Wave, Capacity & Prospective Evidence Status',
+  routeStageDescZh:'当前主路线是 CN_RETURN_MAX_CAPACITY；这里集中检查恢复波段、人民币容量，以及旧前瞻协议当前是否仍有可用证据。',
+  routeStageDescEn:'The primary route is CN_RETURN_MAX_CAPACITY. This stage checks recovery-wave evidence, CNY capacity, and whether the legacy prospective protocol currently contributes usable evidence.',
   baselineZh:'收益优先冻结基线',baselineEn:'Frozen return-first baseline',
   riskAssets:['510300.SS','510500.SS','159915.SZ','512100.SS'],defensiveAssets:['511010.SS']
  },
@@ -3127,7 +3127,7 @@ function renderMarketRouteOverview(m,latest,routeEvaluated,selected,d){
  el('marketRoutePosterior').className=posteriorClass;
  const real={
   US:zh?'四档USD容量 + 模型成本 + 模拟成交后验已接入':'4 USD capacity sleeves + modeled costs + simulated-execution posterior connected',
-  CN:zh?'前瞻对照 + 人民币容量袖套 + 恢复波段后验已接入':'Prospective control + CNY capacity sleeves + recovery-wave posterior connected',
+  CN:zh?'人民币容量袖套 + 恢复波段已接入；前瞻协议按当前状态单独标记':'CNY capacity sleeves + recovery-wave evidence connected; prospective protocol is shown separately by current status',
   HK:zh?'港股独立容量后验账本尚未形成；不借用US/CN结果':'Dedicated HK capacity posterior ledger not yet formed; US/CN results are not substituted'
  };
  el('marketRouteRealizability').textContent=real[m]||'-';
@@ -3197,9 +3197,22 @@ function renderUSReturnMax(report){
  el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
   '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
 }
-function renderProspective(report){
+function renderProspective(report,status){
  const panel=el('prospectivePanel');
- if(!report){panel.className='prospective-panel';return;}
+ if(!report){
+  if(el('market').value!=='CN'){panel.className='prospective-panel';return;}
+  const s=status||{};
+  panel.className='prospective-panel show unavailable';
+  el('prospectiveTitle').textContent=lang==='zh'?'A股辅助前瞻协议 · 当前未激活':'CN Auxiliary Prospective Protocol · Inactive';
+  el('prospectiveStatus').textContent=lang==='zh'?'非当前主路线证据':'Not current-route evidence';
+  el('prospectiveMeta').textContent=(s.version||'cn-prospective-controls@0.3.0')+' · '+
+    (lang==='zh'?'当前协议实验 ':'current-protocol experiments ')+(s.current_protocol_count??0)+' · '+
+    (lang==='zh'?'旧协议失效 ':'invalidated legacy ')+(s.invalidated_legacy_count??0);
+  el('prospectiveNote').textContent=lang==='zh'
+    ? '当前A股主路线是 CN_RETURN_MAX_CAPACITY，而这套前瞻协议只在 CN_WORST_POOL_RESCUE 下登记。当前没有同协议实验，因此不展示空表，也不把旧协议结果混入主路线后验。若未来重新启用该协议，必须重新登记并从登记后的真实交易日开始积累证据。'
+    : 'The current CN primary route is CN_RETURN_MAX_CAPACITY, while this prospective protocol registers only under CN_WORST_POOL_RESCUE. No current-protocol experiment exists, so empty tables are suppressed and legacy results are not mixed into primary-route posterior evidence. Re-activation would require fresh registration and prospective outcomes after registration.';
+  return;
+ }
  panel.className='prospective-panel show';
  const t=T[lang];
  el('prospectiveStatus').textContent=report.status||'-';
@@ -3485,7 +3498,7 @@ async function refreshAll(preferStale=false){
    setStatusNote('dailyAnalysisNote','当前决策已生成，等待下一完整结果期进入后验','Decision is frozen; awaiting the next complete outcome period for posterior evaluation');
   }
   renderUSReturnMax(m==='US'?d.us_return_max:null);
-  renderProspective(isCN?d.prospective_experiment:null);
+  renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null);
   renderRecoveryWave(isCN?d.recovery_wave:null);
   renderHKRoutePanel(m,latest,routeEvaluated,selected);
   drawCurve(curves);
