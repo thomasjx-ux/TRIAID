@@ -347,7 +347,7 @@ class CrossMarketCrashExperiment:
             rows={}
             for label,symbol in specs.items():
                 try:
-                    rows[label]=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
+                    rows[label]=LongCycleHypothesisExperiment._fetch_market_full(symbol,timeout=30)
                 except Exception as exc:
                     errors[f"{market}:{label}"]=f"{type(exc).__name__}:{exc}"
             indexes[market]=rows
