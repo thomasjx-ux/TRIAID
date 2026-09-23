@@ -237,15 +237,38 @@ async def lifespan(app:FastAPI):
                 pass
 
 def deployment_identity()->dict:
-    source_revision=(
+    railway_git_commit_sha=os.getenv("RAILWAY_GIT_COMMIT_SHA","").strip() or None
+    declared_source_revision=(
         os.getenv("TRIAID_DEPLOY_REVISION","").strip()
         or os.getenv("TRIAID_DEPLOY_REV","").strip()
         or None
     )
     runtime_revision=os.getenv("TRIAID_V2_REV","").strip() or None
+    source_revision=railway_git_commit_sha or declared_source_revision
+    declared_matches_railway=(
+        True
+        if not railway_git_commit_sha or not declared_source_revision
+        else declared_source_revision==railway_git_commit_sha
+    )
+    runtime_matches_railway=(
+        True
+        if not railway_git_commit_sha or not runtime_revision
+        else runtime_revision==railway_git_commit_sha
+    )
     return {
         "source_revision":source_revision,
+        "railway_git_commit_sha":railway_git_commit_sha,
+        "declared_source_revision":declared_source_revision,
         "runtime_revision":runtime_revision,
+        "declared_matches_railway":declared_matches_railway,
+        "runtime_matches_railway":runtime_matches_railway,
+        "identity_verified":bool(
+            railway_git_commit_sha
+            and declared_source_revision
+            and runtime_revision
+            and declared_matches_railway
+            and runtime_matches_railway
+        ),
     }
 
 
