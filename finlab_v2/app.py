@@ -930,6 +930,23 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .live-meta{font-size:11px;color:#748091;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .has-tip{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#aeb7c4;text-underline-offset:4px}.tip-mark::after{content:' ⓘ';font-size:10px;color:#7f8c9e;text-decoration:none;white-space:nowrap}
 tbody tr:hover td{background:#f8fbff}
+.home-summary{background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);border:1px solid #d9e3f0;border-radius:16px;padding:16px 18px;margin:14px 0 12px;box-shadow:0 4px 18px rgba(31,55,86,.04)}
+.home-summary-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+.home-summary-kicker{font-size:11px;font-weight:800;letter-spacing:.08em;color:#1769e0;text-transform:uppercase}
+.home-summary h2{font-size:20px;margin:3px 0 5px}
+.home-summary-purpose{font-size:13px;line-height:1.6;color:#43546a;max-width:980px}
+.home-summary-mode{font-size:11px;line-height:1.45;color:#66717f;background:#eef3f9;border-radius:999px;padding:5px 9px;white-space:nowrap}
+.home-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:9px;margin-top:13px}
+.home-summary-card{border:1px solid #e4eaf1;border-radius:11px;background:#fff;padding:11px 12px;min-height:82px}
+.home-summary-label{display:block;font-size:11px;color:#748091;margin-bottom:5px}
+.home-summary-value{font-size:17px;font-weight:800;line-height:1.3;font-variant-numeric:tabular-nums}
+.home-summary-value.open{color:#138a4b}.home-summary-value.closed{color:#66717f}
+.home-summary-detail{font-size:11px;color:#748091;line-height:1.45;margin-top:4px}
+.home-summary-risk{font-size:17px}
+.home-summary-story{margin-top:11px;padding-top:10px;border-top:1px solid #e4eaf1;font-size:12px;line-height:1.6;color:#43546a}
+.home-summary-guide{margin-top:4px;font-size:11px;color:#748091}
+@media(max-width:950px){.home-summary-grid{grid-template-columns:repeat(2,1fr)}.home-summary-head{display:block}.home-summary-mode{display:inline-block;margin-top:8px}}
+@media(max-width:600px){.home-summary-grid{grid-template-columns:1fr}}
 .market-clock-strip{display:grid;grid-template-columns:repeat(3,minmax(190px,1fr));gap:10px;margin:12px 0}
 .market-clock-card{appearance:none;width:100%;text-align:left;border:1px solid var(--line);border-radius:12px;background:#f5f6f8;padding:11px 12px;cursor:pointer;color:inherit}
 .market-clock-card:hover{border-color:#b8c4d4;background:#fafcff}
@@ -995,6 +1012,41 @@ tbody tr:hover td{background:#f8fbff}
   </div>
   <div class="statusline" id="runStatus">Ready</div>
   <div class="statusline" id="marketScopeStatus" style="display:none"></div>
+
+  <section class="home-summary" id="homeSummary" aria-labelledby="homeSummaryTitle">
+    <div class="home-summary-head">
+      <div>
+        <div class="home-summary-kicker" id="homeSummaryKicker">START HERE</div>
+        <h2 id="homeSummaryTitle">第一次看 TRIAID FIN？先看这里</h2>
+        <div class="home-summary-purpose" id="homeSummaryPurpose">TRIAID FIN 用真实市场数据动态选择和调整策略权重，再等待真实后验结果验证这些调整是否真正提高了可实现净收益。重点不是预测某一天涨跌，而是把“选择—调整—验证—进化”做成可回溯的长期实验。</div>
+      </div>
+      <div class="home-summary-mode" id="homeSummaryMode">研究 / Shadow · 不连接券商 · 不自动交易</div>
+    </div>
+    <div class="home-summary-grid">
+      <div class="home-summary-card">
+        <span class="home-summary-label" id="homeSummaryMarketLabel">当前查看</span>
+        <div class="home-summary-value closed" id="homeSummaryMarket">美股 / US · -</div>
+        <div class="home-summary-detail" id="homeSummaryMarketDetail">等待市场时钟</div>
+      </div>
+      <div class="home-summary-card">
+        <span class="home-summary-label" id="homeSummaryDecisionLabel">TRIAID 当前在做什么</span>
+        <div class="home-summary-value" id="homeSummaryDecision">等待策略数据</div>
+        <div class="home-summary-detail" id="homeSummaryDecisionDetail">读取当前策略群与动态权重</div>
+      </div>
+      <div class="home-summary-card">
+        <span class="home-summary-label" id="homeSummaryValidationLabel">最近一次真实验证</span>
+        <div class="home-summary-value" id="homeSummaryValidation">等待真实后验</div>
+        <div class="home-summary-detail" id="homeSummaryValidationDetail">只有已经发生的真实结果才进入这里</div>
+      </div>
+      <div class="home-summary-card">
+        <span class="home-summary-label" id="homeSummaryRiskLabel">三市场联动风险</span>
+        <div class="home-summary-value" id="homeSummaryRisk">读取中</div>
+        <div class="home-summary-detail" id="homeSummaryRiskDetail">US / A股 / 港股联合风险层 · Shadow-only</div>
+      </div>
+    </div>
+    <div class="home-summary-story" id="homeSummaryStory">本页阅读顺序：先确认当前市场 → 看 TRIAID 选了什么、改了什么 → 看真实后验是否增值 → 最后看三市场联合风险与深层实验。</div>
+    <div class="home-summary-guide" id="homeSummaryGuide">下面的复杂表格用于追溯证据；第一次使用不需要逐项读完。</div>
+  </section>
 
   <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
     <button type="button" class="market-clock-card selected" data-clock-market="US" onclick="selectMarket('US')" data-tip="美股纽约时间。仅官方交易时段显示绿色，盘前、盘后、周末及交易所休市日显示灰色。">
@@ -2001,6 +2053,101 @@ const MARKET_UI={
  HK:{zh:'港股 / HK',en:'Hong Kong Equities',timezone:'Asia/Hong_Kong',routeZh:'港股独立收益最大化路线；2800 / 2828 / 3033 为风险资产，2819 为防御资产，策略权重与后验独立记录。',routeEn:'Independent HK return-max route; 2800 / 2828 / 3033 are risk assets and 2819 is the defensive sleeve, with independent weights and posterior evidence.'}
 };
 let marketClockState={};
+let homeSummaryState={
+ selectedCount:null,
+ changedCount:null,
+ selectedNames:[],
+ evaluated:null,
+ preview:false,
+ latestStatus:null,
+ riskScore:null,
+ riskBand:null
+};
+function renderHomeSummary(){
+ const m=el('market').value;
+ const meta=MARKET_UI[m]||{};
+ const clock=marketClockState[m]||{};
+ const zh=lang==='zh';
+ const marketName=zh?(meta.zh||m):(meta.en||m);
+ const phase=phaseText(clock.session_phase||'-');
+ el('homeSummaryKicker').textContent=zh?'START HERE':'START HERE';
+ el('homeSummaryTitle').textContent=zh?'第一次看 TRIAID FIN？先看这里':'New to TRIAID FIN? Start here';
+ el('homeSummaryPurpose').textContent=zh
+  ? 'TRIAID FIN 用真实市场数据动态选择和调整策略权重，再等待真实后验结果验证这些调整是否真正提高了可实现净收益。重点不是预测某一天涨跌，而是把“选择—调整—验证—进化”做成可回溯的长期实验。'
+  : 'TRIAID FIN uses real market data to select and dynamically reweight strategies, then waits for realized outcomes to test whether those changes actually improve realizable net return. The goal is not a one-day price call; it is a traceable select → adjust → validate → evolve research loop.';
+ el('homeSummaryMode').textContent=zh?'研究 / Shadow · 不连接券商 · 不自动交易':'Research / Shadow · no broker connection · no auto-trading';
+ el('homeSummaryMarketLabel').textContent=zh?'当前查看':'Current market';
+ el('homeSummaryDecisionLabel').textContent=zh?'TRIAID 当前在做什么':'What TRIAID is doing';
+ el('homeSummaryValidationLabel').textContent=zh?'最近一次真实验证':'Latest realized validation';
+ el('homeSummaryRiskLabel').textContent=zh?'三市场联动风险':'Three-market risk';
+ el('homeSummaryMarket').textContent=marketName+' · '+phase;
+ el('homeSummaryMarket').className='home-summary-value '+(clock.is_open?'open':'closed');
+ el('homeSummaryMarketDetail').textContent=zh
+  ? ((clock.is_open?'绿色表示官方交易时段':'灰色表示当前非官方交易时段')+' · '+(clock.benchmark?'基准 '+clock.benchmark:'等待市场元数据'))
+  : ((clock.is_open?'Green means the official session is open':'Gray means the official session is closed')+' · '+(clock.benchmark?'benchmark '+clock.benchmark:'awaiting market metadata'));
+
+ const count=homeSummaryState.selectedCount;
+ const changed=homeSummaryState.changedCount;
+ const names=homeSummaryState.selectedNames||[];
+ el('homeSummaryDecision').textContent=count==null
+  ? (zh?'等待策略数据':'Awaiting strategy data')
+  : (zh?(count+' 个策略入选 · '+changed+' 个权重调整'):(count+' selected · '+changed+' reweighted'));
+ el('homeSummaryDecisionDetail').textContent=names.length
+  ? (zh?'主要入选：':'Leading selections: ')+names.slice(0,3).join(zh?'、':' · ')
+  : (zh?'读取当前策略群与动态权重':'Reading current strategy group and dynamic weights');
+
+ const ev=homeSummaryState.evaluated;
+ if(homeSummaryState.preview){
+  el('homeSummaryValidation').textContent=zh?'当前为即时预览':'Manual preview active';
+  el('homeSummaryValidation').className='home-summary-value';
+  el('homeSummaryValidationDetail').textContent=zh?'预览不进入正式证据链，摘要仍等待真实后验。':'Preview results do not enter the formal evidence chain; the summary still waits for realized evidence.';
+ }else if(ev&&ev.evaluation){
+  const e=ev.evaluation,g=Number(e.excess_return);
+  el('homeSummaryValidation').textContent=Number.isFinite(g)
+   ? ((zh?'相对基线 ':'Vs baseline ')+signedPct(g))
+   : (zh?'已有真实后验':'Realized outcome available');
+  el('homeSummaryValidation').className='home-summary-value '+(Number.isFinite(g)?cls(g):'');
+  el('homeSummaryValidationDetail').textContent=(Number.isFinite(Number(e.triaid_return))&&Number.isFinite(Number(e.baseline_return)))
+   ? ((zh?'TRIAID ':'TRIAID ')+fmtPct(e.triaid_return)+' · '+(zh?'基线 ':'baseline ')+fmtPct(e.baseline_return))
+   : (zh?'真实结果已登记，详细比较见下方。':'Realized evidence is recorded; see the detailed comparison below.');
+ }else{
+  el('homeSummaryValidation').textContent=zh?'等待真实后验':'Awaiting realized outcome';
+  el('homeSummaryValidation').className='home-summary-value';
+  el('homeSummaryValidationDetail').textContent=zh
+   ? '只有已经发生并满足证据口径的市场结果才算验证。'
+   : 'Only realized market outcomes that meet the evidence rules count as validation.';
+ }
+
+ const hasRisk=homeSummaryState.riskScore!==null&&homeSummaryState.riskScore!==undefined&&Number.isFinite(Number(homeSummaryState.riskScore));
+ if(hasRisk){
+  const score=Number(homeSummaryState.riskScore),band=riskBandFromScore(score);
+  el('homeSummaryRisk').textContent=score.toFixed(1)+'/100 · '+riskBandText(score);
+  el('homeSummaryRisk').className='home-summary-value home-summary-risk risk-number '+band+' has-tip';
+  el('homeSummaryRisk').dataset.tip=riskScaleTip(score,zh?'三市场联动综合风险':'Three-market aggregate risk');
+ }else{
+  el('homeSummaryRisk').textContent=zh?'读取中':'Loading';
+  el('homeSummaryRisk').className='home-summary-value';
+  delete el('homeSummaryRisk').dataset.tip;
+ }
+ el('homeSummaryRiskDetail').textContent=zh
+  ? 'US / A股 / 港股联合风险层 · Shadow-only · 不自动改变生产权重'
+  : 'US / CN / HK joint risk layer · shadow-only · does not automatically alter production weights';
+
+ const validationPhrase=homeSummaryState.preview
+  ? (zh?'当前有即时预览，但它不进入正式证据链':'a manual preview is active but does not enter the formal evidence chain')
+  : ev&&ev.evaluation
+    ? (zh?'最近真实后验已经可比较':'the latest realized posterior is available for comparison')
+    : (zh?'仍在等待满足口径的真实后验':'the system is still waiting for an eligible realized posterior');
+ const riskPhrase=hasRisk
+  ? (zh?('三市场风险为 '+Number(homeSummaryState.riskScore).toFixed(1)+'/100（'+riskBandText(homeSummaryState.riskScore)+'）'):('three-market risk is '+Number(homeSummaryState.riskScore).toFixed(1)+'/100 ('+riskBandText(homeSummaryState.riskScore)+')'))
+  : (zh?'三市场风险正在读取':'three-market risk is loading');
+ el('homeSummaryStory').textContent=zh
+  ? ('现在你看到的是 '+marketName+'；TRIAID 当前从策略池中选入 '+(count==null?'若干':count)+' 个策略，'+(changed==null?'并根据证据调整权重':('其中 '+changed+' 个发生权重调整'))+'；'+validationPhrase+'；'+riskPhrase+'。')
+  : ('You are viewing '+marketName+'. TRIAID currently selected '+(count==null?'a set of':count)+' strategies, '+(changed==null?'with evidence-based reweighting':changed+' of them reweighted')+'; '+validationPhrase+'; '+riskPhrase+'.');
+ el('homeSummaryGuide').textContent=zh
+  ? '阅读顺序：当前市场与交易状态 → 策略选择/权重调整 → 真实后验结果 → 三市场风险。下面的复杂表格主要用于追溯证据，第一次使用不需要逐项读完。'
+  : 'Read in this order: current market/session → strategy selection and reweighting → realized outcome → three-market risk. The detailed tables below are mainly for evidence traceability; first-time users do not need to read every row.';
+}
 function phaseText(phase){
  const p=String(phase||'');
  const zh={OPEN:'交易中',PREOPEN:'盘前',BREAK:'午间休市',POSTCLOSE:'盘后',CLOSED:'休市',CALENDAR_UNAVAILABLE:'日历不可用'};
@@ -2049,6 +2196,7 @@ function renderMarketIdentity(){
   const s=marketClockState[key]||{};
   el('clockPhase'+key).textContent=phaseText(s.session_phase);
  });
+ renderHomeSummary();
 }
 async function refreshMarketClocks(){
  try{
@@ -2323,10 +2471,19 @@ function renderRiskControl(report){
 }
 function renderRiskWarning(report){
  const panel=el('riskWarningPanel');
- if(!report){panel.style.display='none';return;}
+ if(!report){
+  panel.style.display='none';
+  homeSummaryState.riskScore=null;
+  homeSummaryState.riskBand=null;
+  renderHomeSummary();
+  return;
+ }
  panel.style.display='block';
  const o=report.overall||{}, hs=report.horizon_estimates||{}, ss=report.subscores||{};
  const score=Number(o.risk_pressure_index);
+ homeSummaryState.riskScore=Number.isFinite(score)?score:null;
+ homeSummaryState.riskBand=String(o.risk_band||'');
+ renderHomeSummary();
  const band=String(o.risk_band||'-');
  const bandText=lang==='zh'?(o.risk_band_zh||band):band;
  const bandClass=band.toLowerCase();
@@ -2618,6 +2775,13 @@ async function refreshAll(preferStale=false){
     : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
+  homeSummaryState.selectedCount=selected.length;
+  homeSummaryState.changedCount=selected.filter(x=>Math.abs(Number(x.triaid_weight||0)-Number(x.baseline_weight||0))>1e-8).length;
+  homeSummaryState.selectedNames=selected.slice().sort((a,b)=>Number(b.triaid_weight||0)-Number(a.triaid_weight||0)).map(x=>x.name||x.strategy_id);
+  homeSummaryState.evaluated=evaluated;
+  homeSummaryState.preview=!!previewRun;
+  homeSummaryState.latestStatus=latest?.status||null;
+  renderHomeSummary();
   renderComparison(evaluated);
   el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
   el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.version;
