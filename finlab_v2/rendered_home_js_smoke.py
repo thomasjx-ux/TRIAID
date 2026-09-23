@@ -63,7 +63,9 @@ checks = {
     "market_clock_boot_present": "refreshMarketClocks()" in js,
     "home_summary_renderer_present": "renderHomeSummary()" in js,
     "actionable_tooltip_renderer_present": "tooltipUseGuide(raw)" in js and "uiTipUseGuide(id)" in js,
-    "risk_action_renderer_present": "riskActionGuide(n)" in js,
+    "risk_dynamic_subscore_renderer_present": "riskSubscoreTip(key,score,report)" in js and "riskDriverSummary" in js,
+    "risk_overall_context_renderer_present": "riskOverallTip(score,report)" in js,
+    "risk_horizon_context_renderer_present": "riskHorizonTip(h,entry,report)" in js,
 }
 
 failed = [name for name, ok in checks.items() if not ok]
