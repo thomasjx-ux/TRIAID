@@ -3,14 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime, time as dt_time
 from zoneinfo import ZoneInfo
 
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+
 
 VERSION="official-trading-calendar@0.3.0"
 
-MARKET_TZ={
-    "US":"America/New_York",
-    "CN":"Asia/Shanghai",
-    "HK":"Asia/Hong_Kong",
-}
+def _timezone(market_id:str)->str:
+    return MARKET_REGISTRY.get(market_id).timezone
 
 OFFICIAL_SOURCES={
     "US":{
@@ -95,20 +94,30 @@ HK_EARLY_CLOSE={
     },
 }
 
-_SYNCED={"US":{},"CN":{},"HK":{}}
+_SYNCED={m:{} for m in market_ids()}
 _SYNC_METADATA={}
 
 
 def _market(value:str)->str:
-    key=value.upper()
-    if key not in MARKET_TZ:
-        raise ValueError(f"unsupported_market:{value}")
-    return key
+    try:
+        return normalize_market_id(value)
+    except KeyError as exc:
+        raise ValueError(f"unsupported_market:{value}") from exc
+
+
+def _official_source(market:str)->dict:
+    return OFFICIAL_SOURCES.get(
+        market,
+        {
+            "name":"REGISTERED_MARKET_OFFICIAL_CALENDAR_NOT_CONNECTED",
+            "built_in_coverage_years":[],
+        },
+    )
 
 
 def install_synced_calendar(payload:dict|None)->None:
     global _SYNCED,_SYNC_METADATA
-    synced={"US":{},"CN":{},"HK":{}}
+    synced={m:{} for m in market_ids()}
     metadata={}
     if isinstance(payload,dict):
         metadata={
@@ -117,7 +126,7 @@ def install_synced_calendar(payload:dict|None)->None:
             "last_success_at":payload.get("last_success_at"),
             "last_error":payload.get("last_error"),
         }
-        for market in ("US","CN","HK"):
+        for market in market_ids():
             years=(
                 payload.get("markets",{})
                 .get(market,{})
@@ -150,7 +159,7 @@ def install_synced_calendar(payload:dict|None)->None:
 
 def built_in_years(market_id:str)->list[int]:
     market=_market(market_id)
-    source=US_CLOSED if market=="US" else CN_CLOSED if market=="CN" else HK_CLOSED
+    source={"US":US_CLOSED,"CN":CN_CLOSED,"HK":HK_CLOSED}.get(market,{})
     return sorted(source.keys())
 
 
@@ -165,7 +174,7 @@ def coverage_years(market_id:str)->list[int]:
 
 def _date(value:date|datetime|str|None,market_id:str)->date:
     market=_market(market_id)
-    tz=ZoneInfo(MARKET_TZ[market])
+    tz=ZoneInfo(_timezone(market))
     if value is None:
         return datetime.now(tz).date()
     if isinstance(value,datetime):
@@ -184,26 +193,17 @@ def _calendar_for_year(market_id:str,year:int)->dict|None:
             "origin":"SYNCED_OFFICIAL",
         }
 
-    if market=="US" and year in US_CLOSED:
+    builtins={
+        "US":(US_CLOSED,US_EARLY_CLOSE),
+        "CN":(CN_CLOSED,{}),
+        "HK":(HK_CLOSED,HK_EARLY_CLOSE),
+    }
+    source=builtins.get(market)
+    if source and year in source[0]:
         return {
-            "closed":US_CLOSED[year],
-            "early_close":US_EARLY_CLOSE.get(year,{}),
-            "source":OFFICIAL_SOURCES["US"],
-            "origin":"BUILT_IN_VERIFIED",
-        }
-
-    if market=="CN" and year in CN_CLOSED:
-        return {
-            "closed":CN_CLOSED[year],
-            "early_close":{},
-            "source":OFFICIAL_SOURCES["CN"],
-            "origin":"BUILT_IN_VERIFIED",
-        }
-    if market=="HK" and year in HK_CLOSED:
-        return {
-            "closed":HK_CLOSED[year],
-            "early_close":HK_EARLY_CLOSE.get(year,{}),
-            "source":OFFICIAL_SOURCES["HK"],
+            "closed":source[0][year],
+            "early_close":source[1].get(year,{}) if isinstance(source[1],dict) else {},
+            "source":_official_source(market),
             "origin":"BUILT_IN_VERIFIED",
         }
     return None
@@ -230,7 +230,7 @@ def trading_day_info(
             "early_close_time":None,
             "coverage_years":years,
             "calendar_origin":None,
-            "official_source":OFFICIAL_SOURCES[market],
+            "official_source":_official_source(market),
         }
 
     if day.weekday()>=5:
@@ -245,7 +245,7 @@ def trading_day_info(
             "early_close_time":None,
             "coverage_years":years,
             "calendar_origin":calendar["origin"],
-            "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
+            "official_source":calendar.get("source") or _official_source(market),
         }
 
     if day in calendar["closed"]:
@@ -260,7 +260,7 @@ def trading_day_info(
             "early_close_time":None,
             "coverage_years":years,
             "calendar_origin":calendar["origin"],
-            "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
+            "official_source":calendar.get("source") or _official_source(market),
         }
 
     early=(calendar.get("early_close") or {}).get(day)
@@ -275,7 +275,7 @@ def trading_day_info(
         "early_close_time":early.strftime("%H:%M") if early else None,
         "coverage_years":years,
         "calendar_origin":calendar["origin"],
-        "official_source":calendar.get("source") or OFFICIAL_SOURCES[market],
+        "official_source":calendar.get("source") or _official_source(market),
     }
 
 
@@ -284,7 +284,7 @@ def official_session_phase(
     now:datetime|None=None,
 )->str:
     market=_market(market_id)
-    tz=ZoneInfo(MARKET_TZ[market])
+    tz=ZoneInfo(_timezone(market))
     current=now.astimezone(tz) if now and now.tzinfo else (
         now.replace(tzinfo=tz) if now else datetime.now(tz)
     )
@@ -294,48 +294,47 @@ def official_session_phase(
     if not info["is_trading_day"]:
         return "CLOSED"
 
+    schedule=dict(MARKET_REGISTRY.get(market).session_schedule or {})
+    if not schedule:
+        return "CALENDAR_UNAVAILABLE"
+
+    def parse(value:str)->dt_time:
+        return dt_time.fromisoformat(value)
+
+    def contains(window:tuple[str,str], t:dt_time)->bool:
+        start_t,end_t=parse(window[0]),parse(window[1])
+        return start_t<=t<end_t
+
+    if info.get("early_close") and info.get("early_close_time"):
+        early=parse(str(info["early_close_time"]))
+        opens=[]
+        for a,b in schedule.get("OPEN",()):
+            start_t,end_t=parse(a),parse(b)
+            if start_t>=early:
+                continue
+            opens.append((a,min(end_t,early).strftime("%H:%M")))
+        schedule["OPEN"]=tuple(opens)
+        post=list(schedule.get("POSTCLOSE",()))
+        if post:
+            _,end_text=post[-1]
+            schedule["POSTCLOSE"]=((early.strftime("%H:%M"),end_text),)
+        else:
+            schedule["POSTCLOSE"]=((early.strftime("%H:%M"),"23:59"),)
+        schedule["BREAK"]=tuple(
+            (a,b) for a,b in schedule.get("BREAK",())
+            if parse(a)<early
+        )
+
     t=current.time()
-    if market=="US":
-        close=dt_time.fromisoformat(info["early_close_time"]) if info["early_close"] else dt_time(16,0)
-        if dt_time(4,0)<=t<dt_time(9,30):
-            return "PREOPEN"
-        if dt_time(9,30)<=t<close:
-            return "OPEN"
-        if close<=t<dt_time(20,0):
-            return "POSTCLOSE"
-        return "CLOSED"
-
-    if market=="CN":
-        if dt_time(9,15)<=t<dt_time(9,30):
-            return "PREOPEN"
-        if dt_time(9,30)<=t<dt_time(11,30) or dt_time(13,0)<=t<dt_time(15,0):
-            return "OPEN"
-        if dt_time(11,30)<=t<dt_time(13,0):
-            return "BREAK"
-        if dt_time(15,0)<=t<dt_time(18,0):
-            return "POSTCLOSE"
-        return "CLOSED"
-
-    close=dt_time.fromisoformat(info["early_close_time"]) if info["early_close"] else dt_time(16,10)
-    if dt_time(9,0)<=t<dt_time(9,30):
-        return "PREOPEN"
-    if info["early_close"]:
-        if dt_time(9,30)<=t<dt_time(12,0):
-            return "OPEN"
-        if dt_time(12,0)<=t<dt_time(15,0):
-            return "POSTCLOSE"
-        return "CLOSED"
-    if dt_time(9,30)<=t<dt_time(12,0) or dt_time(13,0)<=t<close:
-        return "OPEN"
-    if dt_time(12,0)<=t<dt_time(13,0):
-        return "BREAK"
-    if close<=t<dt_time(19,0):
-        return "POSTCLOSE"
+    order=("PREOPEN","OPEN","POSTCLOSE","BREAK") if info.get("early_close") else ("PREOPEN","OPEN","BREAK","POSTCLOSE")
+    for phase in order:
+        if any(contains(tuple(window),t) for window in schedule.get(phase,())):
+            return phase
     return "CLOSED"
 
 
 def calendar_status(market_id:str|None=None)->dict:
-    markets=[_market(market_id)] if market_id else ["US","CN","HK"]
+    markets=[_market(market_id)] if market_id else list(market_ids())
     return {
         "version":VERSION,
         "policy":"OFFICIAL_EXCHANGE_CALENDAR; AUTO_SYNCED_OFFICIAL_OVERRIDES_BUILT_IN; FAIL_CLOSED_WHEN_YEAR_UNAVAILABLE",
@@ -345,7 +344,7 @@ def calendar_status(market_id:str|None=None)->dict:
                 "coverage_years":coverage_years(market),
                 "built_in_years":built_in_years(market),
                 "synced_years":synced_years(market),
-                "official_source":OFFICIAL_SOURCES[market],
+                "official_source":_official_source(market),
                 "today":trading_day_info(market),
                 "session_phase":official_session_phase(market),
             }

@@ -79,9 +79,45 @@ class MarketSnapshot(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+class StrategyPoolSpec(BaseModel):
+    pool_id: str
+    allowed_strategy_ids: List[str] = Field(default_factory=list)
+    denied_strategy_ids: List[str] = Field(default_factory=list)
+    market_strategy_ids: Dict[str, List[str]] = Field(default_factory=dict)
+    max_group_size: int = Field(default=10, ge=1, le=100)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountProfile(BaseModel):
+    account_id: str
+    strategy_pool_id: str = "GLOBAL"
+    base_currency: str = "USD"
+    capital: Optional[float] = Field(default=None, gt=0.0, allow_inf_nan=False)
+    allowed_markets: List[str] = Field(default_factory=list)
+    risk_budget: float = Field(default=1.0, gt=0.0, le=1.0, allow_inf_nan=False)
+    max_drawdown_constraint: Optional[float] = Field(default=None, ge=-1.0, le=0.0, allow_inf_nan=False)
+    liquidity_constraint: Dict[str, Any] = Field(default_factory=dict)
+    objective: str = "MAXIMIZE_NET_RETURN"
+    execution_profile: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionContext(BaseModel):
+    market_id: str
+    account_id: str = "GLOBAL"
+    strategy_pool_id: str = "GLOBAL"
+    objective: str = "MAXIMIZE_NET_RETURN"
+    capital_state: Dict[str, Any] = Field(default_factory=dict)
+    risk_state: Dict[str, Any] = Field(default_factory=dict)
+    cross_market_state: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RunRequest(BaseModel):
     market: MarketSnapshot
     strategy_states: List[StrategyState]
+    account: Optional[AccountProfile] = None
+    strategy_pool: Optional[StrategyPoolSpec] = None
+    decision_context: Optional[DecisionContext] = None
     max_group_size: int = Field(default=10, ge=1, le=100)
 
 
@@ -169,6 +205,9 @@ class RunRecord(BaseModel):
     ] = "CREATED"
     module_manifest: Dict[str, str]
     market: MarketSnapshot
+    account_id: str = "GLOBAL"
+    strategy_pool_id: str = "GLOBAL"
+    decision_context: Optional[DecisionContext] = None
     strategy_states: List[StrategyState] = Field(default_factory=list)
     strategy_group: Optional[StrategyGroup] = None
     triaid_decision: Optional[TriaidDecision] = None

@@ -7,6 +7,7 @@ from threading import RLock
 from zoneinfo import ZoneInfo
 
 from .trading_calendar import trading_day_info
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 
 
 class DecisionScheduler:
@@ -37,7 +38,8 @@ class DecisionScheduler:
 
     @staticmethod
     def _tz(market_id:str)->ZoneInfo:
-        return ZoneInfo("America/New_York" if market_id.upper()=="US" else "Asia/Hong_Kong" if market_id.upper()=="HK" else "Asia/Shanghai")
+        market=normalize_market_id(market_id)
+        return ZoneInfo(MARKET_REGISTRY.get(market).timezone)
 
     def session_date(self,market_id:str)->str:
         return datetime.now(self._tz(market_id)).date().isoformat()
@@ -317,15 +319,18 @@ class DecisionScheduler:
         return row
 
     def _postclose_settled(self,market_id:str)->bool:
-        market=market_id.upper()
+        market=normalize_market_id(market_id)
         now=datetime.now(self._tz(market))
         info=trading_day_info(market,now)
-        if market=="CN":
-            close_hour,close_minute=(15,0)
-        elif info.get("early_close") and info.get("early_close_time"):
-            close_hour,close_minute=(int(info["early_close_time"][:2]),int(info["early_close_time"][3:5]))
+        if info.get("early_close") and info.get("early_close_time"):
+            close_text=str(info["early_close_time"])
         else:
-            close_hour,close_minute=(16,0)
+            schedule=MARKET_REGISTRY.get(market).session_schedule or {}
+            open_windows=list(schedule.get("OPEN") or ())
+            if not open_windows:
+                return False
+            close_text=str(open_windows[-1][1])
+        close_hour,close_minute=(int(close_text[:2]),int(close_text[3:5]))
         close_seconds=close_hour*3600+close_minute*60
         now_seconds=now.hour*3600+now.minute*60+now.second
         return now_seconds>=close_seconds+self.close_settle_seconds
@@ -453,7 +458,7 @@ class DecisionScheduler:
             "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
             "markets":{
                 market:self._market_state(market)
-                for market in ("US","CN","HK")
+                for market in market_ids()
             },
             "event_count":len(self.events(limit=10000)),
             "broker_execution_enabled":False,

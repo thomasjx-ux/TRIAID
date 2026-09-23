@@ -6,6 +6,7 @@ from threading import RLock
 from zoneinfo import ZoneInfo
 
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.account_registry import ACCOUNT_REGISTRY
 
 
 class FakeStore:
@@ -26,6 +27,7 @@ engine=PreviewGuardEngine.__new__(PreviewGuardEngine)
 engine._lock=RLock()
 engine._runs={}
 engine.store=FakeStore()
+engine.account_registry=ACCOUNT_REGISTRY
 
 old=os.environ.get("TRIAID_MANUAL_PREVIEW_COOLDOWN_SECONDS")
 os.environ["TRIAID_MANUAL_PREVIEW_COOLDOWN_SECONDS"]="60"

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .store import RunStore
+from .market_registry import market_ids
 
 
 HORIZON_WEIGHTS={
@@ -201,13 +202,24 @@ class RiskWarningSystem:
         hk_rates=cls._composite(current,"HK_RATES_EARLY_WARNING")
         bridge=cls._factor_pct(current,"HK_BRIDGE_DIFFERENTIAL_60")
         hk_us=cls._factor_pct(current,"CORR_HK_US_60")
-        stress=(current.get("features") or {}).get("CROSS_MARKET_STRESS_COUNT_10PCT")
-        stress_ratio=cls._clamp01(float(stress or 0.0)/3.0)
+        corr_mean=cls._factor_pct(current,"CROSS_MARKET_CORR_MEAN_60")
+        features=current.get("features") or {}
+        stress=features.get("CROSS_MARKET_STRESS_COUNT_10PCT")
+        stress_share=features.get("CROSS_MARKET_STRESS_SHARE_10PCT")
+        if stress_share is None:
+            available_market_count=max(
+                1,
+                sum(1 for key in features if str(key).endswith("_DRAWDOWN_STRESS_252")),
+            )
+            stress_ratio=cls._clamp01(float(stress or 0.0)/available_market_count)
+        else:
+            stress_ratio=cls._clamp01(stress_share)
+        generic_link=max(cls._clamp01(corr_mean),cls._clamp01(hk_us),cls._clamp01(bridge))
         base=(
-            0.45*cls._clamp01(systemic.get("score"))
-            +0.25*cls._clamp01(hk_rates.get("score"))
+            0.50*cls._clamp01(systemic.get("score"))
             +0.20*stress_ratio
-            +0.10*max(cls._clamp01(bridge),cls._clamp01(hk_us))
+            +0.15*generic_link
+            +0.15*cls._clamp01(hk_rates.get("score"))
         )
         if bool(systemic.get("triggered")):
             base=max(base,0.80)
@@ -227,10 +239,17 @@ class RiskWarningSystem:
                 "triggered_factors":hk_rates.get("triggered_factors") or [],
             },
             {
-                "id":"CROSS_MARKET_STRESS_COUNT_10PCT",
-                "label_zh":"三市场10%压力数量",
-                "value":stress,
+                "id":"CROSS_MARKET_STRESS_SHARE_10PCT",
+                "label_zh":"跨市场10%压力占比",
+                "value":stress_share,
+                "count":stress,
                 "normalized":stress_ratio,
+            },
+            {
+                "id":"CROSS_MARKET_CORR_MEAN_60",
+                "label_zh":"跨市场60日平均相关性",
+                "percentile":corr_mean,
+                "value":features.get("CROSS_MARKET_CORR_MEAN_60"),
             },
             {
                 "id":"HK_BRIDGE_DIFFERENTIAL_60",
@@ -277,9 +296,11 @@ class RiskWarningSystem:
         dds=[]
         momentum=[]
         drivers=[]
-        for market in ("US","CN","HK"):
+        for market in market_ids():
             dd_name=f"{market}_DRAWDOWN_STRESS_252"
             mom_name=f"{market}_NEGATIVE_MOMENTUM_63"
+            if dd_name not in features and mom_name not in features and mom_name not in pcts:
+                continue
             dd=float(features.get(dd_name) or 0.0)
             mom=float(pcts.get(mom_name) or 0.0)
             dds.append(cls._clamp01(dd/0.20))
@@ -296,6 +317,8 @@ class RiskWarningSystem:
                 "percentile":pcts.get(mom_name),
                 "value":features.get(mom_name),
             })
+        if not dds:
+            return 0.0,drivers
         score=0.60*(sum(dds)/len(dds))+0.40*(sum(momentum)/len(momentum))
         return cls._clamp01(score),drivers
 
@@ -551,7 +574,7 @@ class RiskWarningSystem:
                 "meaning_zh":"信用利差和金融条件从未确认转为确认",
             },
             {
-                "condition":"US/CN/HK drawdown stress broadens",
+                "condition":"registered-market drawdown stress broadens",
                 "meaning_zh":"价格层由局部压力扩展为两到三个市场同时恶化",
             },
             {
@@ -569,7 +592,7 @@ class RiskWarningSystem:
                 "meaning_zh":"债券波动和政策预期变化回落",
             },
             {
-                "condition":"HK / cross-market momentum improves without credit stress",
+                "condition":"cross-market momentum improves without credit stress",
                 "meaning_zh":"港股和跨市场传导没有继续扩散",
             },
         ]

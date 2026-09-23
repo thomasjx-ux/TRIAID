@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 
-from .cross_market_crash import MARKET_INDEXES, PRIMARY_INDEX
+from .cross_market_crash import market_indexes, primary_indexes
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
 
@@ -116,6 +116,7 @@ class HazardProspectiveLedger:
             "statistically_supported_composite_rows":hazard_report.get("statistically_supported_composite_rows") or [],
             "policy_curve_snapshot_id":(policy_curve or {}).get("snapshot_id"),
             "policy_curve_metrics":(policy_curve or {}).get("metrics"),
+            "market_scope":sorted(hazard_report.get("markets") or []),
             "outcomes":{},
             "resolved_horizons":[],
             "pending_horizons":list(HORIZONS),
@@ -135,10 +136,15 @@ class HazardProspectiveLedger:
         rows=self.rows(5000)
         if not rows:
             return {"version":self.version,"rows":0,"updated":0}
+        registered_indexes=market_indexes()
+        registered_primary=primary_indexes()
         primary={}
         errors={}
-        for market,label in PRIMARY_INDEX.items():
-            symbol=MARKET_INDEXES[market][label]
+        for market,label in registered_primary.items():
+            symbol=(registered_indexes.get(market) or {}).get(label)
+            if not symbol:
+                errors[market]="primary_index_symbol_unavailable"
+                continue
             try:
                 primary[market]=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
             except Exception as exc:
@@ -155,15 +161,20 @@ class HazardProspectiveLedger:
                 key=str(horizon)
                 if key in outcomes:
                     continue
+                market_scope=list(out.get("market_scope") or sorted(registered_primary))
                 market_results={}
-                complete=True
-                for market,series in primary.items():
+                complete=bool(market_scope)
+                for market in market_scope:
+                    series=primary.get(market)
+                    if series is None:
+                        complete=False
+                        break
                     metric=self._future_metrics(series,str(out["as_of"]),horizon)
                     if metric is None:
                         complete=False
                         break
                     market_results[market]=metric
-                if complete and len(market_results)==len(PRIMARY_INDEX):
+                if complete and len(market_results)==len(market_scope):
                     outcomes[key]={
                         "resolved_at":datetime.now(timezone.utc).isoformat(),
                         "markets":market_results,

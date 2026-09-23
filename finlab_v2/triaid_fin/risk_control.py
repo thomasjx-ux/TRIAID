@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from .store import RunStore
+from .market_registry import market_ids
 
 
 class CrossMarketRiskControlExperiment:
@@ -34,16 +35,27 @@ class CrossMarketRiskControlExperiment:
     def _market_row(cls,market:str,current:dict,overall_risk:dict)->dict:
         features=current.get("features") or {}
         pcts=current.get("point_in_time_percentiles") or {}
-        dd=float(features.get(f"{market}_DRAWDOWN_STRESS_252") or 0.0)
-        mom_value=features.get(f"{market}_NEGATIVE_MOMENTUM_63")
-        mom_pct=pcts.get(f"{market}_NEGATIVE_MOMENTUM_63")
-        vol=features.get(f"{market}_VOLATILITY_63")
-        vol_pct=pcts.get(f"{market}_VOLATILITY_63")
+        dd_key=f"{market}_DRAWDOWN_STRESS_252"
+        mom_key=f"{market}_NEGATIVE_MOMENTUM_63"
+        vol_key=f"{market}_VOLATILITY_63"
+        data_available=any(
+            key in features or key in pcts
+            for key in (dd_key,mom_key,vol_key)
+        )
+        dd=float(features.get(dd_key) or 0.0) if data_available else None
+        mom_value=features.get(mom_key)
+        mom_pct=pcts.get(mom_key)
+        vol=features.get(vol_key)
+        vol_pct=pcts.get(vol_key)
         risk_score=float((overall_risk.get("overall") or {}).get("risk_pressure_index") or 0.0)
         systemic=bool(
             ((current.get("composites") or {}).get("SYSTEMIC_TRANSMISSION") or {}).get("triggered")
         )
-        if risk_score>=80 and systemic:
+        if not data_available:
+            stage="DATA_UNAVAILABLE"
+            risky_multiplier=1.00
+            defensive_floor=0.00
+        elif risk_score>=80 and systemic:
             stage="SHADOW_DEFENSIVE_BIAS"
             risky_multiplier=0.65
             defensive_floor=0.35
@@ -61,6 +73,7 @@ class CrossMarketRiskControlExperiment:
             defensive_floor=0.00
         return {
             "market":market,
+            "data_available":data_available,
             "drawdown_stress_252":dd,
             "negative_momentum_63":mom_value,
             "negative_momentum_percentile":mom_pct,
@@ -139,7 +152,7 @@ class CrossMarketRiskControlExperiment:
                 "PRICE_CONFIRMATION","价格层确认",
                 "DETERIORATING" if float(((subs.get("market_deterioration") or {}).get("score_0_100")) or 0.0)>=50 else "PARTIAL",
                 ((subs.get("market_deterioration") or {}).get("score_0_100")),
-                ["US/CN/HK drawdown","US/CN/HK 63d momentum"],
+                ["registered-market drawdown","registered-market 63d momentum"],
             ),
         ]
 
@@ -224,7 +237,8 @@ class CrossMarketRiskControlExperiment:
                 "prospective_validation_required":True,
                 "must_show_positive_net_benefit_after_cost":True,
                 "must_not_use_hindsight":True,
-                "market_stratified_US_CN_HK_required":True,
+                "market_stratified_registered_markets_required":True,
+                "registered_markets":list(market_ids()),
             },
         }
 
@@ -249,7 +263,7 @@ class CrossMarketRiskControlExperiment:
         market_data_status=market_data_status or {}
         current=latent.get("current_state") or {}
 
-        market_rows=[self._market_row(m,current,risk_warning) for m in ("US","CN","HK")]
+        market_rows=[self._market_row(m,current,risk_warning) for m in market_ids()]
         warning_coverage=risk_warning.get("data_coverage") or {}
         market_errors=dict(market_data_status.get("errors") or {})
         hk_hf_errors={
@@ -285,6 +299,8 @@ class CrossMarketRiskControlExperiment:
             ),
             "generated_at":datetime.now(timezone.utc).isoformat(),
             "experiment_type":"THREE_MARKET_RISK_CONTROL_SHADOW",
+            "architecture_type":"N_MARKET_RISK_CONTROL_SHADOW",
+            "registered_markets":list(market_ids()),
             "shadow_only":True,
             "risk_estimate":{
                 "overall":risk_warning.get("overall") or {},
@@ -293,6 +309,7 @@ class CrossMarketRiskControlExperiment:
                 "confidence":risk_warning.get("confidence") or {},
                 "data_coverage":risk_warning.get("data_coverage") or {},
             },
+            "market_states":market_rows,
             "three_market_state":market_rows,
             "dynamics_chain":self._dynamics_chain(risk_warning,latent,long_cycle),
             "rates_policy_credit_snapshot":self._macro_snapshot(latent,long_cycle),

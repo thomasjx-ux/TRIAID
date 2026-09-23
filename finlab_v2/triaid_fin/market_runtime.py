@@ -7,6 +7,7 @@ from datetime import datetime, time as dt_time, timezone
 from zoneinfo import ZoneInfo
 
 from .market_data import session_phase
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 from .frequency_policy import FrequencyPolicy
 from .trading_calendar import calendar_status
 
@@ -110,7 +111,7 @@ class MarketDataAutomation:
                     timeout=self.refresh_timeout_seconds,
                 )
                 decision_result=None
-                if self.decision_scheduler is not None and market_id in {"US","CN","HK"}:
+                if self.decision_scheduler is not None:
                     decision_result=await asyncio.to_thread(
                         self.decision_scheduler.after_refresh,
                         market_id,
@@ -199,16 +200,16 @@ class MarketDataAutomation:
                         },
                     }
                     self.cross_market_crash_day=day
-                    self.errors.pop("USCNHK:CRASH_LINKAGE",None)
+                    self.errors.pop("NMARKET:CRASH_LINKAGE",None)
                     print(
-                        "TRIAID_US_CN_HK_CRASH_LINKAGE_DAILY",
+                        "TRIAID_N_MARKET_CRASH_LINKAGE_DAILY",
                         report.get("experiment_id"),
                         report.get("as_of"),
                         self.cross_market_crash_latest.get("paired_event_rows"),
                     )
                 except Exception as exc:
-                    self.errors["USCNHK:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCNHK:CRASH_LINKAGE"])
+                    self.errors["NMARKET:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_N_MARKET_CRASH_LINKAGE_RECOVERY",self.errors["NMARKET:CRASH_LINKAGE"])
 
             if self.hazard_research_day!=day:
                 try:
@@ -283,7 +284,7 @@ class MarketDataAutomation:
         while True:
             now=time.monotonic()
             self.last_loop_heartbeat_utc=datetime.now(timezone.utc).isoformat()
-            for market_id in ("US","CN","HK"):
+            for market_id in market_ids():
                 try:
                     await self._run_market_cycle(market_id,now)
                     self.last_market_cycle_utc[market_id]=datetime.now(timezone.utc).isoformat()
@@ -468,10 +469,10 @@ class MarketDataAutomation:
             "version":self.version,
             "automation_enabled":self.enabled,
             "discipline":"OFFICIAL_TRADING_CALENDAR_GATED_REFRESH; DATA_REFRESH_DOES_NOT_TRIGGER_TRADING",
-            "session_phase":{m:session_phase(m) for m in ("US","CN","HK")},
+            "session_phase":{m:session_phase(m) for m in market_ids()},
             "official_trading_calendar":calendar_status(),
             "last_phase":dict(self.last_phase),
-            "refresh_plan":{m:self.refresh_plan(m) for m in ("US","CN","HK")},
+            "refresh_plan":{m:self.refresh_plan(m) for m in market_ids()},
             "last_refresh_monotonic":dict(self.last_refresh),
             "automation_errors":dict(self.errors),
             "frequency_policy":self.frequency_policy.status(),
