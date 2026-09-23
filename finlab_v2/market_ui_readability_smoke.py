@@ -12,7 +12,7 @@ risk_pos=app.find('<section class="riskpanel" id="riskWarningPanel">')
 us_pos=app.find('<div class="prospective-panel" id="usReturnMaxPanel"')
 cn_pos=app.find('<div class="prospective-panel" id="prospectivePanel"')
 recovery_pos=app.find('<div class="prospective-panel" id="recoveryWavePanel"')
-overview_pos=app.find('<h2 id="overviewTitle">')
+overview_pos=app.find('id="overviewTitle"')
 
 checks={
     "first_screen_summary_present":summary_pos>0 and 'id="homeSummaryTitle"' in app and 'id="homeSummaryPurpose"' in app,
@@ -30,7 +30,7 @@ checks={
     "green_only_for_open":"is_open" in app and "phase==\"OPEN\"" in app,
     "market_identity_panel":'id="marketHero"' in app and 'id="selectedMarketName"' in app,
     "selected_market_first":risk_pos>0 and us_pos>0 and cn_pos>0 and recovery_pos>0 and risk_pos>max(us_pos,cn_pos,recovery_pos),
-    "generic_status_stays_with_market_context":overview_pos>hero_pos>0 and risk_pos>overview_pos,
+    "compact_status_stays_with_market_context":overview_pos>hero_pos>0 and risk_pos>overview_pos and 'id="currentStatusOverview"' in app and 'class="compat-heading"' in app,
     "risk_follows_market_specific_route":risk_pos>max(us_pos,cn_pos,recovery_pos),
     "all_table_headers_auto_tooltipped":"root.querySelectorAll('table th').forEach" in app,
     "dynamic_headers_rechecked":"MutationObserver" in app and "applyTableHeaderTooltips()" in app,
@@ -38,6 +38,8 @@ checks={
     "market_clock_hover_explanations":app.count('data-clock-market=')>=3 and "data-tip=" in app,
     "three_market_label_correct":"执行两个市场" not in app and "预览三个市场" in app,
     "readability_row_hover":"tbody tr:hover td" in app,
+    "status_cards_are_compact":".status-overview-grid{display:grid;grid-template-columns:repeat(12" in app and "min-height:72px" in app,
+    "empty_statuses_are_humanized":"暂无入选" in app and "暂无新数据" in app and "待后验" in app,
     "market_switch_updates_identity":"function onMarketChange()" in app and "applyMarketScope();" in app and "renderMarketIdentity();" in app,
     "market_switch_preserves_fast_render":"refreshAll(true)" in app and "requestAnimationFrame" in app,
 }
