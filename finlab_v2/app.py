@@ -1847,7 +1847,7 @@ function uiTipUseGuide(id){
 function applyUiTooltips(){
  Object.entries(UI_TIPS[lang]||{}).forEach(([id,tip])=>{
   const node=el(id); if(!node)return;
-  const full=tip+'\n'+uiTipUseGuide(id);
+  const full=tip+'\\n'+uiTipUseGuide(id);
   node.classList.add('has-tip','tip-mark');
   node.dataset.tip=full;
   node.setAttribute('aria-label',(node.textContent||'').trim()+' — '+full);
@@ -1968,16 +1968,16 @@ function tableHeaderTipMeta(label){
  const raw=String(label||'').trim();
  const key=normalizeHeaderLabel(raw);
  const extra=(TABLE_HEADER_TIPS_EXTRA[lang]||{})[key];
- if(extra)return {text:extra+'\n'+tooltipUseGuide(raw),explicit:true};
+ if(extra)return {text:extra+'\\n'+tooltipUseGuide(raw),explicit:true};
  const local=TABLE_HEADER_TIPS[lang]||{};
- if(local[key])return {text:local[key]+'\n'+tooltipUseGuide(raw),explicit:true};
+ if(local[key])return {text:local[key]+'\\n'+tooltipUseGuide(raw),explicit:true};
  const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
- if(fallbackOther[key])return {text:fallbackOther[key]+'\n'+tooltipUseGuide(raw),explicit:true};
- if(!raw)return {text:(lang==='zh'?'本列表头说明。':'Table-column explanation.')+'\n'+tooltipUseGuide(raw),explicit:false};
+ if(fallbackOther[key])return {text:fallbackOther[key]+'\\n'+tooltipUseGuide(raw),explicit:true};
+ if(!raw)return {text:(lang==='zh'?'本列表头说明。':'Table-column explanation.')+'\\n'+tooltipUseGuide(raw),explicit:false};
  return {
   text:(lang==='zh'
    ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
-   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.')+'\n'+tooltipUseGuide(raw),
+   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.')+'\\n'+tooltipUseGuide(raw),
   explicit:false
  };
 }
@@ -2114,7 +2114,7 @@ function statusActionGuide(status){
 }
 function statusTip(status){
  const key=String(status||'').toLowerCase();
- return (TIP[lang][key]||TIP[lang].state)+'\n'+statusActionGuide(status);
+ return (TIP[lang][key]||TIP[lang].state)+'\\n'+statusActionGuide(status);
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
@@ -2490,8 +2490,8 @@ function riskActionGuide(score){
 function riskScaleTip(score,label){
  const n=Number(score);
  if(!Number.isFinite(n))return label||'Risk';
- return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+'\n'+
-  riskActionGuide(n)+'\n'+
+ return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+'\\n'+
+  riskActionGuide(n)+'\\n'+
   (lang==='zh'
    ? '用途：决定风险层需要常规观察、加密监控、专项复核、Shadow收紧还是人工冻结升级。这不是股灾概率，也不会单独触发自动交易。'
    : 'Use: decide whether the risk layer calls for normal monitoring, tighter monitoring, focused review, shadow tightening or a manual promotion freeze. This is not crash probability and does not independently trigger trading.');
@@ -2824,7 +2824,7 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
     '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
     '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
-    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\n'+(lang==='zh'?'用途：这里的样本数和理由用于判断历史相似状态是否足以支持当前研究意见。下一步：样本太少或理由只由单一历史情形支撑时继续观察，不因一个高收益代理直接扩大配置。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\\n'+(lang==='zh'?'用途：这里的样本数和理由用于判断历史相似状态是否足以支持当前研究意见。下一步：样本太少或理由只由单一历史情形支撑时继续观察，不因一个高收益代理直接扩大配置。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
  }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
  const capacity=d.capital_capacity||{};
  const capModel=capacity.model||{};
