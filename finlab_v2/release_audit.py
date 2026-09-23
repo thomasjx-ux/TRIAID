@@ -48,6 +48,7 @@ RUNTIME_BOOTSTRAPS=[
 RUNTIME_REQUIRED_PATHS=[
     "/health/live",
     "/api/status",
+    "/api/audit/status",
     "/api/storage/status",
     "/api/market-data/status",
     "/api/risk-warning/latest",
@@ -102,6 +103,7 @@ def structural_checks()->list[dict]:
     check("critical_audit_not_echo_only","TRIAID_POSTDEPLOY_RUNTIME_SMOKE_FAILED" not in start and "TRIAID_RISK_CENTER_FULL_AUDIT_FAILED" not in start,start)
     check("liveness_endpoint_present",'@app.get("/health/live")' in app,None)
     check("readiness_audit_gate_present","TRIAID_RELEASE_AUDIT_REQUIRED" in app and "release_audit" in app,None)
+    check("audit_status_api_present",'@app.get("/api/audit/status")' in app,None)
     check("runtime_smoke_uses_liveness",'/health/live' in post,None)
     check("build_case_manifest_unique",len(BUILD_CASES)==len(set(BUILD_CASES)),BUILD_CASES)
     missing=[x for x in BUILD_CASES if not (ROOT/x).exists()]
@@ -156,8 +158,8 @@ def runtime_checks()->list[dict]:
         result=run_case(script)
         rows.append({"name":"runtime_bootstrap:"+script,"passed":result["passed"],"detail":result})
 
-    risk_deadline=time.monotonic()+180
     for risk_path in ("/api/risk-warning/latest","/api/risk-control/latest"):
+        risk_deadline=time.monotonic()+180
         while time.monotonic()<risk_deadline:
             try:
                 code,_=http_get(risk_path,timeout=10)
