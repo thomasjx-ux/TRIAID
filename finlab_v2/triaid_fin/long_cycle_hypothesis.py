@@ -74,12 +74,18 @@ class LongCycleHypothesisExperiment:
     def _fetch_market_full(symbol:str,timeout:int=25)->dict:
         upper=symbol.upper()
         if upper.endswith((".SS",".SH",".SZ")):
-            return TencentCNMarketDataProvider().fetch_full_daily(
-                upper,
-                min_points=300,
-                timeout=timeout,
-                count=10000,
-            )
+            try:
+                return TencentCNMarketDataProvider().fetch_full_daily(
+                    upper,
+                    min_points=300,
+                    timeout=timeout,
+                    count=10000,
+                )
+            except Exception as primary_exc:
+                fallback=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=timeout)
+                fallback["provider"]="yahoo-fallback-after-tencent"
+                fallback["primary_error"]=f"{type(primary_exc).__name__}:{primary_exc}"
+                return fallback
         return LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=timeout)
 
     @staticmethod
