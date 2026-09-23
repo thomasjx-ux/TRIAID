@@ -35,6 +35,8 @@ class ModeConfig:
     execution_grade: bool
 
 
+HK_HIGH_FREQUENCY_OPTIONAL_SYMBOLS={"2819.HK"}
+
 MODE_CONFIGS={
     "DAILY":ModeConfig("DAILY","10y","1d",False,300,900,"research_grade",False),
     "INTRADAY":ModeConfig("INTRADAY","5d","5m",False,30,90,"research_intraday",False),
@@ -65,6 +67,8 @@ class ProviderPanel:
     include_prepost:bool
     quality:str
     execution_grade:bool
+    requested_symbols:list[str]|None=None
+    degraded_symbols:list[str]|None=None
 
     def metadata(self)->dict:
         return {
@@ -79,6 +83,13 @@ class ProviderPanel:
             "include_prepost":self.include_prepost,
             "quality":self.quality,
             "execution_grade":self.execution_grade,
+            "requested_symbols":list(self.requested_symbols or sorted(self.close)),
+            "degraded_symbols":list(self.degraded_symbols or []),
+            "partial_symbol_policy":(
+                "HK_HIGH_FREQUENCY_SPARSE_DEFENSIVE_NO_INTERPOLATION"
+                if self.market_id=="HK" and self.mode in {"INTRADAY","REALTIME"}
+                else "STRICT_COMPLETE_PANEL"
+            ),
         }
 
 
@@ -161,7 +172,7 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.5.0"
+    version="market-data-hub@0.6.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
@@ -482,7 +493,13 @@ class MarketDataHub:
         now:float,
     )->ProviderPanel:
         series=[]
-        fetch_errors=[]
+        required_errors=[]
+        degraded_symbols=[]
+        optional_sparse=(
+            set(HK_HIGH_FREQUENCY_OPTIONAL_SYMBOLS)
+            if market=="HK" and mode in {"INTRADAY","REALTIME"}
+            else set()
+        )
         for symbol in symbols:
             try:
                 series.append(
@@ -491,22 +508,30 @@ class MarketDataHub:
                         range_=cfg.range_,
                         interval=cfg.interval,
                         include_prepost=cfg.include_prepost,
-                        min_points=cfg.min_points,
+                        min_points=(2 if symbol in optional_sparse else cfg.min_points),
                     )
                 )
             except Exception as exc:
-                fetch_errors.append(f"{symbol}:{type(exc).__name__}:{exc}")
-        if fetch_errors:
+                message=f"{symbol}:{type(exc).__name__}:{exc}"
+                if symbol in optional_sparse:
+                    degraded_symbols.append(message)
+                else:
+                    required_errors.append(message)
+        if required_errors:
             raise MarketDataError(
-                f"provider_incomplete:{provider.version}:{' | '.join(fetch_errors)}"
+                f"provider_incomplete:{provider.version}:{' | '.join(required_errors)}"
             )
 
         by={s.symbol:s for s in series}
         if benchmark not in by:
             raise MarketDataError(f"benchmark_missing:{provider.version}:{market}:{mode}")
 
+        required_series=[
+            s for s in series
+            if s.symbol not in optional_sparse
+        ]
         common=set(by[benchmark].ts)
-        for s in series:
+        for s in required_series:
             common &= set(s.ts)
         ts=[t for t in by[benchmark].ts if t in common]
         aligned_min=(
@@ -523,6 +548,16 @@ class MarketDataHub:
         for symbol,s in by.items():
             cm={t:c for t,c in zip(s.ts,s.close)}
             vm={t:v for t,v in zip(s.ts,s.volume)}
+            missing=[t for t in ts if t not in cm]
+            if missing:
+                if symbol in optional_sparse:
+                    degraded_symbols.append(
+                        f"{symbol}:sparse_alignment:{len(ts)-len(missing)}/{len(ts)}"
+                    )
+                    continue
+                raise MarketDataError(
+                    f"required_symbol_alignment_gap:{provider.version}:{symbol}:{len(missing)}"
+                )
             close[symbol]=[cm[t] for t in ts]
             volume[symbol]=[vm.get(t,0.0) for t in ts]
 
@@ -537,8 +572,14 @@ class MarketDataHub:
             source_latest_ts=ts[-1],
             interval=cfg.interval,
             include_prepost=cfg.include_prepost,
-            quality=cfg.quality,
+            quality=(
+                cfg.quality+"_partial_optional_symbol"
+                if degraded_symbols
+                else cfg.quality
+            ),
             execution_grade=cfg.execution_grade,
+            requested_symbols=list(symbols),
+            degraded_symbols=degraded_symbols,
         )
 
     def capabilities(self,market_id:str|None=None)->dict:
