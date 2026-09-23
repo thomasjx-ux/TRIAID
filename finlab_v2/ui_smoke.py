@@ -87,7 +87,9 @@ assert "renderRiskControl" in html
 assert "/api/risk-control/latest" in html
 assert "三市场风控 Shadow 实验" in html
 assert "港股独立路线" in html
-assert "不能拿美股/A股权重或结果横向替代" in html
+assert "不能借用美股/A股权重、容量或结果补齐港股结论" in html
+assert 'id="hkRoutePanel"' in html
+assert "renderHKRoutePanel" in html
 assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
 assert "/api/market-data/activity/" in html
