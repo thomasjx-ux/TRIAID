@@ -809,7 +809,6 @@ class EvolutionLabEngine:
             cross_market=self.cross_market_crash.latest(),
             policy_curve=self.policy_curve.latest(),
             prospective=self.hazard_prospective.latest(),
-            market_data_status=market_data_status(),
             force=force,
         )
 
@@ -831,6 +830,7 @@ class EvolutionLabEngine:
             cross_market=self.cross_market_crash.latest(),
             policy_curve=self.policy_curve.latest(),
             prospective=self.hazard_prospective.latest(),
+            market_data_status=market_data_status(),
             force=force,
         )
 
