@@ -1804,7 +1804,8 @@ function renderRiskControl(report){
  const dq=report.data_quality||{}, cov=dq.risk_evidence_coverage||{}, gaps=cov.known_gaps||[];
  el('riskDataQuality').textContent=(lang==='zh'?'历史证据覆盖等级 ':'Evidence coverage ')+(cov.coverage_grade||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(cov.term_curve_usable?'OK':'NOT READY')+' · '+(lang==='zh'?'港股高频 ':'HK high-frequency ')+(dq.hk_high_frequency_degraded?'DEGRADED':'OK')+' · '+(lang==='zh'?'正式日线证据受影响 ':'daily evidence affected ')+(dq.evidence_critical_daily_data_affected?'YES':'NO');
  const liveGapEntries=Object.entries(dq.hk_high_frequency_errors||{}).map(([k,v])=>({source:k,error:(v&&v.errors)?v.errors.join(' | '):String(v)}));
- const allGaps=[...gaps,...liveGapEntries];
+ const degradedPanelEntries=Object.entries(dq.hk_high_frequency_degraded_panels||{}).map(([k,v])=>({source:k,error:(v||[]).join(' | ')}));
+ const allGaps=[...gaps,...liveGapEntries,...degradedPanelEntries];
  el('riskDataGaps').innerHTML=allGaps.length?allGaps.map(x=>'<li><b>'+esc(x.source||'-')+'</b> · '+esc(x.error||'-')+'</li>').join(''):'<li>'+(lang==='zh'?'当前未记录已知缺口':'No known gap recorded')+'</li>';
  el('riskControlTitle').textContent=lang==='zh'?'三市场风控 Shadow 实验':'Three-market risk-control shadow experiment';
  const rc=report.risk_control_experiment||{};
