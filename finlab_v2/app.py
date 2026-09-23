@@ -772,6 +772,12 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .risklist{margin:0;padding-left:18px;font-size:12px;line-height:1.55}.risklist li{margin:3px 0}
 .risk-subgrid{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin-top:10px}.risk-sub{border:1px solid #edf0f3;border-radius:8px;padding:9px}.risk-sub b{display:block;font-size:18px;margin-top:3px}
 .risknote{font-size:12px;line-height:1.55;color:#5f6b7a;margin-top:10px}
+.risk-center-banner{margin-top:10px;padding:10px 12px;border:1px solid #dfe7f2;border-radius:10px;background:#f6f9fd;font-size:12px;line-height:1.55;color:#43546a}
+.risk-center-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.risk-center-table{max-height:360px}
+.risk-stage{font-weight:750}.risk-stage.watch{color:#946200}.risk-stage.tighten{color:#b42318}.risk-stage.defensive{color:#7a1730}
+.chain-active{font-weight:750;color:#b42318}.chain-pending{color:#946200}.chain-normal{color:#138a4b}
+@media(max-width:900px){.risk-center-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.riskgrid,.risk-subgrid{grid-template-columns:repeat(2,1fr)}.riskdetailgrid{grid-template-columns:1fr}}
 @media(max-width:760px){.compare,.livegrid{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
 </style>
@@ -796,8 +802,9 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
   <section class="riskpanel" id="riskWarningPanel">
     <div class="riskhead">
       <div>
-        <h2 id="riskWarningTitle">TRIAID 风险预警</h2>
+        <h2 id="riskWarningTitle">TRIAID 三市场联动风险中心</h2>
         <div class="risk-meta" id="riskWarningMeta">等待风险状态</div>
+        <div class="risk-center-banner" id="riskCenterScope">独立于下方美股 / A股 / 港股单市场页面：这里始终联合分析三个市场，并作为风控 shadow 实验输入，不是第四个市场。</div>
       </div>
       <div>
         <div class="risk-overall"><span class="risk-score" id="riskOverallScore">-</span><span>/100</span><span class="risk-band" id="riskOverallBand">-</span></div>
@@ -818,6 +825,73 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <div class="risk-sub"><span class="label" id="riskCreditLabel">信用/流动性</span><b id="riskCredit">-</b></div>
       <div class="risk-sub"><span class="label" id="riskMarketLabel">价格结构恶化</span><b id="riskMarket">-</b></div>
     </div>
+    <div class="risk-center-grid">
+      <div class="riskbox">
+        <h3 id="riskThreeMarketTitle">三市场联动状态</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>市场</th><th>252日回撤压力</th><th>63日负动量</th><th>动量异常分位</th><th>63日波动</th><th>风控实验阶段</th></tr></thead>
+            <tbody id="riskThreeMarketRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskDynamicsTitle">动力链 / 传导路径</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>环节</th><th>状态</th><th>强度</th><th>主要证据</th></tr></thead>
+            <tbody id="riskDynamicsRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskMacroTitle">利率、政策、信用与流动性</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>指标</th><th>当前值</th><th>历史状态分位</th></tr></thead>
+            <tbody id="riskMacroRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskTermTitle">Fed Funds / SOFR 期限曲线</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>曲线</th><th>真实合约点</th><th>前端隐含利率</th><th>远端隐含利率</th><th>远端−前端</th></tr></thead>
+            <tbody id="riskTermRows"></tbody>
+          </table>
+        </div>
+        <details style="margin-top:8px">
+          <summary id="riskCurveDetailTitle" style="cursor:pointer;color:#5f6b7a">展开期限合约明细</summary>
+          <div class="tablewrap risk-center-table" style="margin-top:8px">
+            <table>
+              <thead><tr><th>曲线</th><th>合约月</th><th>代码</th><th>价格</th><th>隐含利率</th></tr></thead>
+              <tbody id="riskCurveContractRows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskHistoryTableTitle">历史危机回溯与统计支持</h3>
+        <div class="tablewrap risk-center-table">
+          <table>
+            <thead><tr><th>联合状态</th><th>领先期</th><th>危机命中</th><th>正常误报</th><th>Lift</th><th>p</th><th>q</th><th>稳健性</th></tr></thead>
+            <tbody id="riskHistoryRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="riskbox">
+        <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
+        <div class="risknote" id="riskControlMeta">-</div>
+        <div class="tablewrap risk-center-table" style="margin-top:8px">
+          <table>
+            <thead><tr><th>市场</th><th>实验阶段</th><th>风险敞口倍率候选</th><th>防御敞口底线候选</th><th>是否已作用生产权重</th></tr></thead>
+            <tbody id="riskControlRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="riskdetailgrid">
       <div class="riskbox"><h3 id="riskDriversTitle">主要风险驱动</h3><ul class="risklist" id="riskDrivers"></ul></div>
       <div class="riskbox"><h3 id="riskBlockersTitle">尚未确认 / 风险阻断项</h3><ul class="risklist" id="riskBlockers"></ul></div>
@@ -826,7 +900,7 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
       <summary id="riskDetailsTitle" style="cursor:pointer;color:#5f6b7a">展开完整证据与验证状态</summary>
       <div class="riskdetailgrid">
         <div class="riskbox"><h3 id="riskHistoricalTitle">历史支持</h3><div class="small" id="riskHistorical">-</div></div>
-        <div class="riskbox"><h3 id="riskProspectiveTitle">前瞻验证</h3><div class="small" id="riskProspective">-</div></div>
+        <div class="riskbox"><h3 id="riskProspectiveTitle">前瞻验证</h3><div class="small" id="riskProspective">-</div><div class="small muted" id="riskLedgerDetail" style="margin-top:6px">-</div></div>
         <div class="riskbox"><h3 id="riskEscalationTitle">升级条件</h3><ul class="risklist" id="riskEscalation"></ul></div>
         <div class="riskbox"><h3 id="riskDeescalationTitle">降级条件</h3><ul class="risklist" id="riskDeescalation"></ul></div>
       </div>
@@ -1661,6 +1735,76 @@ function drawCurve(points){
   g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
  });
 }
+function riskStageClass(stage){
+ const s=String(stage||'');
+ if(s.includes('DEFENSIVE'))return 'risk-stage defensive';
+ if(s.includes('TIGHTEN'))return 'risk-stage tighten';
+ if(s.includes('WATCH'))return 'risk-stage watch';
+ return 'risk-stage';
+}
+function fmtRiskNumber(x,digits=2){
+ const n=Number(x);return Number.isFinite(n)?n.toFixed(digits):'-';
+}
+function renderRiskControl(report){
+ if(!report)return;
+ el('riskCenterScope').textContent=lang==='zh'
+  ? '独立于下方美股 / A股 / 港股单市场页面：这里始终联合分析三个市场，并把结果送入风控 shadow 实验；它不是第四个市场，也不会自动改变生产权重。'
+  : 'Independent of the US/CN/HK market selector below: this center always analyzes all three markets and feeds a shadow risk-control experiment. It is not a fourth market and cannot change production weights automatically.';
+ const names={US:lang==='zh'?'美股 / US':'US',CN:lang==='zh'?'A股 / CN':'CN',HK:lang==='zh'?'港股 / HK':'HK'};
+ el('riskThreeMarketTitle').textContent=lang==='zh'?'三市场联动状态':'Three-market linked state';
+ el('riskThreeMarketRows').innerHTML=(report.three_market_state||[]).map(x=>
+   '<tr><td><b>'+esc(names[x.market]||x.market)+'</b></td>'+
+   '<td>'+fmtPct(x.drawdown_stress_252)+'</td>'+
+   '<td>'+fmtPct(x.negative_momentum_63)+'</td>'+
+   '<td>'+((x.negative_momentum_percentile==null)?'-':fmtPct(x.negative_momentum_percentile))+'</td>'+
+   '<td>'+fmtPct(x.volatility_63)+'</td>'+
+   '<td class="'+riskStageClass(x.risk_control_stage)+'">'+esc(x.risk_control_stage||'-')+'</td></tr>'
+ ).join('');
+ el('riskDynamicsTitle').textContent=lang==='zh'?'动力链 / 传导路径':'Dynamics / transmission chain';
+ el('riskDynamicsRows').innerHTML=(report.dynamics_chain||[]).map(x=>{
+   const state=String(x.state||'-');
+   const clsState=(state.includes('ACTIVE')||state.includes('STRESSED')||state.includes('DETERIORATING'))?'chain-active':(state.includes('NOT_CONFIRMED')||state.includes('PARTIAL'))?'chain-pending':'chain-normal';
+   const score=Number(x.score);
+   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'">'+esc(state)+'</td><td>'+ (Number.isFinite(score)?score.toFixed(score<=1?2:1):'-') +'</td><td>'+esc((x.evidence||[]).join(' · ')||'-')+'</td></tr>';
+ }).join('');
+ el('riskMacroTitle').textContent=lang==='zh'?'利率、政策、信用与流动性':'Rates, policy, credit and liquidity';
+ const macro=report.rates_policy_credit_snapshot||{};
+ const macroLabels={
+  US_TREASURY_2Y_LEVEL:'2Y Treasury',US_TREASURY_10Y_LEVEL:'10Y Treasury',US_TREASURY_30Y_LEVEL:'30Y Treasury',
+  US_REAL_YIELD_10Y_LEVEL:'10Y Real Yield',US_TREASURY_2Y_RISE_90D:'2Y Δ90d',US_TREASURY_10Y_RISE_90D:'10Y Δ90d',
+  US_REAL_YIELD_10Y_RISE_90D:'10Y Real Δ90d',FED_POLICY_RATE_LEVEL:'Fed Funds',FED_FUNDS_FUTURES_IMPLIED_RATE:'Fed Funds Futures',
+  FED_FUNDS_FUTURES_REPRICING_ABS_30D:'Fed Futures |Δ30d|',MOVE_LEVEL:'MOVE',MOVE_RISE_30D:'MOVE Δ30d',MOVE_RISE_90D:'MOVE Δ90d',
+  YIELD_CURVE_INVERSION:'10Y−2Y inversion stress',YIELD_CURVE_10Y3M_INVERSION:'10Y−3M inversion stress',
+  FINANCIAL_CONDITIONS_NFCI:'NFCI',HY_CREDIT_SPREAD_LEVEL:'HY OAS'
+ };
+ el('riskMacroRows').innerHTML=Object.entries(macro).filter(([k])=>!k.endsWith('_LONG_CYCLE')).map(([k,v])=>
+   '<tr><td>'+esc(macroLabels[k]||k)+'</td><td>'+fmtRiskNumber(v.value,4)+'</td><td>'+((v.point_in_time_percentile==null)?'-':fmtPct(v.point_in_time_percentile))+'</td></tr>'
+ ).join('');
+ el('riskTermTitle').textContent=lang==='zh'?'Fed Funds / SOFR 期限曲线':'Fed Funds / SOFR term curves';
+ const tc=report.term_curve||{}, metrics=tc.metrics||{};
+ const curveNames={fed_funds:'Fed Funds',sofr_1m:'SOFR 1M',sofr_3m:'SOFR 3M'};
+ el('riskTermRows').innerHTML=Object.entries(curveNames).map(([k,label])=>{
+  const x=metrics[k]||{};
+  return '<tr><td>'+label+'</td><td>'+esc(x.contracts??'-')+'</td><td>'+fmtRiskNumber(x.front_implied_rate,4)+'%</td><td>'+fmtRiskNumber(x.back_implied_rate,4)+'%</td><td>'+fmtRiskNumber(x.front_to_back_change,4)+'pp</td></tr>';
+ }).join('');
+ el('riskCurveDetailTitle').textContent=lang==='zh'?'展开期限合约明细':'Show contract-level term curve';
+ const curveRows=[];
+ Object.entries(curveNames).forEach(([k,label])=>(tc[k]||[]).forEach(x=>curveRows.push({label,...x})));
+ el('riskCurveContractRows').innerHTML=curveRows.map(x=>'<tr><td>'+esc(x.label)+'</td><td>'+esc(x.contract_month||'-')+'</td><td>'+esc(x.symbol||'-')+'</td><td>'+fmtRiskNumber(x.price,4)+'</td><td>'+fmtRiskNumber(x.implied_rate,4)+'%</td></tr>').join('');
+ el('riskHistoryTableTitle').textContent=lang==='zh'?'历史危机回溯与统计支持':'Historical crash recurrence and statistical support';
+ const hv=report.historical_validation||{};
+ const supported=hv.statistically_supported_composites||[];
+ el('riskHistoryRows').innerHTML=supported.map(x=>'<tr><td>'+esc(x.composite||'-')+'</td><td>'+esc(x.lead_trading_days??'-')+'d</td><td>'+fmtPct(x.event_hit_rate)+'</td><td>'+fmtPct(x.control_false_positive_rate)+'</td><td>'+fmtPct(x.hit_rate_lift)+'</td><td>'+fmtRiskNumber(x.fisher_p_value,4)+'</td><td>'+fmtRiskNumber(x.bh_q_value,4)+'</td><td>'+fmtPct(x.leave_one_event_out_min_hit_rate)+'</td></tr>').join('') || '<tr><td colspan="8">-</td></tr>';
+ el('riskControlTitle').textContent=lang==='zh'?'三市场风控 Shadow 实验':'Three-market risk-control shadow experiment';
+ const rc=report.risk_control_experiment||{};
+ el('riskControlMeta').textContent=(lang==='zh'?'当前阶段 ':'Stage ')+(rc.stage||'-')+' · '+(lang==='zh'?'生产动作 ':'Production action ')+(rc.production_action||'NONE')+' · '+(lang==='zh'?'目标纪律：风险只作为可执行约束/证据层，最大化可实现净收益仍是唯一优化目标。':rc.objective_guard||'');
+ el('riskControlRows').innerHTML=(report.three_market_state||[]).map(x=>{
+  const q=x.shadow_candidate_constraints||{};
+  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(x.risk_control_stage)+'">'+esc(x.risk_control_stage||'-')+'</td><td>'+fmtPct(q.risky_exposure_multiplier)+'</td><td>'+fmtPct(q.defensive_exposure_floor)+'</td><td>'+(x.applied_to_production?'YES':'NO')+'</td></tr>';
+ }).join('');
+ const pv=report.prospective_validation||{};
+ el('riskLedgerDetail').textContent=(lang==='zh'?'风控实验账本 ':'Risk-control ledger ')+(pv.ledger_id||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-');
+}
 function renderRiskWarning(report){
  const panel=el('riskWarningPanel');
  if(!report){panel.style.display='none';return;}
@@ -1903,11 +2047,12 @@ async function refreshAll(){
  const previewId=previewRunIds[m];
  try{
   const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
-  const [s,d,cards,curves,evo,runs,previewRun,riskWarning]=await Promise.all([
+  const [s,d,cards,curves,evo,runs,previewRun,riskWarning,riskControl]=await Promise.all([
    json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
    json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null),
-   jsonOrNull('/api/risk-warning/latest')
+   jsonOrNull('/api/risk-warning/latest'),
+   jsonOrNull('/api/risk-control/latest')
   ]);
   const isCN=m==='CN';
   const isHK=m==='HK';
@@ -1943,6 +2088,7 @@ async function refreshAll(){
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
   renderRiskWarning(riskWarning);
+  renderRiskControl(riskControl);
   renderComparison(evaluated);
   el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
   el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
