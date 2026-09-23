@@ -47,6 +47,56 @@ async def supervise_market_automation()->None:
             )
             await asyncio.sleep(5)
 
+async def bootstrap_startup_maintenance(app:FastAPI)->None:
+    """Run restart recovery after the HTTP app is ready.
+
+    Startup maintenance is operational hygiene, not a prerequisite for serving
+    health/status traffic. Keeping it off the lifespan critical path prevents
+    remote storage latency or reference bootstrapping from delaying readiness.
+    """
+    app.state.startup_maintenance_receipt={
+        "event":"STALE_RUN_RECOVERY",
+        "applied":False,
+        "state":"RUNNING",
+    }
+    try:
+        receipt=await asyncio.to_thread(engine.recover_stale_runs)
+        primary_references={}
+        for market_id in ("US","CN","HK"):
+            try:
+                primary_references[market_id]=await asyncio.to_thread(
+                    engine.ensure_primary_reference,
+                    market_id,
+                )
+            except Exception as exc:
+                primary_references[market_id]={
+                    "market_id":market_id,
+                    "created":False,
+                    "reason":"PRIMARY_REFERENCE_BOOTSTRAP_ERROR",
+                    "error":f"{type(exc).__name__}:{exc}",
+                }
+        receipt["primary_references"]=primary_references
+        receipt["state"]="COMPLETED"
+        app.state.startup_maintenance_receipt=receipt
+        print(
+            "TRIAID_STARTUP_MAINTENANCE_BACKGROUND_PASS",
+            receipt.get("recovered_count"),
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        app.state.startup_maintenance_receipt={
+            "event":"STALE_RUN_RECOVERY",
+            "applied":False,
+            "state":"FAILED",
+            "error":f"{type(exc).__name__}:{exc}",
+        }
+        print(
+            "TRIAID_STARTUP_MAINTENANCE_BACKGROUND_FAILED",
+            f"{type(exc).__name__}:{exc}",
+        )
+
+
 
 async def bootstrap_long_horizon_research()->None:
     try:
@@ -152,24 +202,18 @@ async def lifespan(app:FastAPI):
         "TRIAID_STARTUP_MAINTENANCE","0"
     ).lower() in {"1","true","on","yes"}
     if startup_maintenance_enabled:
-        receipt=engine.recover_stale_runs()
-        primary_references={}
-        for market_id in ("US","CN","HK"):
-            try:
-                primary_references[market_id]=engine.ensure_primary_reference(market_id)
-            except Exception as exc:
-                primary_references[market_id]={
-                    "market_id":market_id,
-                    "created":False,
-                    "reason":"PRIMARY_REFERENCE_BOOTSTRAP_ERROR",
-                    "error":f"{type(exc).__name__}:{exc}",
-                }
-        receipt["primary_references"]=primary_references
-        app.state.startup_maintenance_receipt=receipt
+        app.state.startup_maintenance_receipt={
+            "event":"STALE_RUN_RECOVERY",
+            "applied":False,
+            "state":"PENDING",
+            "reason":"DEFERRED_UNTIL_APP_READY",
+        }
+        tasks.append(asyncio.create_task(bootstrap_startup_maintenance(app)))
     else:
         app.state.startup_maintenance_receipt={
             "event":"STALE_RUN_RECOVERY",
             "applied":False,
+            "state":"DISABLED",
             "reason":"TRIAID_STARTUP_MAINTENANCE_DISABLED",
         }
     if calendar_sync.enabled:
