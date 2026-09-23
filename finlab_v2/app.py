@@ -1810,39 +1810,49 @@ const UI_TIPS={
 
 function uiTipUseGuide(id){
  const zh=lang==='zh';
- if(['resultTitle','baseReturnLabel','triaidReturnLabel','gainLabel','dailyAnalysisLabel','prospectiveHoldLabel','prospectiveTriaidLabel','prospectiveGapLabel','recoveryPrevReturnLabel','recoveryPrevGapLabel','curveTitle'].includes(id)){
-  return zh
-   ? '用途：用它判断冻结决策有没有被真实后验支持。下一步：优先看同周期对照和累计路径；单次领先不作为规则升级依据，持续领先或持续落后才进入复核。'
-   : 'Use: judge whether the frozen decision is supported by realized posterior evidence. Next: prioritize same-period controls and cumulative paths; one win does not justify rule promotion, while persistent out/under-performance triggers review.';
- }
- if(['liveTitle','indexWindowTitle','activityWindowTitle','dateLabel','runStateLabel','overviewTitle'].includes(id)){
-  return zh
-   ? '用途：先确认数据是不是最新、系统是不是在正常运行，再解读策略结果。下一步：若时间、数据源或运行状态异常，先修数据/运行链，不要把基础设施问题误判成模型信号。'
-   : 'Use: confirm data freshness and runtime health before interpreting strategy results. Next: if timestamp, provider or run state is abnormal, fix the data/runtime path before treating it as a model signal.';
- }
- if(['strategyTitle','selectedNamesLabel','selectedLabel','usrmStrategyTitle','prospectiveStrategyTitle','recoveryOpinionTitle'].includes(id)){
-  return zh
-   ? '用途：看系统当前真正选了谁、为什么选、权重如何变化。下一步：打开策略说明和底层价格，检查选择理由、风险、容量与后验是否一致；不一致才进入替换/降级评估。'
-   : 'Use: see what the system actually selected, why, and how weights changed. Next: inspect rationale and underlying prices, then compare selection logic with risk, capacity and posterior outcomes before replacement/downgrade.';
- }
- if(['usrmCapitalTitle','usrmRealizedTitle','capitalSleeveTitle','capitalRealizedTitle','usrmRiskLabel','recoveryCashLabel'].includes(id)){
-  return zh
-   ? '用途：判断策略在真实资金规模下是否还能执行，而不是只看理论收益。下一步：容量不足、成本过高或成交周期过长时，先缩规模/延长执行/淘汰方案，再谈放大收益。'
-   : 'Use: test whether the strategy remains executable at real capital size rather than only on paper. Next: when capacity, cost or execution time is poor, reduce scale, extend execution or reject the route before scaling return.';
- }
- if(['evolutionTitle','evoObservedLabel','evoNegLabel','evoCandidateLabel'].includes(id)){
-  return zh
-   ? '用途：判断当前证据是否足够支持 Core 或策略进化。下一步：候选只在 replay、holdout、shadow、前瞻和审计共同通过后才晋升；否则继续积累证据。'
-   : 'Use: judge whether evidence is strong enough for Core/strategy evolution. Next: promote only after replay, holdout, shadow, prospective and audit checks agree; otherwise keep collecting evidence.';
- }
- if(['regimeLabel','coreLabel','usrmExpectedLabel','usrmGenericLabel','usrmSpyLabel','prospectiveDaysLabel','recoveryPrevDaysLabel','cumLabel'].includes(id)){
-  return zh
-   ? '用途：提供当前结论的上下文和比较口径。下一步：先确认口径一致，再把它与同页的对照、风险和真实后验一起使用，不要单独把一个状态值当成行动指令。'
-   : 'Use: provide context and comparison convention for the current conclusion. Next: confirm the convention first, then read it with controls, risk and realized posterior evidence rather than treating one state value as an action signal.';
- }
+ const posterior=new Set(['resultTitle','baseReturnLabel','triaidReturnLabel','gainLabel','dailyAnalysisLabel','prospectiveHoldLabel','prospectiveTriaidLabel','prospectiveGapLabel','recoveryPrevReturnLabel','recoveryPrevGapLabel','curveTitle']);
+ const runtime=new Set(['liveTitle','indexWindowTitle','activityWindowTitle','dateLabel','runStateLabel','overviewTitle']);
+ const strategy=new Set(['strategyTitle','selectedNamesLabel','selectedLabel','usrmStrategyTitle','prospectiveStrategyTitle','recoveryOpinionTitle']);
+ const capacity=new Set(['usrmCapitalTitle','usrmRealizedTitle','capitalSleeveTitle','capitalRealizedTitle','usrmRiskLabel','recoveryCashLabel']);
+ const evolution=new Set(['evolutionTitle','evoObservedLabel','evoNegLabel','evoCandidateLabel']);
+ const context=new Set(['regimeLabel','coreLabel','usrmExpectedLabel','usrmGenericLabel','usrmSpyLabel','prospectiveDaysLabel','recoveryPrevDaysLabel','cumLabel']);
+ const route=new Set(['usReturnMaxTitle','prospectiveTitle','recoveryWaveTitle']);
+ const exposure=new Set(['usrmAssetTitle']);
+ const control=new Set(['usrmControlTitle']);
+ const dailyPath=new Set(['dailyTitle','prospectiveDailyTitle','recoveryReviewTitle']);
+ if(posterior.has(id))return zh
+  ? '怎么用：先看同一冻结时点的基线与TRIAID，再看相对收益差和累计路径。若优势只来自单个结果期、随后迅速反转，不能算稳定增值；只有多个已完成后验方向一致，才值得进入规则复核。'
+  : 'How to use: compare TRIAID with the control frozen at the same decision time, then inspect the return gap and cumulative path. If the edge comes from one outcome period and quickly reverses, it is not stable value-add; only repeated completed posteriors justify rule review.';
+ if(runtime.has(id))return zh
+  ? '怎么用：先核对市场数据日、数据源、交易阶段和延迟，再读策略结果。若时间戳停滞、当前交易阶段与数据更新不一致或provider异常，先按数据/运行故障处理，不把它解释成策略信号。'
+  : 'How to use: verify market-data date, provider, session phase and delay before reading strategy results. If timestamps stall, updates disagree with the session phase or the provider is abnormal, treat it as a data/runtime fault rather than a strategy signal.';
+ if(strategy.has(id))return zh
+  ? '怎么用：核对谁被选中、基线权重→TRIAID权重改了多少、选择理由是什么。若加权没有冻结时理由，或后续已完成后验持续落后基线，就进入降权/退出规则复核。'
+  : 'How to use: check who was selected, the baseline→TRIAID weight change, and the frozen-time rationale. If added weight lacks a frozen rationale or completed posteriors repeatedly lag the control, review downgrade/exit rules.';
+ if(capacity.has(id))return zh
+  ? '怎么用：看ADV占用、最少成交天数、模拟成本、fill ratio和剩余未成交目标。若成本吞掉预期优势、成交周期过长或长期无法完成目标仓位，这条路线在该资金规模下就不算可实现。'
+  : 'How to use: inspect ADV usage, minimum execution days, modeled cost, fill ratio and remaining target notional. If costs consume the expected edge, execution takes too long, or the target cannot be filled, the route is not realizable at that capital size.';
+ if(evolution.has(id))return zh
+  ? '怎么用：看已完成后验数量、负相对收益比例和Candidate状态。Candidate只有在 replay、holdout、shadow、前瞻与audit全部通过后才可晋升；任一项未通过就保持原Core。'
+  : 'How to use: inspect evaluated-run count, negative relative-return rate and Candidate status. A Candidate may promote only after replay, holdout, shadow, prospective and audit checks all pass; otherwise keep the current Core.';
+ if(context.has(id))return zh
+  ? '怎么用：先确认市场、数据日、Core版本和比较口径属于同一快照。不是同一市场/日期/冻结版本的数据不要直接横向比较；先统一口径再看收益或风险。'
+  : 'How to use: first confirm market, data date, Core version and comparison convention belong to the same snapshot. Do not compare across different markets/dates/frozen versions until the convention is aligned.';
+ if(route.has(id))return zh
+  ? '怎么用：先确认当前市场采用哪条主实验路线、谁是冻结对照、后验从什么时候开始计。若页面所示路线与当前市场不匹配，或对照不是同一冻结时点，先视为配置/展示错误。'
+  : 'How to use: confirm which primary experiment route the market uses, what the frozen control is, and when posterior evaluation starts. If the displayed route does not match the market or the control was not frozen at the same time, treat it as a configuration/display fault.';
+ if(exposure.has(id))return zh
+  ? '怎么用：看策略权重最终落到哪些ETF/资产，以及风险资产、债券、黄金和现金各占多少。若底层敞口加总与策略层目标风险敞口不一致，先检查策略→资产映射，不继续解读收益。'
+  : 'How to use: see which ETFs/assets the strategy weights ultimately create and how risky assets, bonds, gold and cash are split. If underlying exposure does not reconcile with the strategy-level target, inspect the strategy→asset mapping before interpreting returns.';
+ if(control.has(id))return zh
+  ? '怎么用：确认“TRIAID赢了谁”。对照必须与TRIAID同一冻结时点、同一结果期、同一收益口径；只要对照中途改变，后验差值就失去可比性。'
+  : 'How to use: verify exactly what TRIAID is being compared against. The control must share the same freeze time, outcome period and return convention; if the control changes midstream, the posterior gap is no longer comparable.';
+ if(dailyPath.has(id))return zh
+  ? '怎么用：沿交易日逐项看收益贡献，确认累计结果是不是被某一天或少数几天主导。若去掉极端单日后优势消失，先按脆弱结果处理，不把累计数字直接当成稳定能力。'
+  : 'How to use: inspect day-by-day contribution and check whether the cumulative result is dominated by one or a few days. If the edge disappears without an extreme day, treat it as fragile rather than stable capability.';
  return zh
-  ? '用途：帮助判断当前页面结论是否值得继续追踪。下一步：结合相邻对照项和真实后验决定是继续观察、补证据还是进入更深审计。'
-  : 'Use: help decide whether the current page conclusion deserves further attention. Next: combine it with nearby controls and realized posterior evidence to choose observation, more evidence or deeper audit.';
+  ? '该项目尚未配置专用用途说明；这是UI文案缺陷，不应依赖这段提示做判断。'
+  : 'This item lacks a dedicated usage explanation; treat that as a UI copy defect and do not rely on this tooltip for a decision.';
 }
 function applyUiTooltips(){
  Object.entries(UI_TIPS[lang]||{}).forEach(([id,tip])=>{
@@ -1920,49 +1930,33 @@ function tooltipUseGuide(label){
  const key=normalizeHeaderLabel(raw).toLowerCase();
  const zh=lang==='zh';
  const has=(...words)=>words.some(w=>key.includes(normalizeHeaderLabel(w).toLowerCase()));
- if(has('状态','state','阶段','stage','研究意见','action','opinion')){
-  return zh
-   ? '用途：先判断这行结果处在“可正式比较、仅Shadow观察、还是暂停/待验证”的哪一层，再决定后面的数字能不能直接用于结论。下一步：状态未成熟时先补证据，不要只看收益数字。'
-   : 'Use: first determine whether the row is live-comparable, shadow-only, paused, or still awaiting evidence. Next: if the state is immature, gather evidence before acting on return numbers.';
- }
- if(has('权重','weight','敞口','exposure','调整','change','delta')){
-  return zh
-   ? '用途：看 TRIAID 相对基线到底改了什么、改了多少。下一步：把权重变化与选择原因、风险、容量和后验收益差一起看；只有后验持续支持，调整才算有价值。'
-   : 'Use: see exactly what TRIAID changed versus the baseline and by how much. Next: read the change together with rationale, risk, capacity and realized return gap; the adjustment matters only if posterior evidence supports it.';
- }
- if(has('收益','return','损益','p&l','净值','equity','差值','gap','累计','cumulative','名次','rank')){
-  return zh
-   ? '用途：判断冻结决策最终有没有产生真实增值，而不是只看当时的预测。下一步：优先和同一时点冻结的基线/对照比较；单日结果只作线索，累计且可重复的后验差异更重要。'
-   : 'Use: judge whether the frozen decision actually added realized value rather than merely looking good at decision time. Next: compare with the contemporaneously frozen control; one-day results are clues, repeated cumulative posterior differences matter more.';
- }
- if(has('风险','risk','回撤','drawdown','波动','volatility','动量','momentum','压力','stress','分位','percentile')){
-  return zh
-   ? '用途：定位为什么当前需要更谨慎，以及风险主要来自哪里。下一步：风险升高时先检查驱动项、数据质量和跨市场一致性，再进入Shadow约束测试；不要仅凭单一风险列直接改生产权重。'
-   : 'Use: locate why the current state deserves more caution and where the pressure comes from. Next: when risk rises, inspect drivers, data quality and cross-market consistency before shadow constraint tests; do not change production weights from one risk column alone.';
- }
- if(has('成本','cost','adv','成交','fill','流动性','liquidity','资金','capital','天数','days','投入','invested','目标仓位','notional')){
-  return zh
-   ? '用途：判断纸面收益能不能在当前资金规模和流动性下真正实现。下一步：如果容量占用、成交天数或成本过高，应在研究层降低规模、延长执行周期或淘汰该方案，而不是继续放大名义收益。'
-   : 'Use: test whether paper returns remain realizable at the stated capital and liquidity. Next: if capacity, execution days or costs are too high, reduce research scale, extend execution or reject the route rather than scaling nominal return.';
- }
- if(has('样本','sample','p','q','lift','支持','support','命中','hit','稳健','robust')){
-  return zh
-   ? '用途：判断当前结论证据够不够硬。下一步：样本少、q值不支持或稳健性差时继续观察，不升级结论；只有多窗口、留一验证和前瞻结果共同支持时才提高置信度。'
-   : 'Use: judge whether the evidence is strong enough. Next: with small samples, unsupported q-values or weak robustness, keep observing rather than promote the claim; confidence rises only when multiple windows, leave-one-out checks and prospective results agree.';
- }
- if(has('日期','交易日','date','day','市场','market','产品','product','etf','指标','indicator','曲线','curve','合约','contract')){
-  return zh
-   ? '用途：确认你比较的是同一个市场、同一个时点和同一类对象，避免把不同日期或不同口径的数据混在一起。下一步：出现异常时先核对时间、市场和数据源，再判断模型。'
-   : 'Use: make sure comparisons use the same market, timestamp and object type. Next: when something looks abnormal, verify time, market and data source before blaming the model.';
- }
- if(has('原因','依据','说明','rationale','why','explanation','evidence','证据')){
-  return zh
-   ? '用途：回答为什么当时会做这个决定，用于防止看到结果后倒推理由。下一步：先看冻结时证据，再看真实后验；如果理由和后验长期不一致，才进入策略或规则修订。'
-   : 'Use: answer why the decision was made at the time and prevent hindsight rationalization. Next: read frozen-time evidence first, then realized posterior outcomes; revise strategy/rules only when the mismatch persists.';
- }
+ if(has('状态','state','阶段','stage','研究意见','action','opinion'))return zh
+  ? '怎么用：先确认这行能否进入正式比较。ACTIVE/EVALUATED可看正式后验；SHADOW/CANDIDATE只看验证进度；FROZEN/RETIRED不应参与当前配置。状态没成熟时，后面的高收益数字不能作为晋级依据。'
+  : 'How to use: first determine whether the row is eligible for formal comparison. ACTIVE/EVALUATED can support posterior review; SHADOW/CANDIDATE are validation-only; FROZEN/RETIRED should not participate in current allocation.';
+ if(has('权重','weight','敞口','exposure','调整','change','delta'))return zh
+  ? '怎么用：直接比较基线权重、TRIAID权重和Δ权重，确认系统到底加了谁、减了谁。再把Δ与冻结时理由、风险、容量和后验收益差对应起来；无法解释的权重变化应进入审计。'
+  : 'How to use: compare baseline weight, TRIAID weight and delta to see exactly what increased or decreased. Reconcile the delta with frozen rationale, risk, capacity and posterior return gap; unexplained changes require audit.';
+ if(has('收益','return','损益','p&l','净值','equity','差值','gap','累计','cumulative','名次','rank'))return zh
+  ? '怎么用：只和同一冻结时点、同一结果期的对照比较。看单期差值后必须继续看累计路径和实际名次；若优势只靠一次异常收益，不能据此升级策略。'
+  : 'How to use: compare only against a control from the same freeze time and outcome period. After the period gap, inspect cumulative path and realized rank; an edge driven by one abnormal return does not justify promotion.';
+ if(has('风险','risk','回撤','drawdown','波动','volatility','动量','momentum','压力','stress','分位','percentile'))return zh
+  ? '怎么用：把这一列当成“异常来自哪里”的定位器。先看它是否相对自身历史异常，再去主驱动/跨市场/信用流动性里找确认；单个高分只触发追查，不直接触发权重变化。'
+  : 'How to use: use this column to locate where abnormality comes from. Check whether it is unusual versus its own history, then seek confirmation in drivers, transmission and credit/liquidity; one high metric triggers investigation, not a weight change.';
+ if(has('成本','cost','adv','成交','fill','流动性','liquidity','资金','capital','天数','days','投入','invested','目标仓位','notional'))return zh
+  ? '怎么用：看该资金规模下是否真能成交。重点核对ADV占用、成交天数、fill ratio、模型成本和剩余目标；如果成本吃掉收益优势或目标长期填不满，这个方案就应降规模、延长执行或淘汰。'
+  : 'How to use: test whether the position can actually be executed at this capital size. Focus on ADV usage, execution days, fill ratio, modeled cost and remaining target; if cost consumes the edge or the target cannot be filled, reduce scale, extend execution or reject the route.';
+ if(has('样本','sample','p','q','lift','支持','support','命中','hit','稳健','robust'))return zh
+  ? '怎么用：按“样本数 → 命中/误报 → Lift → p/q → 留一稳健性 → 前瞻成熟度”顺序读。任一关键环节不支持，就把它保留为候选证据，不升级成已验证结论。'
+  : 'How to use: read in order: sample size → hit/false-positive rate → lift → p/q → leave-one-out robustness → prospective maturity. If a key step is unsupported, keep it as candidate evidence rather than a validated claim.';
+ if(has('日期','交易日','date','day','市场','market','产品','product','etf','指标','indicator','曲线','curve','合约','contract'))return zh
+  ? '怎么用：用它核对对象和时间是否一致。遇到异常先检查市场、交易日、数据源、合约月份/产品代码，再判断模型；时间或对象错位时其余列没有可比性。'
+  : 'How to use: verify object and timestamp alignment. When something looks abnormal, first check market, trading day, provider and contract/product identity; if these are misaligned, the remaining columns are not comparable.';
+ if(has('原因','依据','说明','rationale','why','explanation','evidence','证据'))return zh
+  ? '怎么用：先读冻结时理由，再读后来真实后验，检查“当时为什么选”与“后来实际发生什么”是否一致。若长期不一致，修规则；不能用后来结果反向改写当时理由。'
+  : 'How to use: read the frozen-time rationale first, then the later realized posterior and compare “why selected” with “what happened.” Persistent mismatch calls for rule revision; later outcomes must not rewrite the original rationale.';
  return zh
-  ? '用途：用这一列帮助判断当前结论是否成立，以及下一步应该继续观察、补证据还是进入更深一层验证。不要脱离同表对照项单独解读。'
-  : 'Use: this column helps decide whether the current conclusion is supported and whether the next step is observation, more evidence, or deeper validation. Do not interpret it in isolation from its controls.';
+  ? '该表头没有专用用途说明；视为UI契约缺失，不应只凭这一列做判断。'
+  : 'This header lacks dedicated usage guidance; treat it as a UI-contract gap and do not make a decision from this column alone.';
 }
 function tableHeaderTipMeta(label){
  const raw=String(label||'').trim();
@@ -1973,11 +1967,11 @@ function tableHeaderTipMeta(label){
  if(local[key])return {text:local[key]+'\\n'+tooltipUseGuide(raw),explicit:true};
  const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
  if(fallbackOther[key])return {text:fallbackOther[key]+'\\n'+tooltipUseGuide(raw),explicit:true};
- if(!raw)return {text:(lang==='zh'?'本列表头说明。':'Table-column explanation.')+'\\n'+tooltipUseGuide(raw),explicit:false};
+ if(!raw)return {text:lang==='zh'?'缺少表头说明；这是UI契约缺失。':'Missing header explanation; this is a UI-contract gap.',explicit:false};
  return {
   text:(lang==='zh'
-   ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
-   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.')+'\\n'+tooltipUseGuide(raw),
+   ? '“'+raw+'”尚未配置专用定义和使用说明；这是UI契约缺失。'
+   : '“'+raw+'” does not yet have a dedicated definition and usage guide; this is a UI-contract gap.'),
   explicit:false
  };
 }
@@ -2089,28 +2083,28 @@ function statusActionGuide(status){
  const key=String(status||'').toLowerCase();
  const zh=lang==='zh';
  const mapZh={
-  active:'用途：可以进入当前正式策略群。下一步：继续看权重、风险和真实后验；若持续落后或风险恶化，再考虑降级。',
-  shadow:'用途：只验证，不正式配置。下一步：继续积累真实前瞻样本，达到准入要求前不要给生产权重。',
-  reduced:'用途：说明策略证据或表现已经变弱。下一步：限制影响并观察恢复条件；若继续不支持则冻结。',
-  frozen:'用途：当前不应参与正式配置。下一步：只有出现新的、可验证的证据后才重新评估。',
-  candidate:'用途：还在候选池。下一步：补足前瞻样本、稳健性和容量证据，不要因为一次好结果提前晋级。',
-  research:'用途：只用于研发。下一步：先完成复现、压力测试和前瞻验证，再讨论准入。',
-  retired:'用途：已退出当前策略体系。下一步：默认不再投入研究资源，除非出现足够强的新证据。',
-  preview_ready:'用途：只看即时页面效果。下一步：不能把预览结果算进正式后验或策略晋级。'
+  active:'怎么用：该策略可以进入当前正式策略群。重点看Δ权重、风险/容量和后续EVALUATED相对收益；若多次完成后验持续落后对应基线，或容量/风险约束失效，就进入降级复核。',
+  shadow:'怎么用：只允许积累前瞻证据，不给正式配置权重。先看完整交易日样本、稳定性和对照结果；未达到准入门槛前，单次高收益不改变状态。',
+  reduced:'怎么用：当前影响已被压低。核对触发降级的具体证据是否恢复；未恢复则继续减弱或冻结，恢复后也要重新通过准入检查。',
+  frozen:'怎么用：当前不得参与正式配置。先查冻结原因；只有新的可复现证据重新通过准入链后才能恢复，不因短期反弹自动解冻。',
+  candidate:'怎么用：仍是候选。逐项看 replay、holdout、shadow、前瞻、容量和audit 是否通过；缺一项都不能晋级。',
+  research:'怎么用：只用于研发。先完成复现、压力测试、对照和前瞻样本，再决定是否进入Candidate。',
+  retired:'怎么用：已退出当前策略体系。除非出现新的、可复现且足以重新打开准入链的证据，否则不再投入正式配置资源。',
+  preview_ready:'怎么用：只检查页面与即时计算结果。不得写入正式后验、累计曲线或生命周期晋级证据。'
  };
  const mapEn={
-  active:'Use: eligible for the live strategy group. Next: keep monitoring weight, risk and realized posterior evidence; downgrade only if deterioration persists.',
-  shadow:'Use: validation only, no live allocation. Next: accumulate prospective evidence before any production weight.',
-  reduced:'Use: evidence/performance has weakened. Next: limit influence and monitor recovery conditions; freeze if weakness persists.',
-  frozen:'Use: should not participate in live allocation. Next: reconsider only with new verifiable evidence.',
-  candidate:'Use: still in the candidate pool. Next: add prospective, robustness and capacity evidence; do not promote on one good result.',
-  research:'Use: development only. Next: complete reproduction, stress tests and prospective validation before admission.',
-  retired:'Use: outside the current system. Next: spend no normal allocation/research budget unless materially new evidence appears.',
-  preview_ready:'Use: display-only preview. Next: do not count it toward official posterior evidence or lifecycle promotion.'
+  active:'How to use: eligible for the active strategy group. Inspect weight delta, risk/capacity and subsequent EVALUATED relative return; repeated completed underperformance or failed constraints triggers downgrade review.',
+  shadow:'How to use: prospective evidence only, with no live allocation. Inspect complete trading-day samples, stability and control results; one strong result does not change status before admission gates pass.',
+  reduced:'How to use: influence is already constrained. Recheck the evidence that caused downgrade; if it has not recovered, continue reducing or freeze. Recovery still requires re-admission checks.',
+  frozen:'How to use: excluded from active allocation. Inspect the freeze reason; restore only after new reproducible evidence passes admission again, not because of a short-term rebound.',
+  candidate:'How to use: still a candidate. Check replay, holdout, shadow, prospective, capacity and audit one by one; any missing gate blocks promotion.',
+  research:'How to use: R&D only. Complete reproduction, stress tests, controls and prospective samples before Candidate admission.',
+  retired:'How to use: outside the current strategy system. Do not allocate formal resources unless new reproducible evidence is strong enough to reopen admission.',
+  preview_ready:'How to use: display/immediate-computation check only. Do not write it into formal posterior evidence, cumulative curves or lifecycle promotion.'
  };
  return (zh?mapZh:mapEn)[key]||(zh
-  ? '用途：先判断当前状态允许做什么，再解读收益和权重；状态本身决定这条结果能否进入正式证据链。'
-  : 'Use: determine what the current state permits before reading returns or weights; the state controls whether the result can enter the formal evidence chain.');
+  ? '状态缺少专用动作说明；先查状态定义和准入规则，不要仅凭收益数字行动。'
+  : 'This state lacks dedicated action guidance; inspect its definition and admission rules before acting on return numbers.');
 }
 function statusTip(status){
  const key=String(status||'').toLowerCase();
@@ -2248,8 +2242,8 @@ function renderHomeSummary(){
   delete el('homeSummaryRisk').dataset.tip;
  }
  el('homeSummaryRiskDetail').textContent=zh
-  ? 'US / A股 / 港股联合风险层 · Shadow-only · 不自动改变生产权重'
-  : 'US / CN / HK joint risk layer · shadow-only · does not automatically alter production weights';
+  ? 'US / A股 / 港股联合风险层 · 用于决定是否加密监控或启动Shadow收紧对照 · 不直接改权重'
+  : 'US / CN / HK joint risk layer · used to decide whether to tighten monitoring or launch shadow constraints · does not directly change weights';
 
  const validationPhrase=homeSummaryState.preview
   ? (zh?'当前有即时预览，但它不进入正式证据链':'a manual preview is active but does not enter the formal evidence chain')
@@ -2405,8 +2399,8 @@ function applyMarketScope(){
  el('marketScopeStatus').style.display=hk?'block':'none';
  el('marketScopeStatus').textContent=hk
   ? (lang==='zh'
-     ? '港股已进入独立策略研究路线：2800/2828/3033 为风险资产，2819 为防御资产；策略、TRIAID权重与后验独立记录。仍为研究系统，不连接券商、不自动交易。'
-     : 'Hong Kong now has an independent strategy research route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded independently. Research only; no broker execution.')
+     ? '港股独立路线：2800/2828/3033 为风险资产，2819 为防御资产；策略选择、TRIAID权重和后验单独记录。切到港股后应只用港股冻结基线与后验比较，不能拿美股/A股权重或结果横向替代。'
+     : 'Hong Kong uses an independent route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded separately. Compare HK only with its own frozen HK control; do not substitute US/CN weights or outcomes.')
   : '';
 }
 function onMarketChange(){
@@ -2468,24 +2462,6 @@ function riskBandText(score){
  const zh={low:'低',elevated:'升高',high:'高',severe:'严重',critical:'临界'};
  const en={low:'LOW',elevated:'ELEVATED',high:'HIGH',severe:'SEVERE',critical:'CRITICAL'};
  return (lang==='zh'?zh:en)[band]||'-';
-}
-function riskActionGuide(score){
- const band=riskBandFromScore(score);
- const zh={
-  low:'当前动作：维持常规观察，重点验证收益路线本身，不需要因为风险层额外收紧。若驱动项突然跳升，再进入复核。',
-  elevated:'当前动作：提高监控频率，先核对主要驱动、数据质量和三市场是否同向；继续正常研究运行，但把新增高风险暴露列为重点观察。',
-  high:'当前动作：进入专项风险复核。逐项检查利率/政策、价格结构、跨市场传导和流动性来源，并启动或加强 Shadow 收紧方案对照；生产权重仍不自动改变。',
-  severe:'当前动作：把风险控制放到优先级前列。Shadow 中测试更低风险敞口、更高防御底线和容量压力情景；暂停未经验证的激进策略晋级，等待风险回落或更多证据。',
-  critical:'当前动作：进入最高级人工复核。冻结新的高风险策略晋级和未经验证的放大方案，优先验证数据真实性、系统性传导和极端情景；只有人工审计与后验证据支持后才考虑恢复。'
- };
- const en={
-  low:'Action: keep normal monitoring and focus on validating the return route itself. No extra tightening is needed from the risk layer unless drivers jump materially.',
-  elevated:'Action: monitor more frequently; verify major drivers, data quality and whether markets are moving consistently. Continue normal research but scrutinize any new high-risk exposure.',
-  high:'Action: start a focused risk review. Inspect rates/policy, market structure, cross-market transmission and liquidity, and strengthen shadow tightening comparisons; production weights still do not change automatically.',
-  severe:'Action: make risk control a priority. In shadow, test lower risky exposure, higher defensive floors and capacity stress; pause promotion of unvalidated aggressive strategies until risk eases or evidence improves.',
-  critical:'Action: trigger the highest-level manual review. Freeze new high-risk promotions and unvalidated scaling, verify data integrity/systemic transmission/extreme scenarios first, and restore only after manual audit plus posterior evidence.'
- };
- return (lang==='zh'?zh:en)[band]||'';
 }
 function riskScaleTip(score,label){
  const n=Number(score);
@@ -2787,8 +2763,8 @@ function renderRiskWarning(report){
  const src=report.source_status||{};
  el('riskSourceStatus').textContent=(lang==='zh'?'数据时点：':'Source dates: ')+'Long '+(src.long_cycle_as_of||'-')+' · Hazard '+(src.latent_hazard_as_of||'-')+' · US/CN/HK '+(src.cross_market_as_of||'-')+' · Curve '+(src.policy_curve_as_of||'-')+' · Shadow '+(src.prospective_as_of||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(src.term_curve_usable?'OK':'NOT READY');
  el('riskSemantics').textContent=lang==='zh'
-  ? '风险指数是0–100的状态/证据压力评分，不是股灾概率，也不是未来收益预测。颜色阈值与后台风险分级完全一致；预警层目前为 shadow-only，不自动改变任何市场的组合权重。'
-  : 'The 0–100 risk index is a state/evidence pressure score, not a crash probability or return forecast. Color thresholds exactly match backend risk bands; the warning layer is shadow-only and cannot automatically change portfolio weights.';
+  ? '读法：先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日哪一段被什么分项推高。只有驱动继续扩散且阻断项转为确认，风险证据才升级；驱动回落并满足降级条件时才解除。该层只提供Shadow风控证据，不直接修改生产权重。'
+  : 'Read it in order: main drivers → missing confirmations → which components dominate 20/60/120/250d horizons. Evidence escalates only when drivers broaden and blockers become confirmed; it de-escalates when drivers normalize and de-escalation conditions are met. This layer supplies shadow risk evidence and does not directly change production weights.';
  applyTableHeaderTooltips();
 }
 function renderComparison(evaluated){
@@ -2922,7 +2898,7 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
     '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
     '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
-    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\\n'+(lang==='zh'?'用途：这里的样本数和理由用于判断历史相似状态是否足以支持当前研究意见。下一步：样本太少或理由只由单一历史情形支撑时继续观察，不因一个高收益代理直接扩大配置。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\\n'+(lang==='zh'?'怎么用：先看相似样本数，再看这些样本是否跨多个时期、方向是否一致。样本稀疏或只由单一历史情形支撑时，把 expected forward return 视为未充分支持，并保持冻结权重不变，直到新增前瞻样本或稳健性证据补足。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
  }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
  const capacity=d.capital_capacity||{};
  const capModel=capacity.model||{};
