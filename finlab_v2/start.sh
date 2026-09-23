@@ -15,6 +15,10 @@ fi
 # Runtime starts immediately. Non-critical verification is intentionally delayed
 # so it cannot compete with readiness or block health checks.
 (
+  sleep "${TRIAID_POSTDEPLOY_RUNTIME_SMOKE_DELAY:-8}"
+  "$PYTHON_BIN" postdeploy_runtime_smoke.py || echo TRIAID_POSTDEPLOY_RUNTIME_SMOKE_FAILED
+) &
+(
   sleep "${TRIAID_POST_START_UI_AUDIT_DELAY:-15}"
   "$PYTHON_BIN" ui_smoke.py || echo TRIAID_UI_NONBLOCKING_AUDIT_FAILED
 ) &
