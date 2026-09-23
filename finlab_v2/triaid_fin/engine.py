@@ -1369,7 +1369,7 @@ class EvolutionLabEngine:
     def refresh_market_data(self,market_id:str,mode:str)->dict:
         return refresh_market_data(market_id,mode)
 
-    def daily_summary(self,market_id:str|None=None)->dict:
+    def daily_summary(self,market_id:str|None=None,compact:bool=False)->dict:
         rows=self.all_runs()
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
@@ -1379,27 +1379,28 @@ class EvolutionLabEngine:
             us_return=self.us_return_max_ledger.daily_report()
             if us_return:
                 summary["us_return_max"]=us_return
-            long_cycle=self.long_cycle_hypothesis.latest()
-            if long_cycle:
-                summary["long_cycle_hypothesis"]=long_cycle
-            crash_linkage=self.cross_market_crash.latest()
-            if crash_linkage:
-                summary["cross_market_crash"]=crash_linkage
-            latent=self.latent_hazard.latest()
-            if latent:
-                summary["latent_hazard"]=latent
-            policy_curve=self.policy_curve.latest()
-            if policy_curve:
-                summary["policy_expectation_curve"]=policy_curve
-            hazard_shadow=self.hazard_prospective.latest()
-            if hazard_shadow:
-                summary["hazard_prospective"]=hazard_shadow
-            risk_warning=self.risk_warning.latest()
-            if risk_warning:
-                summary["risk_warning"]=risk_warning
-            risk_control=self.risk_control.latest()
-            if risk_control:
-                summary["risk_control"]=risk_control
+            if not compact:
+                long_cycle=self.long_cycle_hypothesis.latest()
+                if long_cycle:
+                    summary["long_cycle_hypothesis"]=long_cycle
+                crash_linkage=self.cross_market_crash.latest()
+                if crash_linkage:
+                    summary["cross_market_crash"]=crash_linkage
+                latent=self.latent_hazard.latest()
+                if latent:
+                    summary["latent_hazard"]=latent
+                policy_curve=self.policy_curve.latest()
+                if policy_curve:
+                    summary["policy_expectation_curve"]=policy_curve
+                hazard_shadow=self.hazard_prospective.latest()
+                if hazard_shadow:
+                    summary["hazard_prospective"]=hazard_shadow
+                risk_warning=self.risk_warning.latest()
+                if risk_warning:
+                    summary["risk_warning"]=risk_warning
+                risk_control=self.risk_control.latest()
+                if risk_control:
+                    summary["risk_control"]=risk_control
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
