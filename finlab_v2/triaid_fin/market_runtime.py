@@ -200,16 +200,16 @@ class MarketDataAutomation:
                         },
                     }
                     self.cross_market_crash_day=day
-                    self.errors.pop("USCNHK:CRASH_LINKAGE",None)
+                    self.errors.pop("NMARKET:CRASH_LINKAGE",None)
                     print(
-                        "TRIAID_US_CN_HK_CRASH_LINKAGE_DAILY",
+                        "TRIAID_N_MARKET_CRASH_LINKAGE_DAILY",
                         report.get("experiment_id"),
                         report.get("as_of"),
                         self.cross_market_crash_latest.get("paired_event_rows"),
                     )
                 except Exception as exc:
-                    self.errors["USCNHK:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_US_CN_HK_CRASH_LINKAGE_RECOVERY",self.errors["USCNHK:CRASH_LINKAGE"])
+                    self.errors["NMARKET:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
+                    print("TRIAID_N_MARKET_CRASH_LINKAGE_RECOVERY",self.errors["NMARKET:CRASH_LINKAGE"])
 
             if self.hazard_research_day!=day:
                 try:
