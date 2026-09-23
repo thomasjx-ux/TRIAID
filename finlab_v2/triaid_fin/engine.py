@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from statistics import mean
 from threading import RLock
 from typing import Dict, List
@@ -183,6 +184,66 @@ class EvolutionLabEngine:
             self._save_run(run)
         return run
 
+    def claim_manual_preview_run(
+        self,
+        market_id:str,
+    )->tuple[RunRecord,bool,str]:
+        market_id=market_id.upper()
+        cooldown_seconds=max(
+            0,
+            int(os.getenv("TRIAID_MANUAL_PREVIEW_COOLDOWN_SECONDS","60") or "60"),
+        )
+        now=datetime.now(ZoneInfo("UTC"))
+        with self._lock:
+            previews=sorted(
+                [
+                    r for r in self._runs.values()
+                    if r.market.market_id.upper()==market_id
+                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
+                ],
+                key=lambda r:r.created_at,
+            )
+            pending=[r for r in previews if r.status=="FETCHING_DATA"]
+            if pending:
+                return pending[-1],False,"PENDING_REUSED"
+
+            recent_ready=[
+                r for r in previews
+                if r.status=="PREVIEW_READY"
+            ]
+            if recent_ready and cooldown_seconds>0:
+                recent=recent_ready[-1]
+                try:
+                    age_seconds=max(
+                        0.0,
+                        (now-datetime.fromisoformat(recent.created_at)).total_seconds(),
+                    )
+                except Exception:
+                    age_seconds=float(cooldown_seconds)
+                if age_seconds<cooldown_seconds:
+                    return recent,False,"COOLDOWN_REUSED"
+
+            self._prune_manual_previews()
+            run_id=f"{market_id}-live-{uuid4().hex[:12]}"
+            run=RunRecord(
+                run_id=run_id,
+                module_manifest=self.module_manifest,
+                market=MarketSnapshot(
+                    market_id=market_id,
+                    as_of="",
+                    snapshot_id="PENDING",
+                    metadata={
+                        "run_scope":"MANUAL_PREVIEW",
+                        "evidence_eligible":False,
+                        "research_only":True,
+                    },
+                ),
+                status="FETCHING_DATA",
+            )
+            self._runs[run_id]=run
+            self._save_run(run)
+            return run,True,"CREATED"
+
     def create_pending_live_run(
         self,
         market_id:str,
@@ -192,18 +253,10 @@ class EvolutionLabEngine:
         run_scope=str(run_scope or "OFFICIAL_EVIDENCE").upper()
         if run_scope not in {"OFFICIAL_EVIDENCE","MANUAL_PREVIEW"}:
             raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
-        evidence_eligible=run_scope=="OFFICIAL_EVIDENCE"
-        with self._lock:
-            if not evidence_eligible:
-                pending=[
-                    r for r in self._runs.values()
-                    if r.market.market_id.upper()==market_id
-                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
-                    and r.status=="FETCHING_DATA"
-                ]
-                if pending:
-                    return sorted(pending,key=lambda r:r.created_at)[-1]
-                self._prune_manual_previews()
+        if run_scope=="MANUAL_PREVIEW":
+            run,_,_=self.claim_manual_preview_run(market_id)
+            return run
+
         run_id=f"{market_id}-live-{uuid4().hex[:12]}"
         run=RunRecord(
             run_id=run_id,
@@ -213,8 +266,8 @@ class EvolutionLabEngine:
                 as_of="",
                 snapshot_id="PENDING",
                 metadata={
-                    "run_scope":run_scope,
-                    "evidence_eligible":evidence_eligible,
+                    "run_scope":"OFFICIAL_EVIDENCE",
+                    "evidence_eligible":True,
                     "research_only":True,
                 },
             ),
