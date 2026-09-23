@@ -41,6 +41,7 @@ jobs:
           python startup_readonly_contract_smoke.py
           python primary_revision_migration_smoke.py
           python strategy_contract_smoke.py
+          python n_market_multi_account_smoke.py
           python provider_adjustment_smoke.py
           python provider_freshness_smoke.py
           python tushare_auction_smoke.py
