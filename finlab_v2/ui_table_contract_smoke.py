@@ -54,6 +54,14 @@ checks={
     "dynamics_risk_colored":"Dynamics-node risk intensity" in app,
     "macro_percentile_colored":"Historical state percentile for this risk factor" in app,
     "risk_stage_has_hover_explanation":"riskStageTip(stage)" in app,
+    "table_hover_has_usefulness_layer":"function tooltipUseGuide(label)" in app and "'用途：" in app and "tooltipUseGuide(raw)" in app,
+    "ui_hover_has_usefulness_layer":"function uiTipUseGuide(id)" in app and "uiTipUseGuide(id)" in app,
+    "status_hover_has_next_action":"function statusActionGuide(status)" in app and "statusActionGuide(status)" in app,
+    "strategy_hover_has_next_action":"不要仅凭单日涨跌直接改策略权重" in app,
+    "market_clock_hover_is_actionable":"确认当前页面是不是处于官方交易时段" in app and "午休或休市本身不代表系统异常" in app,
+    "risk_hover_is_action_oriented":"function riskActionGuide(score)" in app and "当前动作：进入专项风险复核" in app and "当前动作：进入最高级人工复核" in app,
+    "risk_hover_does_not_dump_thresholds":"统一阈值：低<25" not in app[app.find("function riskScaleTip"):app.find("function setRiskScoreNode")],
+    "rationale_hover_has_usefulness":"这里的样本数和理由用于判断历史相似状态" in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
