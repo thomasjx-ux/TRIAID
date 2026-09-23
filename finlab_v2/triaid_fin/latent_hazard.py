@@ -13,7 +13,7 @@ from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
 
 
-LEADS=(20,60,120,250)
+LEADS=(20,60,120,250)\nDATA_SOURCE_REVISION="market-provider-split@0.1.0"
 FACTOR_ALERT_PERCENTILE=0.80
 CONTROL_STEP=63
 CRASH_EXCLUSION_SESSIONS=250
@@ -533,6 +533,7 @@ class LatentHazardExperiment:
             previous
             and previous.get("as_of")==as_of
             and previous.get("version")==self.version
+            and previous.get("data_source_revision")==DATA_SOURCE_REVISION
             and not force
         ):
             return previous
@@ -869,6 +870,7 @@ class LatentHazardExperiment:
         payload={
             "version":self.version,
             "protocol_version":self.protocol_version,
+            "data_source_revision":DATA_SOURCE_REVISION,
             "as_of":as_of,
             "generated_at":datetime.now(timezone.utc).isoformat(),
             "shadow_only":True,
