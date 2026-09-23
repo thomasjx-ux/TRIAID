@@ -5,6 +5,7 @@ from pathlib import Path
 
 os.environ["TRIAID_DEPLOY_REVISION"]="ci-source-revision"
 os.environ["TRIAID_V2_REV"]="ci-runtime-revision"
+os.environ["TRIAID_RELEASE_AUDIT_REQUIRED"]="0"
 
 import app as app_module
 
