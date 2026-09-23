@@ -182,6 +182,11 @@ class TencentCNMarketDataProvider:
         tz=self._tz(symbol)
         parsed=[]
         previous_cumulative=0.0
+        # Tencent can publish a next-session placeholder exactly at the lunch
+        # boundary (observed for HK as 13:00 while local time was 12:00).
+        # Current bars are commonly labelled by their ending minute, so allow a
+        # small forward tolerance but reject clearly future session placeholders.
+        future_cutoff=int(datetime.now(tz).timestamp())+90
         for line in rows:
             parts=str(line).split()
             if len(parts)<3 or len(parts[0])<4:
@@ -192,6 +197,8 @@ class TencentCNMarketDataProvider:
                 cumulative=float(parts[2] or 0.0)
                 raw=f"{day}{hhmm}" if len(day)==8 else f"{day.replace('-','')}{hhmm}"
                 stamp=self._minute_ts(raw,tz)
+                if stamp>future_cutoff:
+                    continue
                 bar_volume=max(0.0,cumulative-previous_cumulative)
                 previous_cumulative=max(previous_cumulative,cumulative)
             except Exception:
