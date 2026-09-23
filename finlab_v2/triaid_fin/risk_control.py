@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from .store import RunStore
+from .market_registry import market_ids
 
 
 class CrossMarketRiskControlExperiment:
@@ -139,7 +140,7 @@ class CrossMarketRiskControlExperiment:
                 "PRICE_CONFIRMATION","价格层确认",
                 "DETERIORATING" if float(((subs.get("market_deterioration") or {}).get("score_0_100")) or 0.0)>=50 else "PARTIAL",
                 ((subs.get("market_deterioration") or {}).get("score_0_100")),
-                ["US/CN/HK drawdown","US/CN/HK 63d momentum"],
+                ["registered-market drawdown","registered-market 63d momentum"],
             ),
         ]
 
@@ -224,7 +225,8 @@ class CrossMarketRiskControlExperiment:
                 "prospective_validation_required":True,
                 "must_show_positive_net_benefit_after_cost":True,
                 "must_not_use_hindsight":True,
-                "market_stratified_US_CN_HK_required":True,
+                "market_stratified_registered_markets_required":True,
+                "registered_markets":list(market_ids()),
             },
         }
 
@@ -249,7 +251,7 @@ class CrossMarketRiskControlExperiment:
         market_data_status=market_data_status or {}
         current=latent.get("current_state") or {}
 
-        market_rows=[self._market_row(m,current,risk_warning) for m in ("US","CN","HK")]
+        market_rows=[self._market_row(m,current,risk_warning) for m in market_ids()]
         warning_coverage=risk_warning.get("data_coverage") or {}
         market_errors=dict(market_data_status.get("errors") or {})
         hk_hf_errors={
@@ -285,6 +287,8 @@ class CrossMarketRiskControlExperiment:
             ),
             "generated_at":datetime.now(timezone.utc).isoformat(),
             "experiment_type":"THREE_MARKET_RISK_CONTROL_SHADOW",
+            "architecture_type":"N_MARKET_RISK_CONTROL_SHADOW",
+            "registered_markets":list(market_ids()),
             "shadow_only":True,
             "risk_estimate":{
                 "overall":risk_warning.get("overall") or {},
@@ -293,6 +297,7 @@ class CrossMarketRiskControlExperiment:
                 "confidence":risk_warning.get("confidence") or {},
                 "data_coverage":risk_warning.get("data_coverage") or {},
             },
+            "market_states":market_rows,
             "three_market_state":market_rows,
             "dynamics_chain":self._dynamics_chain(risk_warning,latent,long_cycle),
             "rates_policy_credit_snapshot":self._macro_snapshot(latent,long_cycle),
