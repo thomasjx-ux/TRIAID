@@ -881,6 +881,11 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
         </div>
       </div>
       <div class="riskbox">
+        <h3 id="riskDataQualityTitle">数据完整性与降级状态</h3>
+        <div class="small" id="riskDataQuality">-</div>
+        <ul class="risklist" id="riskDataGaps"></ul>
+      </div>
+      <div class="riskbox">
         <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
         <div class="risknote" id="riskControlMeta">-</div>
         <div class="tablewrap risk-center-table" style="margin-top:8px">
