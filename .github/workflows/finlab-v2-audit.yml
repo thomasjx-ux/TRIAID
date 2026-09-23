@@ -13,6 +13,7 @@ on:
       - "finlab_v2/**"
       - ".github/workflows/finlab-v2-audit.yml"
 
+# Architecture regression gate
 jobs:
   audit:
     runs-on: ubuntu-latest
