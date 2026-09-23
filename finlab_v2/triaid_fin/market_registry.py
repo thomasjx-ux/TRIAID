@@ -29,9 +29,13 @@ class MarketSpec:
 
 
 class MarketRegistry:
+    version = "market-registry@0.2.0"
+    filename = "market_registry.json"
+
     def __init__(self) -> None:
         self._specs: dict[str, MarketSpec] = {}
         self._aliases: dict[str, str] = {}
+        self._store = None
 
     def register(self, spec: MarketSpec, *, replace: bool = False) -> MarketSpec:
         key = spec.market_id.strip().upper()
@@ -39,6 +43,11 @@ class MarketRegistry:
             raise ValueError("market_id cannot be empty")
         if key in self._specs and not replace:
             raise ValueError(f"market already registered: {key}")
+        if replace and key in self._specs:
+            old=self._specs[key]
+            for alias in (key,*old.aliases):
+                if self._aliases.get(alias)==key:
+                    self._aliases.pop(alias,None)
         normalized = MarketSpec(
             market_id=key,
             benchmark=spec.benchmark,
@@ -96,8 +105,50 @@ class MarketRegistry:
     def pairwise_market_ids(self) -> tuple[tuple[str, str], ...]:
         return tuple(combinations(self.ids(), 2))
 
+    def load_from_store(self, store) -> dict:
+        self._store=store
+        payload=store.load_json(self.filename,default={}) or {}
+        for row in payload.get("markets") or []:
+            try:
+                self.register(
+                    MarketSpec(
+                        market_id=row["market_id"],
+                        benchmark=row["benchmark"],
+                        assets=tuple(row.get("assets") or ()),
+                        risk_assets=tuple(row.get("risk_assets") or ()),
+                        defensive_assets=tuple(row.get("defensive_assets") or ()),
+                        currency=row.get("currency") or "USD",
+                        reference_capital=float(row.get("reference_capital") or 1.0),
+                        base_cost_bps=float(row.get("base_cost_bps") or 0.0),
+                        impact_coefficient_bps=float(row.get("impact_coefficient_bps") or 0.0),
+                        max_participation_adv=float(row.get("max_participation_adv") or 0.01),
+                        timezone=row.get("timezone") or "UTC",
+                        aliases=tuple(row.get("aliases") or ()),
+                        balanced_risk_weight=float(row.get("balanced_risk_weight") or 0.60),
+                        research_indexes=tuple(tuple(x) for x in (row.get("research_indexes") or ())),
+                        primary_index_label=row.get("primary_index_label"),
+                        session_schedule={
+                            str(k):tuple(tuple(x) for x in v)
+                            for k,v in (row.get("session_schedule") or {}).items()
+                        },
+                        metadata=dict(row.get("metadata") or {}),
+                        enabled=bool(row.get("enabled",True)),
+                    ),
+                    replace=True,
+                )
+            except Exception:
+                continue
+        return self.snapshot()
+
+    def persist(self) -> dict:
+        payload=self.snapshot()
+        if self._store is not None:
+            self._store.save_json(self.filename,payload)
+        return payload
+
     def snapshot(self) -> dict:
         return {
+            "version":self.version,
             "markets": [
                 {
                     "market_id": spec.market_id,
@@ -107,7 +158,14 @@ class MarketRegistry:
                     "assets": list(spec.assets),
                     "risk_assets": list(spec.risk_assets),
                     "defensive_assets": list(spec.defensive_assets),
+                    "reference_capital":spec.reference_capital,
+                    "base_cost_bps":spec.base_cost_bps,
+                    "impact_coefficient_bps":spec.impact_coefficient_bps,
+                    "max_participation_adv":spec.max_participation_adv,
+                    "balanced_risk_weight":spec.balanced_risk_weight,
                     "aliases": list(spec.aliases),
+                    "research_indexes":[list(x) for x in spec.research_indexes],
+                    "primary_index_label":spec.primary_index_label,
                     "enabled": spec.enabled,
                     "session_schedule":{k:[list(x) for x in v] for k,v in spec.session_schedule.items()},
                     "metadata":dict(spec.metadata),
@@ -181,8 +239,11 @@ for _spec in (
 MARKETS = MARKET_REGISTRY.mapping()
 
 
-def register_market(spec: MarketSpec, *, replace: bool = False) -> MarketSpec:
-    return MARKET_REGISTRY.register(spec, replace=replace)
+def register_market(spec: MarketSpec, *, replace: bool = False, persist: bool = True) -> MarketSpec:
+    row=MARKET_REGISTRY.register(spec, replace=replace)
+    if persist:
+        MARKET_REGISTRY.persist()
+    return row
 
 
 def normalize_market_id(value: str) -> str:
