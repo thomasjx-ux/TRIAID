@@ -235,10 +235,12 @@ class TradingCalendarSync:
         self.enabled=os.getenv("TRIAID_CALENDAR_SYNC","1").lower() not in {
             "0","false","off","no"
         }
-        self.interval_seconds=max(
-            3600,
-            int(os.getenv("TRIAID_CALENDAR_SYNC_INTERVAL_SECONDS","21600")),
-        )
+        interval_raw=(os.getenv("TRIAID_CALENDAR_SYNC_INTERVAL_SECONDS") or "21600").strip()
+        try:
+            interval_value=int(interval_raw)
+        except ValueError:
+            interval_value=21600
+        self.interval_seconds=max(3600,interval_value)
         self._fetcher=fetcher or self._fetch
         self.state=self.store.load_json(self.state_name,default={}) or {}
         self.state["version"]=self.version
