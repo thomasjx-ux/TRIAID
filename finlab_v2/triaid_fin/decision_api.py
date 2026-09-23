@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 
-VALID_MARKETS={"US","CN"}
+VALID_MARKETS={"US","CN","HK"}
 
 
 def build_decision_router(scheduler)->APIRouter:
@@ -20,7 +20,7 @@ def build_decision_router(scheduler)->APIRouter:
     )->list[dict]:
         key=market_id.upper() if market_id else None
         if key and key not in VALID_MARKETS:
-            raise HTTPException(status_code=400,detail="market_id must be US or CN")
+            raise HTTPException(status_code=400,detail="market_id must be US, CN or HK")
         return scheduler.events(key,limit)
 
     return router
