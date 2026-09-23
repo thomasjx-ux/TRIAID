@@ -254,5 +254,12 @@ def market_ids() -> tuple[str, ...]:
     return MARKET_REGISTRY.ids()
 
 
+def evidence_market_ids() -> tuple[str, ...]:
+    return tuple(
+        market for market in market_ids()
+        if str(MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or "").strip()
+    )
+
+
 def market_pairs() -> tuple[tuple[str, str], ...]:
     return MARKET_REGISTRY.pairwise_market_ids()
