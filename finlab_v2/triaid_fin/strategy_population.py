@@ -193,7 +193,8 @@ class StrategyPopulationModule:
         cards = []
         market_key=market_id.upper() if market_id else None
         for item in self.definitions():
-            if market_key and market_key not in {m.upper() for m in item.market_support}:
+            support={m.upper() for m in item.market_support}
+            if market_key and "*" not in support and market_key not in support:
                 continue
             cards.append(
                 {
