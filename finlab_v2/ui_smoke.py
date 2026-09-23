@@ -32,8 +32,13 @@ assert "首个正向历史窗口" in html
 assert "历史收益优势速度/日" in html
 assert "恢复率优势×样本支持" in html
 assert "历史相似状态平均前向收益" in html
-assert "累计单期超额和" in html
-assert "最新数据摘要" in html
+assert "累计相对收益差" in html
+assert "当前市场总览" in html
+assert 'id="currentStatusOverview"' in html
+assert 'class="compat-heading"' in html
+assert "暂无入选" in html
+assert "暂无新数据" in html
+assert "待后验" in html
 assert "TRIAID冻结综合排序" in html
 assert "最大目标仓位/ADV" in html
 assert "模型往返成本代理" in html
