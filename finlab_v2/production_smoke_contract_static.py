@@ -47,4 +47,23 @@ assert 'store.list_runs()' in probe_text
 assert 'save_' not in probe_text
 assert 'append_' not in probe_text
 
+app_text=Path("app.py").read_text(encoding="utf-8")
+engine_text=Path("triaid_fin/engine.py").read_text(encoding="utf-8")
+decision_api_text=Path("triaid_fin/decision_api.py").read_text(encoding="utf-8")
+
+# Manual preview is intentionally public for the UI, but it must remain
+# non-evidence-bearing and repeated clicks must not queue duplicate work.
+assert 'claim_manual_preview_run(market_id)' in app_text
+assert 'if scheduled:' in app_text
+assert '"evidence_eligible":False' in app_text
+assert 'TRIAID_MANUAL_PREVIEW_COOLDOWN_SECONDS' in engine_text
+assert 'PENDING_REUSED' in engine_text
+assert 'COOLDOWN_REUSED' in engine_text
+assert '"run_scope":"MANUAL_PREVIEW"' in engine_text
+assert '"evidence_eligible":False' in engine_text
+
+# Three-market integration must stay symmetric at the API boundary.
+assert 'VALID_MARKETS={"US","CN","HK"}' in decision_api_text
+assert 'market_id must be US, CN or HK' in decision_api_text
+
 print("TRIAID_PRODUCTION_SMOKE_CONTRACT_STATIC_PASS")
