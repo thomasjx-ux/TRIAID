@@ -900,6 +900,24 @@ button.primary{background:#172033;color:#fff;border-color:#172033}
 .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .summary .item{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}
 .summary .item b{display:block;margin-top:4px;font-size:15px}
+.compat-heading{display:none!important;margin:0!important;height:0!important;overflow:hidden!important}
+.status-overview-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px;align-items:stretch;margin-bottom:6px}
+.status-card{background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 12px;min-height:72px;display:flex;flex-direction:column;justify-content:flex-start}
+.status-card.span-2{grid-column:span 2}.status-card.span-3{grid-column:span 3}.status-card.span-4{grid-column:span 4}.status-card.span-5{grid-column:span 5}
+.status-value{display:block;margin-top:4px;font-size:18px;font-weight:800;line-height:1.25;min-width:0;overflow-wrap:anywhere}
+.status-value.analysis-value{font-size:15px;line-height:1.4}
+.status-value.compact-list{font-size:15px;line-height:1.35}
+.status-value.core-value{font-size:16px;line-height:1.3}
+.status-note{font-size:10.5px;color:#87909d;line-height:1.35;margin-top:4px}
+.status-analysis-card{background:#fbfdff}
+@media(max-width:1050px){
+ .status-card.span-2,.status-card.span-3,.status-card.span-4,.status-card.span-5{grid-column:span 6}
+ .status-analysis-card{grid-column:span 12!important}
+}
+@media(max-width:640px){
+ .status-card.span-2,.status-card.span-3,.status-card.span-4,.status-card.span-5,.status-analysis-card{grid-column:1/-1!important}
+ .status-card{min-height:0}
+}
 .prospective-panel{display:none;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:10px}
 .prospective-panel.show{display:block}.prospective-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .prospective-meta{font-size:12px;color:#748091;margin-top:5px}.prospective-kpis{margin-top:10px}
@@ -1099,20 +1117,50 @@ tbody tr:hover td{background:#f8fbff}
       <span class="flow-step-no">01</span>
       <div><div class="flow-stage-title" id="stageMarketTitle">当前市场与状态</div><div class="flow-stage-desc" id="stageMarketDesc">先确认市场、交易阶段、数据日期与当前状态，再读任何策略结论。</div></div>
     </div>
-    <h2 id="dailyTitle">最新数据摘要</h2>
-  <div class="summary">
-    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
-    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
-    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
-    <div class="item"><span class="label" id="dailyAnalysisLabel">最新后验结论</span><b id="dailyAnalysis">-</b></div>
-  </div>
+    <h2 id="dailyTitle">当前市场总览</h2>
+  <h2 id="overviewTitle" class="compat-heading">当前状态</h2>
+  <div class="status-overview-grid" id="currentStatusOverview">
+    <div class="status-card span-2" id="regimeCard">
+      <span class="label" id="regimeLabel">市场状态</span>
+      <b class="status-value" id="regime">等待数据</b>
+      <div class="status-note" id="regimeNote">当前市场状态尚未载入</div>
+    </div>
+    <div class="status-card span-2" id="runStateCard">
+      <span class="label" id="runStateLabel">运行状态</span>
+      <b class="status-value" id="runState">等待数据</b>
+      <div class="status-note" id="runStateNote">等待当前运行状态</div>
+    </div>
+    <div class="status-card span-3" id="selectedNamesCard">
+      <span class="label" id="selectedNamesLabel">当前入选</span>
+      <b class="status-value compact-list" id="selectedNames">暂无入选</b>
+      <div class="status-note" id="selectedNamesNote">等待当前冻结策略群</div>
+    </div>
+    <div class="status-card span-5 status-analysis-card" id="dailyAnalysisCard">
+      <span class="label" id="dailyAnalysisLabel">最新后验结论</span>
+      <b class="status-value analysis-value" id="dailyAnalysis">待后验</b>
+      <div class="status-note" id="dailyAnalysisNote">当前决策已生成后，等待真实结果进入证据链</div>
+    </div>
 
-  <h2 id="overviewTitle">当前状态</h2>
-  <div class="grid">
-    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
-    <div class="card"><div class="label" id="coreLabel">通用 Core</div><div class="value triaid" id="core">-</div></div>
-    <div class="card"><div class="label" id="selectedLabel">当前入选策略数</div><div class="value" id="selectedCount">-</div></div>
-    <div class="card"><div class="label" id="cumLabel">累计单期超额和</div><div class="value" id="cumExcess">-</div></div>
+    <div class="status-card span-3" id="dateCard">
+      <span class="label" id="dateLabel">最新数据日</span>
+      <b class="status-value numeric" id="date">等待数据</b>
+      <div class="status-note" id="dateNote">当前市场最近可用交易日</div>
+    </div>
+    <div class="status-card span-3 core-status-card" id="coreCard">
+      <span class="label" id="coreLabel">通用 Core</span>
+      <b class="status-value triaid core-value" id="core">等待版本</b>
+      <div class="status-note" id="coreNote">当前运行的 Core 版本</div>
+    </div>
+    <div class="status-card span-2" id="selectedCountCard">
+      <span class="label" id="selectedLabel">当前入选策略数</span>
+      <b class="status-value numeric" id="selectedCount">0</b>
+      <div class="status-note" id="selectedCountNote">当前无入选策略</div>
+    </div>
+    <div class="status-card span-4" id="cumExcessCard">
+      <span class="label" id="cumLabel">累计相对收益差</span>
+      <b class="status-value numeric" id="cumExcess">待后验</b>
+      <div class="status-note" id="cumExcessNote">需至少一轮真实后验后显示</div>
+    </div>
   </div>
 
   <h2 id="liveTitle">当前市场数据</h2>
@@ -1604,9 +1652,9 @@ const T={
   result:'TRIAID 结果比较',baseReturn:'基线组合后验收益',triaidReturn:'TRIAID 配置后验收益',gain:'TRIAID 相对收益差',
   live:'当前市场数据',indexWindow:'最新市场标的窗口',activityWindow:'后台运行事件',
   baseSub:'冻结基线',triaidSub:'冻结 TRIAID 配置',gainSub:'TRIAID 配置后验收益 − 基线后验收益',
-  overview:'当前状态',date:'最新数据日',core:'通用 Core',selected:'当前入选策略数',cum:'累计单期超额和',
+  overview:'当前状态',date:'最新数据日',core:'通用 Core',selected:'当前入选策略数',cum:'累计相对收益差',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
-  daily:'最新数据摘要',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'最新后验结论',
+  daily:'当前市场总览',regime:'市场状态',runState:'运行状态',selectedNames:'当前入选',analysis:'最新后验结论',
   usReturnMax:'美股 Return-Max 路线',usrmExpected:'Return-Max 多周期年化状态估计',usrmGeneric:'通用 Core 多周期年化状态估计',usrmSpy:'SPY 多周期年化状态估计',usrmRisk:'目标风险仓位',usrmStrategy:'当前冻结策略权重',usrmAsset:'底层 ETF 目标敞口',usrmCapital:'四档美元资金规模容量实验',usrmRealized:'上一轮真实市场后验与模拟执行容量回顾',usrmControl:'上一轮冻结配置理论持仓后验路径',
   prospective:'A股前瞻对照实验',prospectiveDays:'已观察交易日',prospectiveHold:'最差池累计收益',prospectiveTriaid:'TRIAID冻结配置累计收益',prospectiveGap:'TRIAID相对最差池',
   prospectiveStrategy:'策略确定与冻结排序',prospectiveDaily:'每日波动轨迹',predRank:'TRIAID冻结综合排序',dailyReturn:'最近一日',cumReturn:'累计收益',realRank:'当前实际名次',detReason:'确定依据',
@@ -1627,9 +1675,9 @@ const T={
   result:'TRIAID Result Comparison',baseReturn:'Baseline portfolio posterior return',triaidReturn:'TRIAID allocation posterior return',gain:'TRIAID relative return gap',
   live:'Market Data and Backend Runtime',indexWindow:'Latest Market Instrument Window',activityWindow:'Backend Runtime Events',
   baseSub:'Frozen baseline',triaidSub:'Frozen TRIAID allocation',gainSub:'TRIAID allocation posterior return − baseline posterior return',
-  overview:'Current State',date:'Latest market date',core:'Generic Core',selected:'Selected strategy count',cum:'Sum of period excess returns',
+  overview:'Current State',date:'Latest market date',core:'Generic Core',selected:'Selected strategy count',cum:'Cumulative relative return gap',
   curve:'Continuous Review',legendBase:'Strategy-group baseline',legendTriaid:'TRIAID',
-  daily:'Latest Data Summary',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Latest posterior conclusion',
+  daily:'Current Market Overview',regime:'Market regime',runState:'Run status',selectedNames:'Selected now',analysis:'Latest posterior conclusion',
   usReturnMax:'US Return-Max Route',usrmExpected:'Return-Max multi-window annualized state estimate',usrmGeneric:'Generic Core multi-window annualized state estimate',usrmSpy:'SPY multi-window annualized state estimate',usrmRisk:'Target risk exposure',usrmStrategy:'Current Frozen Strategy Weights',usrmAsset:'Underlying ETF Target Exposure',usrmCapital:'Four-Tier USD Capital Capacity Experiment',usrmRealized:'Prior Real-Market Outcome and Simulated Execution Review',usrmControl:'Prior Frozen-Allocation Theoretical-Holdings Posterior Path',
   prospective:'CN Prospective Control Experiment',prospectiveDays:'Observed trading days',prospectiveHold:'Worst-pool cumulative return',prospectiveTriaid:'Frozen TRIAID cumulative return',prospectiveGap:'TRIAID vs worst pool',
   prospectiveStrategy:'Strategy Determination and Frozen Ranking',prospectiveDaily:'Daily Fluctuation Path',predRank:'TRIAID frozen composite rank',dailyReturn:'Latest day',cumReturn:'Cumulative return',realRank:'Current realized rank',detReason:'Determination basis',
@@ -3211,6 +3259,38 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
  }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
 }
+function humanRunState(status){
+ const s=String(status||'').trim();
+ const zh=lang==='zh';
+ const map={
+  NO_NEW_DATA:zh?'暂无新数据':'No new data',
+  EVALUATED:zh?'已完成后验':'Posterior evaluated',
+  DECIDED:zh?'决策已生成':'Decision generated',
+  PREVIEW_READY:zh?'即时预览':'Preview ready',
+  READY:zh?'就绪':'Ready',
+  RUNNING:zh?'运行中':'Running',
+  FAILED:zh?'运行失败':'Run failed'
+ };
+ return map[s]||s.replaceAll('_',' ')||(zh?'等待状态':'Awaiting status');
+}
+function humanRegime(regime){
+ const s=String(regime||'').trim();
+ const zh=lang==='zh';
+ const map={
+  risk_on_trend:zh?'风险偏好 · 趋势':'Risk-on · trend',
+  risk_off:zh?'防御 · 风险收缩':'Risk-off',
+  neutral:zh?'中性':'Neutral',
+  recovery:zh?'恢复':'Recovery',
+  transition:zh?'过渡':'Transition'
+ };
+ return map[s]||s.replaceAll('_',' ')||(zh?'等待状态':'Awaiting regime');
+}
+function humanCoreVersion(version){
+ const s=String(version||'').trim();
+ if(!s)return lang==='zh'?'等待版本':'Awaiting version';
+ return s.replace(/^triaid-core-/i,'TRIAID Core · ');
+}
+function setStatusNote(id,zh,en){if(el(id))el(id).textContent=lang==='zh'?zh:en}
 async function refreshAll(preferStale=false){
  const m=el('market').value;
  const seq=++refreshSeq;
@@ -3270,15 +3350,47 @@ async function refreshAll(preferStale=false){
   renderHomeSummary();
   renderMarketRouteOverview(m,latest,routeEvaluated,selected,d);
   renderComparison(evaluated);
-  el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
-  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.version;
-  el('selectedCount').textContent=selected.length;
-  const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
-  el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
-  el('runState').textContent=previewRun
-    ? ((previewRun.status||'-')+' · '+(lang==='zh'?'不进入证据链':'non-evidence'))
-    : (latest?.status||'-');
-  el('selectedNames').innerHTML=selected.length?selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':''):'-';
+  const marketDate=(previewRun?.market?.as_of)||d.date||null;
+  el('date').textContent=marketDate||(lang==='zh'?'等待数据':'Awaiting data');
+  setStatusNote('dateNote',marketDate?'当前市场最近可用交易日':'尚未取得当前市场数据日',marketDate?'Latest available trading day for the selected market':'No market date is available yet');
+
+  const coreVersion=(previewRun?.triaid_decision?.core_version)||s.version||null;
+  el('core').textContent=humanCoreVersion(coreVersion);
+  el('core').title=coreVersion||'';
+  setStatusNote('coreNote','当前运行的 Core 版本','Currently active Core version');
+
+  el('selectedCount').textContent=String(selected.length);
+  setStatusNote('selectedCountNote',selected.length?'与当前冻结入选名单一致':'当前冻结策略群为 0',selected.length?'Matches the current frozen selection':'Current frozen strategy group contains 0 strategies');
+
+  const cum=lastCurve?lastCurve.cumulative_excess_return:null;
+  if(cum===null||cum===undefined||!Number.isFinite(Number(cum))){
+   el('cumExcess').textContent=lang==='zh'?'待后验':'Awaiting posterior';
+   el('cumExcess').className='status-value numeric';
+   setStatusNote('cumExcessNote','需至少一轮真实后验后显示','Shown after at least one realized posterior result');
+  }else{
+   el('cumExcess').textContent=fmtPct(cum);
+   el('cumExcess').className='status-value numeric '+cls(cum);
+   setStatusNote('cumExcessNote','已完成后验的累计相对收益差','Cumulative relative-return gap across completed posterior results');
+  }
+
+  const rawRegime=previewRun?.market?.regime||latest?.regime||'';
+  el('regime').textContent=humanRegime(rawRegime);
+  el('regime').title=rawRegime;
+  setStatusNote('regimeNote','当前市场状态，用于解释策略为何被选中或降权','Current market state used to interpret selection and reweighting');
+
+  const rawRunState=previewRun?(previewRun.status||'PREVIEW_READY'):(latest?.status||'');
+  el('runState').textContent=humanRunState(rawRunState)+(previewRun?(lang==='zh'?' · 预览':' · preview'):'');
+  el('runState').title=rawRunState;
+  setStatusNote(
+   'runStateNote',
+   previewRun?'即时预览不进入正式证据链':(rawRunState==='NO_NEW_DATA'?'当前周期没有新增可用行情或后验结果':'当前运行与证据状态'),
+   previewRun?'Preview does not enter the formal evidence chain':(rawRunState==='NO_NEW_DATA'?'No new usable market or posterior data in the current cycle':'Current runtime and evidence state')
+  );
+
+  el('selectedNames').innerHTML=selected.length
+   ? selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':'')
+   : (lang==='zh'?'暂无入选':'No selection');
+  setStatusNote('selectedNamesNote',selected.length?'显示当前冻结策略群，最多列出前6项':'当前没有满足冻结入选条件的策略',selected.length?'Current frozen strategy group; first six shown':'No strategy currently meets the frozen selection criteria');
   if(previewRun){
    el('dailyAnalysis').textContent=T[lang].preview;
    el('dailyAnalysis').className='';
@@ -3293,6 +3405,13 @@ async function refreshAll(preferStale=false){
     : T[lang].pending;
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
   }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  if(previewRun){
+   setStatusNote('dailyAnalysisNote','当前是即时预览，不进入正式后验','Current result is a preview and does not enter formal posterior evidence');
+  }else if(evaluated){
+   setStatusNote('dailyAnalysisNote','来自已经完成的真实后验，可与同一冻结时点基线比较','Completed realized posterior; compare with the control frozen at the same time');
+  }else{
+   setStatusNote('dailyAnalysisNote','当前决策已生成，等待下一完整结果期进入后验','Decision is frozen; awaiting the next complete outcome period for posterior evaluation');
+  }
   renderUSReturnMax(m==='US'?d.us_return_max:null);
   renderProspective(isCN?d.prospective_experiment:null);
   renderRecoveryWave(isCN?d.recovery_wave:null);
