@@ -20,8 +20,10 @@ ids=[
     "activityWindowTitle",
 ]
 for x in ids:
-    if html.count(f'id="{x}"')!=1:
-        raise SystemExit(f"TRIAID_INFORMATION_ARCHITECTURE_FAILED:ID_COUNT:{x}:{html.count(f'id={chr(34)}{x}{chr(34)}')}")
+    marker=f'id="{x}"'
+    count=html.count(marker)
+    if count!=1:
+        raise SystemExit(f"TRIAID_INFORMATION_ARCHITECTURE_FAILED:ID_COUNT:{x}:{count}")
 
 checks={
     "executive_summary_before_market_controls":pos("homeSummary")<pos("marketClockStrip")<pos("marketHero"),
