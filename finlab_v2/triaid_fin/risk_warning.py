@@ -311,6 +311,8 @@ class RiskWarningSystem:
             "supported_composite_count":len(supported),
             "policy_repricing_best":best,
             "historical_event_count":latent.get("event_count"),
+            "policy_repricing_event_samples":best.get("event_samples") if best else None,
+            "policy_repricing_control_samples":best.get("control_samples") if best else None,
             "normal_control_count":latent.get("control_count"),
         }
 
@@ -337,18 +339,20 @@ class RiskWarningSystem:
     @classmethod
     def _confidence(cls,historical:dict,prospective:dict)->dict:
         best=historical.get("policy_repricing_best") or {}
-        event_count=int(historical.get("historical_event_count") or 0)
+        total_event_count=int(historical.get("historical_event_count") or 0)
+        tested_event_count=int(historical.get("policy_repricing_event_samples") or 0)
         q=best.get("bh_q_value")
         prospective_maturity=prospective.get("maturity")
-        if event_count>=8 and q is not None and float(q)<=0.05 and prospective_maturity=="MATURE":
+        if tested_event_count>=8 and q is not None and float(q)<=0.05 and prospective_maturity=="MATURE":
             level="HIGH"
-        elif event_count>=3 and q is not None and float(q)<=0.10:
+        elif tested_event_count>=3 and q is not None and float(q)<=0.10:
             level="MODERATE"
         else:
             level="LOW"
         return {
             "level":level,
-            "historical_crisis_samples":event_count,
+            "historical_crisis_samples_total":total_event_count,
+            "historical_crisis_samples_tested":tested_event_count,
             "best_supported_q_value":q,
             "prospective_maturity":prospective_maturity,
             "guard":"This is confidence in the warning-state evidence, not a probability that a crash will occur.",
@@ -423,6 +427,15 @@ class RiskWarningSystem:
         cross_market=cross_market or {}
         policy_curve=policy_curve or {}
         prospective=prospective or {}
+
+        source_presence={
+            "long_cycle":bool(long_cycle),
+            "latent_hazard":bool(latent),
+            "cross_market":bool(cross_market),
+            "policy_curve":bool(policy_curve),
+            "prospective":bool(prospective),
+        }
+        data_coverage=sum(1 for x in source_presence.values() if x)/len(source_presence)
 
         component_dates=[
             str(x)
@@ -584,6 +597,12 @@ class RiskWarningSystem:
             "historical_support":historical,
             "prospective_validation":prospective_validation,
             "confidence":confidence,
+            "data_coverage":{
+                "ratio":round(data_coverage,3),
+                "sources":source_presence,
+                "term_curve_usable":bool((policy_curve.get("data_quality") or {}).get("term_curve_usable")),
+                "guard":"If coverage is incomplete, the risk-pressure score may understate missing dimensions and must not be interpreted as reassuring.",
+            },
             "escalation_conditions":escalation,
             "deescalation_conditions":deescalation,
             "source_status":{
