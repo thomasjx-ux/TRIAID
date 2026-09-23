@@ -251,11 +251,12 @@ class FileStorageBackend:
 
 
 class SupabaseStorageBackend:
-    version="supabase-storage-backend@0.1.0"
+    version="supabase-storage-backend@0.2.0"
 
     def __init__(self)->None:
         self.endpoint=os.environ.get("TRIAID_SUPABASE_PERSISTENCE_URL","").strip()
         self.token=os.environ.get("TRIAID_SUPABASE_TOKEN","").strip()
+        self.runtime_id=os.environ.get("TRIAID_RUNTIME_ID","").strip()
         if not self.endpoint or not self.token:
             raise StorageBackendError("supabase_backend_missing_endpoint_or_token")
         self.root=Path("/remote/supabase")
@@ -281,7 +282,8 @@ class SupabaseStorageBackend:
             headers={
                 "content-type":"application/json",
                 "x-triaid-token":self.token,
-                "user-agent":"TRIAID-FIN-V2-STORAGE/0.1",
+                **({"x-triaid-runtime-id":self.runtime_id} if self.runtime_id else {}),
+                "user-agent":"TRIAID-FIN-V2-STORAGE/0.2",
             },
         )
         try:
@@ -352,6 +354,7 @@ class SupabaseStorageBackend:
             "backend":"supabase",
             "version":self.version,
             "root":"supabase://triaid-persistence",
+            "runtime_id":self.runtime_id or None,
             "durability":"PERSISTENT",
             "persistent":True,
             "endpoint_configured":bool(self.endpoint),
