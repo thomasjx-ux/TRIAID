@@ -226,7 +226,10 @@ def strategy_ids_for_market(
     eligible=tuple(
         row.strategy_id
         for row in build_definitions()
-        if key in {str(x).upper() for x in row.market_support}
+        if (
+            "*" in {str(x).upper() for x in row.market_support}
+            or key in {str(x).upper() for x in row.market_support}
+        )
     )
     if account_id=="GLOBAL" and strategy_pool_id in {None,"GLOBAL"}:
         return eligible
