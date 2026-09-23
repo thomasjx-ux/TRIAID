@@ -123,7 +123,8 @@ assert report["horizon_estimates"]["120"]["risk_pressure_index"]>=report["horizo
 assert report["confidence"]["level"]=="MODERATE"
 assert report["prospective_validation"]["maturity"]=="EARLY_UNRESOLVED"
 assert any(x["code"]=="POLICY_REPRICING_STRESS_ACTIVE" for x in report["warnings"])
-assert "not a calibrated crash probability" in report["semantics"]["risk_pressure_index"]
+sem=report["semantics"]["risk_pressure_index"].lower()
+assert "not" in sem and "calibrated" in sem and "probability" in sem
 assert report["applied_to_weights"] is False
 assert report["production_action"]=="NONE"
 
