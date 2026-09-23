@@ -19,4 +19,5 @@ python us_return_max_smoke.py
 python strategy_contract_smoke.py
 python production_smoke_contract_static.py
 python manual_preview_guard_smoke.py
+python hk_tencent_5m_aggregation_smoke.py
 echo TRIAID_BUILD_GATE_PASS
