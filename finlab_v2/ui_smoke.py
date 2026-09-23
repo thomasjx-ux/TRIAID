@@ -59,6 +59,14 @@ assert 'id="commandLog"' in html
 assert "refreshLiveWindows" in html
 assert '<option value="HK">港股 / HK</option>' in html
 assert 'id="marketScopeStatus"' in html
+assert 'id="riskWarningPanel"' in html
+assert 'id="riskOverallScore"' in html
+assert 'id="risk20"' in html and 'id="risk60"' in html and 'id="risk120"' in html and 'id="risk250"' in html
+assert 'id="riskDrivers"' in html
+assert 'id="riskBlockers"' in html
+assert "renderRiskWarning" in html
+assert "/api/risk-warning/latest" in html
+assert "风险指数是0–100的状态/证据压力评分，不是股灾概率" in html
 assert "港股已进入独立策略研究路线" in html
 assert "预览三个市场" in html
 assert "/api/market-data/live-indicators/" in html
