@@ -1008,6 +1008,9 @@ tbody tr:hover td{background:#f8fbff}
 .evidence-details{margin-top:12px;border:1px solid #e5eaf0;border-radius:10px;background:#fbfcfe;padding:0 11px}
 .evidence-details>summary{cursor:pointer;padding:11px 0;color:#43546a;font-size:12px;font-weight:700}
 .evidence-details[open]>summary{border-bottom:1px solid #edf0f3;margin-bottom:10px}
+.route-overview{background:#f8fbff;border:1px solid #dbe6f3;border-radius:12px;padding:13px;margin:8px 0 12px}
+.route-overview .prospective-kpis{margin-top:9px}
+#marketScopeStatus{background:#f8fbff;border-color:#dbe6f3;color:#43546a;line-height:1.5}
 @media(max-width:760px){.flow-stage-head{gap:8px}.flow-stage-title{font-size:16px}}
 </style>
 </head>
@@ -1200,6 +1203,22 @@ tbody tr:hover td{background:#f8fbff}
       <span class="flow-step-no">04</span>
       <div><div class="flow-stage-title" id="stageRouteTitle">市场专属路线与可实现性</div><div class="flow-stage-desc" id="stageRouteDesc">进入当前市场自己的主实验路线，检查底层敞口、资金容量、执行成本和前瞻/后验。</div></div>
     </div>
+    <div class="route-overview" id="marketRouteOverview">
+      <div class="prospective-head">
+        <div>
+          <b id="marketRouteTitle">当前市场主路线</b>
+          <div class="prospective-meta" id="marketRouteNote">-</div>
+        </div>
+        <span class="tag" id="marketRouteStatus">-</span>
+      </div>
+      <div class="summary prospective-kpis">
+        <div class="item"><span class="label" id="marketRouteModeLabel">主实验模式</span><b id="marketRouteMode">-</b></div>
+        <div class="item"><span class="label" id="marketRouteBaselineLabel">验证基线</span><b id="marketRouteBaseline">-</b></div>
+        <div class="item"><span class="label" id="marketRoutePosteriorLabel">该路线最近后验</span><b id="marketRoutePosterior">-</b></div>
+        <div class="item"><span class="label" id="marketRouteRealizabilityLabel">可实现性证据</span><b id="marketRouteRealizability">-</b></div>
+      </div>
+    </div>
+
     <div class="prospective-panel" id="usReturnMaxPanel">
     <div class="prospective-head">
       <div>
@@ -1370,6 +1389,30 @@ tbody tr:hover td{background:#f8fbff}
           <th id="rvrGap">累计差值</th>
         </tr></thead>
         <tbody id="recoveryReviewRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="prospective-panel" id="hkRoutePanel">
+    <div class="prospective-head">
+      <div>
+        <b id="hkRouteTitle">港股独立 Return-Max 路线</b>
+        <div class="prospective-meta" id="hkRouteMeta">-</div>
+      </div>
+      <span class="tag" id="hkRouteStatus">-</span>
+    </div>
+    <div class="summary prospective-kpis">
+      <div class="item"><span class="label" id="hkSelectedLabel">当前入选策略</span><b id="hkSelected">-</b></div>
+      <div class="item"><span class="label" id="hkChangedLabel">发生权重调整</span><b id="hkChanged">-</b></div>
+      <div class="item"><span class="label" id="hkPosteriorLabel">最近路线后验差</span><b id="hkPosterior">-</b></div>
+      <div class="item"><span class="label" id="hkCapacityLabel">独立容量证据</span><b id="hkCapacity">待建立专属账本</b></div>
+    </div>
+    <div class="prospective-note" id="hkRouteNote">港股只使用港股冻结基线与真实后验。当前没有可替代的 US/CN 容量结果；港股专属容量账本未形成前，页面明确保留这一证据缺口。</div>
+    <h3 id="hkAssetTitle">港股主路线资产角色</h3>
+    <div class="tablewrap" style="max-height:280px">
+      <table>
+        <thead><tr><th id="hkAssetSymbolHeader">ETF</th><th id="hkAssetRoleHeader">角色</th></tr></thead>
+        <tbody id="hkAssetRows"></tbody>
       </table>
     </div>
   </div>
@@ -2105,11 +2148,13 @@ function strategyMarketTip(strategyId,name){
 }
 function applyFlowLabels(){
  const zh=lang==='zh';
+ const m=el('market')?.value||'US';
+ const meta=MARKET_UI[m]||MARKET_UI.US;
  const labels={
   stageMarket:[zh?'当前市场与状态':'Market and current state',zh?'先确认市场、交易阶段、数据日期与当前状态，再读任何策略结论。':'Confirm market, session, data date and current state before interpreting strategy conclusions.'],
-  stageDecision:[zh?'TRIAID 当前决策':'Current TRIAID decision',zh?'看选了哪些策略、权重怎么变、为什么变；候选池只是对照，不混入正式配置。':'See what was selected, how weights changed and why; candidates remain a separate control set.'],
-  stageValidation:[zh?'真实结果验证':'Realized outcome validation',zh?'把冻结基线与冻结 TRIAID 放在同一结果期比较，再看累计路径是否持续。':'Compare frozen baseline and frozen TRIAID over the same outcome period, then check persistence on the cumulative path.'],
-  stageRoute:[zh?'市场专属路线与可实现性':'Market-specific route and realizability',zh?'进入当前市场自己的主实验路线，检查底层敞口、资金容量、执行成本和前瞻/后验。':'Use the selected market’s own route to inspect underlying exposure, capacity, execution cost and prospective/posterior evidence.'],
+  stageDecision:[zh?meta.decisionZh:meta.decisionEn,zh?meta.decisionDescZh:meta.decisionDescEn],
+  stageValidation:[zh?meta.validationZh:meta.validationEn,zh?meta.validationDescZh:meta.validationDescEn],
+  stageRoute:[zh?meta.routeStageZh:meta.routeStageEn,zh?meta.routeStageDescZh:meta.routeStageDescEn],
   stageRisk:[zh?'三市场联动风险':'Three-market linked risk',zh?'从单市场决策切到 US/A股/港股联合风险层：先看风险结论和主要驱动，再按需展开深层证据。':'Move from single-market decisions to the joint US/CN/HK risk layer: read the conclusion and main drivers first, then open deep evidence as needed.'],
   stageEvolution:[zh?'Core 进化':'Core evolution',zh?'只有已经完成的真实后验与审计证据，才能推动 Candidate 与 Core 变化。':'Only completed realized posterior and audit evidence can change a Candidate or Core.']
  };
@@ -2241,9 +2286,60 @@ function warmAllMarkets(){
  queue.forEach((m,i)=>setTimeout(()=>warmMarketCache(m),1200+(i*1400)));
 }
 const MARKET_UI={
- US:{zh:'美股 / US',en:'US Equities',timezone:'America/New_York',routeZh:'Return-Max 主路线，纳入容量与模型执行成本；风险资产 SPY / QQQ / IWM，防御资产 TLT / GLD。',routeEn:'Return-Max primary route with capacity and modeled execution cost; SPY / QQQ / IWM are risk assets and TLT / GLD are defensive assets.'},
- CN:{zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.'},
- HK:{zh:'港股 / HK',en:'Hong Kong Equities',timezone:'Asia/Hong_Kong',routeZh:'港股独立收益最大化路线；2800 / 2828 / 3033 为风险资产，2819 为防御资产，策略权重与后验独立记录。',routeEn:'Independent HK return-max route; 2800 / 2828 / 3033 are risk assets and 2819 is the defensive sleeve, with independent weights and posterior evidence.'}
+ US:{
+  zh:'美股 / US',en:'US Equities',timezone:'America/New_York',routeMode:'US_RETURN_MAX_CAPACITY',
+  routeZh:'Return-Max 主路线，纳入容量与模型执行成本；风险资产 SPY / QQQ / IWM，防御资产 TLT / GLD。',
+  routeEn:'Return-Max primary route with capacity and modeled execution cost; SPY / QQQ / IWM are risk assets and TLT / GLD are defensive assets.',
+  scopeZh:'美股页面分两层：第02–03阶段展示通用 Core 对照决策与后验；第04阶段单独展示 Return-Max 主路线、容量和执行成本。两条证据链不混用。',
+  scopeEn:'The US page has two layers: stages 02–03 show the generic-Core control decision/posterior, while stage 04 shows the Return-Max primary route with capacity and execution costs. The evidence chains are not mixed.',
+  decisionZh:'美股通用 Core 对照决策',decisionEn:'US Generic-Core Control Decision',
+  decisionDescZh:'先看通用 Core 选了哪些策略和如何调权；它是对照层，不代表 Return-Max 主路线本身。',
+  decisionDescEn:'Inspect the generic-Core selection and reweighting first; this is the control layer, not the Return-Max route itself.',
+  validationZh:'美股通用 Core 后验验证',validationEn:'US Generic-Core Posterior Validation',
+  validationDescZh:'只把同一冻结时点的通用 Core 基线与 TRIAID 配置比较；Return-Max 的后验留在第04阶段。',
+  validationDescEn:'Compare only the generic-Core baseline and TRIAID frozen at the same time; Return-Max posterior evidence stays in stage 04.',
+  routeStageZh:'美股 Return-Max 主路线与可实现性',routeStageEn:'US Return-Max Route & Realizability',
+  routeStageDescZh:'检查 Return-Max 冻结排序、底层ETF、四档美元容量、模型成本和真实后验，不与通用 Core 对照层混写。',
+  routeStageDescEn:'Inspect the Return-Max frozen ranking, underlying ETFs, four USD capacity sleeves, modeled costs and realized posterior without mixing them with the generic-Core control.',
+  baselineZh:'Return-Max vs 通用 Core / SPY',baselineEn:'Return-Max vs Generic Core / SPY',
+  riskAssets:['SPY','QQQ','IWM'],defensiveAssets:['TLT','GLD']
+ },
+ CN:{
+  zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeMode:'CN_RETURN_MAX_CAPACITY',
+  routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',
+  routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.',
+  scopeZh:'A股页面以 CN_RETURN_MAX_CAPACITY 为主路线。策略群、冻结基线、前瞻实验、恢复波段和容量结果都只与A股自身数据比较。',
+  scopeEn:'The CN page uses CN_RETURN_MAX_CAPACITY as its primary route. Strategy groups, frozen controls, prospective tests, recovery-wave research and capacity results are compared only within CN.',
+  decisionZh:'A股收益优先决策',decisionEn:'CN Return-First Decision',
+  decisionDescZh:'先看A股收益优先策略群与 TRIAID 动态权重，再看候选池为什么没有入选。',
+  decisionDescEn:'Inspect the CN return-first strategy group and TRIAID dynamic weights, then see why candidates were excluded.',
+  validationZh:'A股真实后验验证',validationEn:'CN Realized Posterior Validation',
+  validationDescZh:'用同一冻结时点的收益优先基线与 TRIAID 比较，并检查累计路径是否持续。',
+  validationDescEn:'Compare the return-first baseline and TRIAID frozen at the same time, then test persistence on the cumulative path.',
+  routeStageZh:'A股前瞻、恢复波段与容量',routeStageEn:'CN Prospective, Recovery-Wave & Capacity',
+  routeStageDescZh:'把前瞻对照、恢复波段研究和人民币资金容量放在同一专属路线阶段，判断收益是否可实现。',
+  routeStageDescEn:'Keep prospective controls, recovery-wave research and CNY capacity in one market-specific stage to test whether the return is realizable.',
+  baselineZh:'收益优先冻结基线',baselineEn:'Frozen return-first baseline',
+  riskAssets:['510300.SS','510500.SS','159915.SZ','512100.SS'],defensiveAssets:['511010.SS']
+ },
+ HK:{
+  zh:'港股 / HK',en:'Hong Kong Equities',timezone:'Asia/Hong_Kong',routeMode:'HK_RETURN_MAX_CAPACITY',
+  routeZh:'港股独立收益最大化路线；2800 / 2828 / 3033 为风险资产，2819 为防御资产，策略权重与后验独立记录。',
+  routeEn:'Independent HK return-max route; 2800 / 2828 / 3033 are risk assets and 2819 is the defensive sleeve, with independent weights and posterior evidence.',
+  scopeZh:'港股使用独立 HK_RETURN_MAX_CAPACITY 路线。策略、冻结基线和后验只与港股自身比较；不能借用美股/A股权重、容量或结果补齐港股结论。',
+  scopeEn:'HK uses an independent HK_RETURN_MAX_CAPACITY route. Strategies, frozen controls and posterior evidence are HK-only; US/CN weights, capacity or outcomes cannot substitute for HK evidence.',
+  decisionZh:'港股收益优先决策',decisionEn:'HK Return-First Decision',
+  decisionDescZh:'先看港股自己的策略群、权重变化和选择原因；所有比较都锁定港股自身基线。',
+  decisionDescEn:'Inspect HK-only strategy selection, weight changes and rationale; all comparisons remain anchored to the HK control.',
+  validationZh:'港股真实后验验证',validationEn:'HK Realized Posterior Validation',
+  validationDescZh:'只比较 HK_RETURN_MAX_CAPACITY 同一冻结时点的基线与 TRIAID，避免被其他市场结果污染。',
+  validationDescEn:'Compare baseline and TRIAID only within the same HK_RETURN_MAX_CAPACITY freeze; do not contaminate it with other markets.',
+  routeStageZh:'港股独立路线与可实现性',routeStageEn:'HK Independent Route & Realizability',
+  routeStageDescZh:'检查港股独立资产角色、当前后验证据和专属容量缺口；没有港股独立容量账本时明确标记，不借用其他市场。',
+  routeStageDescEn:'Inspect HK-specific asset roles, current posterior evidence and any capacity gap; if an HK capacity ledger is not yet available, mark it explicitly rather than borrowing another market.',
+  baselineZh:'港股独立冻结基线',baselineEn:'Frozen HK-only baseline',
+  riskAssets:['2800.HK','2828.HK','3033.HK'],defensiveAssets:['2819.HK']
+ }
 };
 let marketClockState={};
 let homeSummaryState={
@@ -2389,6 +2485,7 @@ function renderMarketIdentity(){
   const s=marketClockState[key]||{};
   el('clockPhase'+key).textContent=phaseText(s.session_phase);
  });
+ applyFlowLabels();
  renderHomeSummary();
 }
 async function refreshMarketClocks(){
@@ -2475,14 +2572,11 @@ async function refreshLiveWindows(){
 }
 function applyMarketScope(){
  const m=el('market').value;
- const hk=m==='HK';
+ const meta=MARKET_UI[m]||MARKET_UI.US;
  el('runBtn').disabled=false;
- el('marketScopeStatus').style.display=hk?'block':'none';
- el('marketScopeStatus').textContent=hk
-  ? (lang==='zh'
-     ? '港股独立路线：2800/2828/3033 为风险资产，2819 为防御资产；策略选择、TRIAID权重和后验单独记录。切到港股后应只用港股冻结基线与后验比较，不能拿美股/A股权重或结果横向替代。'
-     : 'Hong Kong uses an independent route: 2800/2828/3033 are risky assets and 2819 is the defensive sleeve. Strategy selection, TRIAID weights and posterior evidence are recorded separately. Compare HK only with its own frozen HK control; do not substitute US/CN weights or outcomes.')
-  : '';
+ el('marketScopeStatus').style.display='block';
+ el('marketScopeStatus').textContent=lang==='zh'?meta.scopeZh:meta.scopeEn;
+ applyFlowLabels();
 }
 function onMarketChange(){
  const seq=++marketSwitchSeq;
@@ -2859,6 +2953,79 @@ function renderComparison(evaluated){
  el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
  el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
 }
+function renderMarketRouteOverview(m,latest,routeEvaluated,selected,d){
+ const meta=MARKET_UI[m]||MARKET_UI.US;
+ const zh=lang==='zh';
+ const clock=marketClockState[m]||{};
+ const routeMode=clock.primary_experiment_mode||meta.routeMode||'-';
+ el('marketRouteTitle').textContent=(zh?meta.zh:meta.en)+' · '+(zh?'主路线摘要':'Primary-route summary');
+ el('marketRouteMode').textContent=routeMode;
+ el('marketRouteBaseline').textContent=zh?meta.baselineZh:meta.baselineEn;
+ el('marketRouteNote').textContent=zh?meta.routeZh:meta.routeEn;
+ let posteriorText=zh?'等待该路线真实后验':'Awaiting route posterior';
+ let posteriorClass='';
+ if(m==='US'){
+  const review=d?.us_return_max?.previous_decision_review||d?.us_return_max?.latest_decision_review||null;
+  if(review&&Number(review.observation_days||0)>0){
+   const gap=Number(review.current_return_max_theoretical_return||0)-Number(review.current_generic_core_theoretical_return||0);
+   posteriorText=(zh?'Return-Max 相对通用 Core ':'Return-Max vs Generic Core ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }
+ }else if(m==='CN'){
+  const p=d?.prospective_experiment?.current_portfolio_cumulative_returns||null;
+  if(p&&Number.isFinite(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL))){
+   const gap=Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);
+   posteriorText=(zh?'前瞻累计相对对照 ':'Prospective gap vs control ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }else if(routeEvaluated){
+   const gap=Number(routeEvaluated.evaluation?.excess_return||0);
+   posteriorText=(zh?'路线后验相对基线 ':'Route posterior vs baseline ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }
+ }else if(routeEvaluated){
+  const gap=Number(routeEvaluated.evaluation?.excess_return||0);
+  posteriorText=(zh?'港股路线后验相对基线 ':'HK route posterior vs baseline ')+signedPct(gap);
+  posteriorClass=cls(gap);
+ }
+ el('marketRoutePosterior').textContent=posteriorText;
+ el('marketRoutePosterior').className=posteriorClass;
+ const real={
+  US:zh?'四档USD容量 + 模型成本 + 模拟成交后验已接入':'4 USD capacity sleeves + modeled costs + simulated-execution posterior connected',
+  CN:zh?'前瞻对照 + 人民币容量袖套 + 恢复波段后验已接入':'Prospective control + CNY capacity sleeves + recovery-wave posterior connected',
+  HK:zh?'港股独立容量后验账本尚未形成；不借用US/CN结果':'Dedicated HK capacity posterior ledger not yet formed; US/CN results are not substituted'
+ };
+ el('marketRouteRealizability').textContent=real[m]||'-';
+ el('marketRouteStatus').textContent=(routeEvaluated?.evaluation?.status)||(latest?.status)||(zh?'等待数据':'WAITING');
+}
+function renderHKRoutePanel(m,latest,routeEvaluated,selected){
+ const panel=el('hkRoutePanel');
+ if(m!=='HK'){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const meta=MARKET_UI.HK;
+ const changed=selected.filter(x=>Math.abs(Number(x.triaid_weight||0)-Number(x.baseline_weight||0))>1e-8).length;
+ el('hkRouteTitle').textContent=lang==='zh'?'港股独立 Return-Max 路线':'HK Independent Return-Max Route';
+ el('hkRouteMeta').textContent=(meta.routeMode||'-')+' · '+(lang==='zh'?'只比较港股自身冻结基线':'HK-only frozen-control comparison');
+ el('hkRouteStatus').textContent=(routeEvaluated?.evaluation?.status)||(latest?.status)||'-';
+ el('hkSelected').textContent=String(selected.length);
+ el('hkChanged').textContent=String(changed);
+ if(routeEvaluated){
+  const gap=Number(routeEvaluated.evaluation?.excess_return||0);
+  el('hkPosterior').textContent=signedPct(gap);
+  el('hkPosterior').className=cls(gap);
+ }else{
+  el('hkPosterior').textContent=lang==='zh'?'等待真实后验':'Awaiting posterior';
+  el('hkPosterior').className='';
+ }
+ el('hkCapacity').textContent=lang==='zh'?'待建立专属账本':'Dedicated ledger pending';
+ el('hkRouteNote').textContent=lang==='zh'
+  ?'港股策略选择、冻结基线与后验全部独立记录。当前页面不会用美股或A股容量结果填补港股证据；在专属容量账本形成前，这一项明确保持“待验证”。'
+  :'HK strategy selection, frozen controls and posterior evidence are recorded independently. The page will not fill HK capacity evidence with US/CN results; this remains explicitly unvalidated until an HK-specific capacity ledger exists.';
+ const rows=[
+  ...meta.riskAssets.map(x=>[x,lang==='zh'?'风险资产':'Risk asset']),
+  ...meta.defensiveAssets.map(x=>[x,lang==='zh'?'防御资产':'Defensive asset'])
+ ];
+ el('hkAssetRows').innerHTML=rows.map(x=>'<tr><td>'+esc(x[0])+'</td><td>'+esc(x[1])+'</td></tr>').join('');
+}
 function renderUSReturnMax(report){
  const panel=el('usReturnMaxPanel');
  if(!report){panel.className='prospective-panel';return;}
@@ -3043,6 +3210,7 @@ async function refreshAll(preferStale=false){
   if(seq!==refreshSeq||el('market').value!==m)return;
   const isCN=m==='CN';
   const isHK=m==='HK';
+  const routeMode=(MARKET_UI[m]||{}).routeMode||null;
   const primaryMode=isCN?'CN_RETURN_MAX_CAPACITY':isHK?'HK_RETURN_MAX_CAPACITY':null;
   const evaluated=[...runs].reverse().find(x=>
    x.evaluation&&x.evaluation.status==='EVALUATED'&&(!primaryMode||x.experiment_mode===primaryMode)
@@ -3073,6 +3241,9 @@ async function refreshAll(preferStale=false){
     ? ([...detailRuns].reverse().find(x=>x.experiment_mode===primaryMode)||null)
     : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
+  const routeEvaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!routeMode||x.experiment_mode===routeMode)
+  )||null;
   const lastCurve=curves.length?curves[curves.length-1]:null;
   homeSummaryState.selectedCount=selected.length;
   homeSummaryState.changedCount=selected.filter(x=>Math.abs(Number(x.triaid_weight||0)-Number(x.baseline_weight||0))>1e-8).length;
@@ -3081,6 +3252,7 @@ async function refreshAll(preferStale=false){
   homeSummaryState.preview=!!previewRun;
   homeSummaryState.latestStatus=latest?.status||null;
   renderHomeSummary();
+  renderMarketRouteOverview(m,latest,routeEvaluated,selected,d);
   renderComparison(evaluated);
   el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
   el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.version;
@@ -3108,6 +3280,7 @@ async function refreshAll(preferStale=false){
   renderUSReturnMax(m==='US'?d.us_return_max:null);
   renderProspective(isCN?d.prospective_experiment:null);
   renderRecoveryWave(isCN?d.recovery_wave:null);
+  renderHKRoutePanel(m,latest,routeEvaluated,selected);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
