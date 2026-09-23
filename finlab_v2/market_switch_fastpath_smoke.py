@@ -16,6 +16,11 @@ checks={
     "market_change_warms_selected_market":"warmMarketCache(el('market').value)" in app,
     "strategy_context_cache_first":"cached_daily=hub.cached_panel(key,\"DAILY\")" in market,
     "strategy_context_external_refresh_only_on_cache_miss":"if cached_daily is None:\n        daily=fetch_panel(key,\"DAILY\",force=False)" in market,
+    "compact_daily_ui_path":"compact=true&market_id=" in app and "compact: bool = Query(default=False)" in app,
+    "lightweight_core_endpoint":'@app.get("/api/ui/core")' in app,
+    "market_switch_not_blocked_by_risk_panels":"const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all" in app,
+    "risk_panels_refresh_independently":"async function refreshRiskPanels()" in app and "setInterval(refreshRiskPanels,10000)" in app,
+    "live_indicator_not_blocked_by_activity":"const idx=await idxPromise;" in app and "const act=await actPromise;" in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
