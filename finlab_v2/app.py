@@ -1049,15 +1049,15 @@ tbody tr:hover td{background:#f8fbff}
   </section>
 
   <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
-    <button type="button" class="market-clock-card selected" data-clock-market="US" onclick="selectMarket('US')" data-tip="美股纽约时间。仅官方交易时段显示绿色，盘前、盘后、周末及交易所休市日显示灰色。">
+    <button type="button" class="market-clock-card selected" data-clock-market="US" onclick="selectMarket('US')" data-tip="美股纽约时间。用途：确认当前页面是不是处于官方交易时段。绿色时重点看实时价格、调度和盘中变化；灰色时主要看最近完整交易日和冻结结果，不要把非交易状态误判成数据故障。">
       <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>美股 / US</span><span class="market-clock-phase" id="clockPhaseUS">-</span></div>
       <div class="market-clock-time" id="clockTimeUS">--:--:--</div><div class="market-clock-date" id="clockDateUS">America/New_York</div>
     </button>
-    <button type="button" class="market-clock-card" data-clock-market="CN" onclick="selectMarket('CN')" data-tip="A股上海时间。仅上交所/深交所连续交易时段显示绿色，午间休市、盘前、收盘后及休市日显示灰色。">
+    <button type="button" class="market-clock-card" data-clock-market="CN" onclick="selectMarket('CN')" data-tip="A股上海时间。用途：确认现在是否处于连续交易时段。绿色时可判断实时数据和盘中调整链；灰色时优先看最近完整交易日后验，午休或休市本身不代表系统异常。">
       <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>A股 / CN</span><span class="market-clock-phase" id="clockPhaseCN">-</span></div>
       <div class="market-clock-time" id="clockTimeCN">--:--:--</div><div class="market-clock-date" id="clockDateCN">Asia/Shanghai</div>
     </button>
-    <button type="button" class="market-clock-card" data-clock-market="HK" onclick="selectMarket('HK')" data-tip="港股香港时间。仅港交所连续交易时段显示绿色，午间休市、盘前、收盘后及休市日显示灰色。">
+    <button type="button" class="market-clock-card" data-clock-market="HK" onclick="selectMarket('HK')" data-tip="港股香港时间。用途：确认当前是否处于港股连续交易时段。绿色时关注实时价格和策略状态；灰色时以最近完整交易日结果为准，不应因为休市而期待实时数据继续变化。">
       <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>港股 / HK</span><span class="market-clock-phase" id="clockPhaseHK">-</span></div>
       <div class="market-clock-time" id="clockTimeHK">--:--:--</div><div class="market-clock-date" id="clockDateHK">Asia/Hong_Kong</div>
     </button>
@@ -1878,20 +1878,69 @@ const TABLE_HEADER_TIPS_EXTRA={
  }
 };
 
+function tooltipUseGuide(label){
+ const raw=String(label||'').trim();
+ const key=normalizeHeaderLabel(raw).toLowerCase();
+ const zh=lang==='zh';
+ const has=(...words)=>words.some(w=>key.includes(normalizeHeaderLabel(w).toLowerCase()));
+ if(has('状态','state','阶段','stage','研究意见','action','opinion')){
+  return zh
+   ? '用途：先判断这行结果处在“可正式比较、仅Shadow观察、还是暂停/待验证”的哪一层，再决定后面的数字能不能直接用于结论。下一步：状态未成熟时先补证据，不要只看收益数字。'
+   : 'Use: first determine whether the row is live-comparable, shadow-only, paused, or still awaiting evidence. Next: if the state is immature, gather evidence before acting on return numbers.';
+ }
+ if(has('权重','weight','敞口','exposure','调整','change','delta')){
+  return zh
+   ? '用途：看 TRIAID 相对基线到底改了什么、改了多少。下一步：把权重变化与选择原因、风险、容量和后验收益差一起看；只有后验持续支持，调整才算有价值。'
+   : 'Use: see exactly what TRIAID changed versus the baseline and by how much. Next: read the change together with rationale, risk, capacity and realized return gap; the adjustment matters only if posterior evidence supports it.';
+ }
+ if(has('收益','return','损益','p&l','净值','equity','差值','gap','累计','cumulative','名次','rank')){
+  return zh
+   ? '用途：判断冻结决策最终有没有产生真实增值，而不是只看当时的预测。下一步：优先和同一时点冻结的基线/对照比较；单日结果只作线索，累计且可重复的后验差异更重要。'
+   : 'Use: judge whether the frozen decision actually added realized value rather than merely looking good at decision time. Next: compare with the contemporaneously frozen control; one-day results are clues, repeated cumulative posterior differences matter more.';
+ }
+ if(has('风险','risk','回撤','drawdown','波动','volatility','动量','momentum','压力','stress','分位','percentile')){
+  return zh
+   ? '用途：定位为什么当前需要更谨慎，以及风险主要来自哪里。下一步：风险升高时先检查驱动项、数据质量和跨市场一致性，再进入Shadow约束测试；不要仅凭单一风险列直接改生产权重。'
+   : 'Use: locate why the current state deserves more caution and where the pressure comes from. Next: when risk rises, inspect drivers, data quality and cross-market consistency before shadow constraint tests; do not change production weights from one risk column alone.';
+ }
+ if(has('成本','cost','adv','成交','fill','流动性','liquidity','资金','capital','天数','days','投入','invested','目标仓位','notional')){
+  return zh
+   ? '用途：判断纸面收益能不能在当前资金规模和流动性下真正实现。下一步：如果容量占用、成交天数或成本过高，应在研究层降低规模、延长执行周期或淘汰该方案，而不是继续放大名义收益。'
+   : 'Use: test whether paper returns remain realizable at the stated capital and liquidity. Next: if capacity, execution days or costs are too high, reduce research scale, extend execution or reject the route rather than scaling nominal return.';
+ }
+ if(has('样本','sample','p','q','lift','支持','support','命中','hit','稳健','robust')){
+  return zh
+   ? '用途：判断当前结论证据够不够硬。下一步：样本少、q值不支持或稳健性差时继续观察，不升级结论；只有多窗口、留一验证和前瞻结果共同支持时才提高置信度。'
+   : 'Use: judge whether the evidence is strong enough. Next: with small samples, unsupported q-values or weak robustness, keep observing rather than promote the claim; confidence rises only when multiple windows, leave-one-out checks and prospective results agree.';
+ }
+ if(has('日期','交易日','date','day','市场','market','产品','product','etf','指标','indicator','曲线','curve','合约','contract')){
+  return zh
+   ? '用途：确认你比较的是同一个市场、同一个时点和同一类对象，避免把不同日期或不同口径的数据混在一起。下一步：出现异常时先核对时间、市场和数据源，再判断模型。'
+   : 'Use: make sure comparisons use the same market, timestamp and object type. Next: when something looks abnormal, verify time, market and data source before blaming the model.';
+ }
+ if(has('原因','依据','说明','rationale','why','explanation','evidence','证据')){
+  return zh
+   ? '用途：回答为什么当时会做这个决定，用于防止看到结果后倒推理由。下一步：先看冻结时证据，再看真实后验；如果理由和后验长期不一致，才进入策略或规则修订。'
+   : 'Use: answer why the decision was made at the time and prevent hindsight rationalization. Next: read frozen-time evidence first, then realized posterior outcomes; revise strategy/rules only when the mismatch persists.';
+ }
+ return zh
+  ? '用途：用这一列帮助判断当前结论是否成立，以及下一步应该继续观察、补证据还是进入更深一层验证。不要脱离同表对照项单独解读。'
+  : 'Use: this column helps decide whether the current conclusion is supported and whether the next step is observation, more evidence, or deeper validation. Do not interpret it in isolation from its controls.';
+}
 function tableHeaderTipMeta(label){
  const raw=String(label||'').trim();
  const key=normalizeHeaderLabel(raw);
  const extra=(TABLE_HEADER_TIPS_EXTRA[lang]||{})[key];
- if(extra)return {text:extra,explicit:true};
+ if(extra)return {text:extra+'\n'+tooltipUseGuide(raw),explicit:true};
  const local=TABLE_HEADER_TIPS[lang]||{};
- if(local[key])return {text:local[key],explicit:true};
+ if(local[key])return {text:local[key]+'\n'+tooltipUseGuide(raw),explicit:true};
  const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
- if(fallbackOther[key])return {text:fallbackOther[key],explicit:true};
- if(!raw)return {text:lang==='zh'?'本列表头说明。':'Table-column explanation.',explicit:false};
+ if(fallbackOther[key])return {text:fallbackOther[key]+'\n'+tooltipUseGuide(raw),explicit:true};
+ if(!raw)return {text:(lang==='zh'?'本列表头说明。':'Table-column explanation.')+'\n'+tooltipUseGuide(raw),explicit:false};
  return {
-  text:lang==='zh'
+  text:(lang==='zh'
    ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
-   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.',
+   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.')+'\n'+tooltipUseGuide(raw),
   explicit:false
  };
 }
@@ -1956,6 +2005,11 @@ function strategyMarketTip(strategyId,name){
   (lang==='zh'?'价格源 ':'Price source ')+(ctx.provider||'-')+' · '+(ctx.price_mode||'-')+
   ' · '+(lang==='zh'?'最近交易日 ':'Last trading day ')+(ctx.last_trading_day||'-')
  );
+ lines.push(
+  lang==='zh'
+   ? '用途：判断这个策略当前实际暴露到哪些资产、最新价格和最近交易日变化是否与目标权重相符。下一步：价格缺失、过旧或异常时先检查数据源；不要仅凭单日涨跌直接改策略权重。'
+   : 'Use: verify which assets the strategy is actually exposed to and whether latest prices / last-session moves are consistent with the target weights. Next: if prices are missing, stale or anomalous, check the data source first; do not reweight from one day’s move alone.'
+ );
  return lines.join('\\n');
 }
 function applyText(){
@@ -1994,9 +2048,36 @@ function applyText(){
   ?'以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。'
   :'The section below is the cross-market risk layer. It always analyzes US, CN and HK jointly and does not switch with the selected market.';
 }
+function statusActionGuide(status){
+ const key=String(status||'').toLowerCase();
+ const zh=lang==='zh';
+ const mapZh={
+  active:'用途：可以进入当前正式策略群。下一步：继续看权重、风险和真实后验；若持续落后或风险恶化，再考虑降级。',
+  shadow:'用途：只验证，不正式配置。下一步：继续积累真实前瞻样本，达到准入要求前不要给生产权重。',
+  reduced:'用途：说明策略证据或表现已经变弱。下一步：限制影响并观察恢复条件；若继续不支持则冻结。',
+  frozen:'用途：当前不应参与正式配置。下一步：只有出现新的、可验证的证据后才重新评估。',
+  candidate:'用途：还在候选池。下一步：补足前瞻样本、稳健性和容量证据，不要因为一次好结果提前晋级。',
+  research:'用途：只用于研发。下一步：先完成复现、压力测试和前瞻验证，再讨论准入。',
+  retired:'用途：已退出当前策略体系。下一步：默认不再投入研究资源，除非出现足够强的新证据。',
+  preview_ready:'用途：只看即时页面效果。下一步：不能把预览结果算进正式后验或策略晋级。'
+ };
+ const mapEn={
+  active:'Use: eligible for the live strategy group. Next: keep monitoring weight, risk and realized posterior evidence; downgrade only if deterioration persists.',
+  shadow:'Use: validation only, no live allocation. Next: accumulate prospective evidence before any production weight.',
+  reduced:'Use: evidence/performance has weakened. Next: limit influence and monitor recovery conditions; freeze if weakness persists.',
+  frozen:'Use: should not participate in live allocation. Next: reconsider only with new verifiable evidence.',
+  candidate:'Use: still in the candidate pool. Next: add prospective, robustness and capacity evidence; do not promote on one good result.',
+  research:'Use: development only. Next: complete reproduction, stress tests and prospective validation before admission.',
+  retired:'Use: outside the current system. Next: spend no normal allocation/research budget unless materially new evidence appears.',
+  preview_ready:'Use: display-only preview. Next: do not count it toward official posterior evidence or lifecycle promotion.'
+ };
+ return (zh?mapZh:mapEn)[key]||(zh
+  ? '用途：先判断当前状态允许做什么，再解读收益和权重；状态本身决定这条结果能否进入正式证据链。'
+  : 'Use: determine what the current state permits before reading returns or weights; the state controls whether the result can enter the formal evidence chain.');
+}
 function statusTip(status){
  const key=String(status||'').toLowerCase();
- return TIP[lang][key]||TIP[lang].state;
+ return (TIP[lang][key]||TIP[lang].state)+'\n'+statusActionGuide(status);
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
 async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
@@ -2351,13 +2432,32 @@ function riskBandText(score){
  const en={low:'LOW',elevated:'ELEVATED',high:'HIGH',severe:'SEVERE',critical:'CRITICAL'};
  return (lang==='zh'?zh:en)[band]||'-';
 }
+function riskActionGuide(score){
+ const band=riskBandFromScore(score);
+ const zh={
+  low:'当前动作：维持常规观察，重点验证收益路线本身，不需要因为风险层额外收紧。若驱动项突然跳升，再进入复核。',
+  elevated:'当前动作：提高监控频率，先核对主要驱动、数据质量和三市场是否同向；继续正常研究运行，但把新增高风险暴露列为重点观察。',
+  high:'当前动作：进入专项风险复核。逐项检查利率/政策、价格结构、跨市场传导和流动性来源，并启动或加强 Shadow 收紧方案对照；生产权重仍不自动改变。',
+  severe:'当前动作：把风险控制放到优先级前列。Shadow 中测试更低风险敞口、更高防御底线和容量压力情景；暂停未经验证的激进策略晋级，等待风险回落或更多证据。',
+  critical:'当前动作：进入最高级人工复核。冻结新的高风险策略晋级和未经验证的放大方案，优先验证数据真实性、系统性传导和极端情景；只有人工审计与后验证据支持后才考虑恢复。'
+ };
+ const en={
+  low:'Action: keep normal monitoring and focus on validating the return route itself. No extra tightening is needed from the risk layer unless drivers jump materially.',
+  elevated:'Action: monitor more frequently; verify major drivers, data quality and whether markets are moving consistently. Continue normal research but scrutinize any new high-risk exposure.',
+  high:'Action: start a focused risk review. Inspect rates/policy, market structure, cross-market transmission and liquidity, and strengthen shadow tightening comparisons; production weights still do not change automatically.',
+  severe:'Action: make risk control a priority. In shadow, test lower risky exposure, higher defensive floors and capacity stress; pause promotion of unvalidated aggressive strategies until risk eases or evidence improves.',
+  critical:'Action: trigger the highest-level manual review. Freeze new high-risk promotions and unvalidated scaling, verify data integrity/systemic transmission/extreme scenarios first, and restore only after manual audit plus posterior evidence.'
+ };
+ return (lang==='zh'?zh:en)[band]||'';
+}
 function riskScaleTip(score,label){
  const n=Number(score);
  if(!Number.isFinite(n))return label||'Risk';
- return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+
+ return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+'\n'+
+  riskActionGuide(n)+'\n'+
   (lang==='zh'
-   ? '。统一阈值：低<25；升高25–44.9；高45–64.9；严重65–79.9；临界≥80。该颜色表示风险/压力级别，不是股灾概率。'
-   : '. Shared thresholds: LOW <25; ELEVATED 25–44.9; HIGH 45–64.9; SEVERE 65–79.9; CRITICAL ≥80. Color indicates pressure/risk level, not crash probability.');
+   ? '用途：决定风险层需要常规观察、加密监控、专项复核、Shadow收紧还是人工冻结升级。这不是股灾概率，也不会单独触发自动交易。'
+   : 'Use: decide whether the risk layer calls for normal monitoring, tighter monitoring, focused review, shadow tightening or a manual promotion freeze. This is not crash probability and does not independently trigger trading.');
 }
 function setRiskScoreNode(id,score,suffix,label,baseClass=''){
  const node=el(id),n=Number(score);
@@ -2375,13 +2475,20 @@ function riskCellHtml(text,score,label){
 function riskStageTip(stage){
  const s=String(stage||'-');
  const zh={
-  WATCH_ONLY:'观察阶段：风险证据达到关注条件，但不改变生产权重。',
-  NORMAL_OBSERVATION:'常规观察：当前没有达到提高约束的阈值。',
-  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧候选：仅实验性提出更严格风险约束，未作用于生产权重。',
-  SHADOW_DEFENSIVE_BIAS:'Shadow防御偏置候选：仅实验性提高防御配置，未作用于生产权重。',
-  DATA_UNAVAILABLE:'数据不足：该市场当前无法形成完整风险状态。'
+  WATCH_ONLY:'观察阶段：风险证据值得关注，但不改变生产权重。用途：持续盯驱动项和后验；如果风险继续上升或跨市场同步增强，再进入Shadow收紧测试。',
+  NORMAL_OBSERVATION:'常规观察：当前没有需要额外风控动作的证据。用途：继续正常验证收益路线，只有风险驱动明显变化时才升级。',
+  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧候选：实验性测试更低风险敞口。用途：比较收紧后是否减少尾部损失、是否牺牲过多收益；通过前瞻验证前不作用生产权重。',
+  SHADOW_DEFENSIVE_BIAS:'Shadow防御偏置候选：实验性提高防御配置。用途：验证防御偏置是否在真实后验中改善风险收益；未验证前不作用生产权重。',
+  DATA_UNAVAILABLE:'数据不足：当前无法形成完整风险状态。用途：先修复/补齐数据，不应把缺数据解释成低风险，也不应据此调整权重。'
  };
- return lang==='zh'?(zh[s]||('风控实验阶段：'+s)):'Risk-control experiment stage: '+s+'. Shadow-only unless explicitly promoted.';
+ const en={
+  WATCH_ONLY:'Watch-only: evidence deserves attention but does not change production weights. Use: monitor drivers/posterior evidence and move to shadow tightening only if risk or cross-market synchronization strengthens.',
+  NORMAL_OBSERVATION:'Normal observation: no evidence currently calls for extra risk action. Use: keep validating the return route and escalate only when drivers change materially.',
+  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow tightening candidate: test lower risky exposure. Use: compare whether tightening reduces tail loss without excessive return sacrifice; never affect production weights before prospective validation.',
+  SHADOW_DEFENSIVE_BIAS:'Shadow defensive-bias candidate: test more defensive exposure. Use: validate whether the bias improves realized risk-adjusted outcomes before any production use.',
+  DATA_UNAVAILABLE:'Data unavailable: a complete risk state cannot be formed. Use: repair/fill data first; missing data is neither low risk nor a reason to change weights.'
+ };
+ return (lang==='zh'?zh:en)[s]||((lang==='zh'?'风控实验阶段：':'Risk-control experiment stage: ')+s);
 }
 function riskStageClass(stage){
  const s=String(stage||'');
