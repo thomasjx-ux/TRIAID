@@ -63,7 +63,13 @@ if EXPECTED_REVISION:
     assert status["deployment"]["source_revision"]==EXPECTED_REVISION
 
 storage=call("/api/storage/status")
-assert storage["backend"] in {"supabase","file"}
+backend_payload=storage.get("backend")
+backend_name=(
+    str(backend_payload.get("backend") or "")
+    if isinstance(backend_payload,dict)
+    else str(backend_payload or "")
+)
+assert backend_name in {"supabase","file"}
 
 rules_hk=call("/api/strategy-population/rules/HK")
 assert str(rules_hk.get("market_id") or "").upper()=="HK"
@@ -100,7 +106,7 @@ print(
         {
             "revision":EXPECTED_REVISION or None,
             "markets":status["markets"],
-            "storage_backend":storage["backend"],
+            "storage_backend":backend_name,
             "hk_scheduler_api":True,
         },
         ensure_ascii=False,
