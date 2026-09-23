@@ -1130,8 +1130,9 @@ class EvolutionLabEngine:
         return useful[-1] if useful else (rows[-1] if rows else None)
 
     def status(self)->dict:
+        runs=self.all_runs()
         counts:Dict[str,int]={}
-        for run in self.all_runs():
+        for run in runs:
             counts[run.status]=counts.get(run.status,0)+1
         return {
             "architecture_version":self.architecture_version,
@@ -1146,9 +1147,9 @@ class EvolutionLabEngine:
             "markets":["US","CN","HK"],
             "run_counts":counts,
             "run_scope_counts":{
-                "official_evidence":sum(1 for r in self.all_runs() if self._evidence_eligible_run(r)),
+                "official_evidence":sum(1 for r in runs if self._evidence_eligible_run(r)),
                 "manual_preview_in_memory":sum(
-                    1 for r in self.all_runs()
+                    1 for r in runs
                     if str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
                 ),
             },
