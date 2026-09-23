@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from statistics import mean
 from typing import Dict, Iterable, List
 
@@ -124,7 +124,23 @@ class StrategyPopulationModule:
             key="CN"
         if key in self._config_overrides:
             return self._config_overrides[key]
-        return CN_CONFIG if key=="CN" else HK_CONFIG if key=="HK" else US_CONFIG
+        if key=="CN":
+            return CN_CONFIG
+        if key=="HK":
+            return HK_CONFIG
+        if key=="US":
+            return US_CONFIG
+        return replace(
+            US_CONFIG,
+            config_version=f"population-{key.lower()}@0.1.0",
+            market_id=key,
+            near_duplicate_corr=1.01,
+            family_cap=10,
+            redundancy_penalty=0.0,
+            uncertainty_penalty=0.0,
+            switch_hurdle_bps=0.0,
+            switch_guard_enabled=True,
+        )
 
     def rules(self, market_id: str) -> dict:
         cfg = self.config_for(market_id)
@@ -150,12 +166,18 @@ class StrategyPopulationModule:
             result["research_experiment_objective"]=PRIMARY_OBJECTIVE
             result["primary_route_selector"]="MAX_REALIZABLE_NET_RETURN_OVER_TRADABLE_HK_ETF_UNIVERSE"
             result["execution_scope"]="RESEARCH_ONLY_NO_BROKER_EXECUTION"
-        else:
+        elif cfg.market_id=="US":
             result["active_research_experiment"]="US_RETURN_MAX_CAPACITY"
             result["market_route"]="US_RETURN_MAXIMIZATION"
             result["research_experiment_objective"]="MAXIMIZE_REALIZABLE_NET_RETURN"
             result["primary_route_selector"]="MAX_REALIZABLE_NET_RETURN_WITH_MARKET_SPECIFIC_EXECUTION_CONSTRAINTS"
             result["generic_population_role"]="CONTROL_AND_INFRASTRUCTURE_ONLY_FOR_US_RETURN_MAX_ROUTE"
+        else:
+            result["active_research_experiment"]=None
+            result["market_route"]="GENERIC_REGISTERED_MARKET"
+            result["research_experiment_objective"]=PRIMARY_OBJECTIVE
+            result["primary_route_selector"]="REQUIRES_REGISTERED_MARKET_EXPERIMENT_ADAPTER"
+            result["execution_scope"]="RESEARCH_ONLY_NO_BROKER_EXECUTION"
         return result
 
     def register(self, definition: StrategyDefinition) -> None:
