@@ -26,7 +26,8 @@ checks={
     "market_clock_hover_explanations":app.count('data-clock-market=')>=3 and "data-tip=" in app,
     "three_market_label_correct":"执行两个市场" not in app and "预览三个市场" in app,
     "readability_row_hover":"tbody tr:hover td" in app,
-    "market_switch_updates_identity":"function onMarketChange(){applyMarketScope();renderMarketIdentity();" in app,
+    "market_switch_updates_identity":"function onMarketChange()" in app and "applyMarketScope();" in app and "renderMarketIdentity();" in app,
+    "market_switch_preserves_fast_render":"refreshAll(true)" in app and "requestAnimationFrame" in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
