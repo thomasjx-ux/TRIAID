@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .store import RunStore
+from .market_registry import market_ids
 
 
 HORIZON_WEIGHTS={
@@ -277,7 +278,7 @@ class RiskWarningSystem:
         dds=[]
         momentum=[]
         drivers=[]
-        for market in ("US","CN","HK"):
+        for market in market_ids():
             dd_name=f"{market}_DRAWDOWN_STRESS_252"
             mom_name=f"{market}_NEGATIVE_MOMENTUM_63"
             dd=float(features.get(dd_name) or 0.0)
@@ -296,6 +297,8 @@ class RiskWarningSystem:
                 "percentile":pcts.get(mom_name),
                 "value":features.get(mom_name),
             })
+        if not dds:
+            return 0.0,drivers
         score=0.60*(sum(dds)/len(dds))+0.40*(sum(momentum)/len(momentum))
         return cls._clamp01(score),drivers
 
@@ -551,7 +554,7 @@ class RiskWarningSystem:
                 "meaning_zh":"信用利差和金融条件从未确认转为确认",
             },
             {
-                "condition":"US/CN/HK drawdown stress broadens",
+                "condition":"registered-market drawdown stress broadens",
                 "meaning_zh":"价格层由局部压力扩展为两到三个市场同时恶化",
             },
             {
@@ -569,7 +572,7 @@ class RiskWarningSystem:
                 "meaning_zh":"债券波动和政策预期变化回落",
             },
             {
-                "condition":"HK / cross-market momentum improves without credit stress",
+                "condition":"cross-market momentum improves without credit stress",
                 "meaning_zh":"港股和跨市场传导没有继续扩散",
             },
         ]
