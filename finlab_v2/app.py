@@ -333,6 +333,11 @@ def status()->dict:
     }
 
 
+@app.get("/api/audit/status")
+def audit_status()->dict:
+    return release_audit_status()
+
+
 @app.get("/api/storage/status")
 def storage_status()->dict:
     return engine.store.status()
