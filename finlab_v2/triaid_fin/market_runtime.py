@@ -37,7 +37,12 @@ class MarketDataAutomation:
         self.last_success_utc:dict[str,str]={}
         self.consecutive_failures:dict[str,int]={}
         self.supervisor_restarts:int=0
-        self.refresh_timeout_seconds=max(10,int(os.getenv("TRIAID_REFRESH_TIMEOUT_SECONDS","30")))
+        refresh_timeout_raw=(os.getenv("TRIAID_REFRESH_TIMEOUT_SECONDS") or "30").strip()
+        try:
+            refresh_timeout_value=int(refresh_timeout_raw)
+        except ValueError:
+            refresh_timeout_value=30
+        self.refresh_timeout_seconds=max(10,refresh_timeout_value)
 
     def refresh_plan_for_phase(self,market_id:str,phase:str)->dict[str,int]:
         market=market_id.upper()
