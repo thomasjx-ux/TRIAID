@@ -332,7 +332,7 @@ class MarketDataAutomation:
 
     def live_indicators(self,market_id:str)->dict:
         market=market_id.upper()
-        rows=self.engine.market_observations(market,"REALTIME",300)
+        rows=self.engine.market_observations(market,"REALTIME",120)
         valid=[]
         for row in rows:
             try:
@@ -399,7 +399,7 @@ class MarketDataAutomation:
         phase=session_phase(market)
         plan=self.refresh_plan_for_phase(market,phase)
         events=[]
-        for row in self.engine.market_observations(market,None,max(200,limit*4)):
+        for row in self.engine.market_observations(market,None,max(80,limit)):
             mode=str(row.get("mode") or "").upper()
             interval=self.frequency_policy.interval(market,mode) if mode in {"DAILY","INTRADAY","PREOPEN","REALTIME"} else None
             events.append({
@@ -411,7 +411,7 @@ class MarketDataAutomation:
                 "source_latest_ts":row.get("source_latest_ts"),
                 "message":f"{mode} data <- {row.get('provider')} · points={row.get('points')} · source_ts={row.get('source_latest_ts')}",
             })
-        for row in self.engine.market_transitions(market,None,max(200,limit*4)):
+        for row in self.engine.market_transitions(market,None,max(80,limit)):
             events.append({
                 "at":row.get("derived_at"),
                 "kind":"STATE_TRANSITION",
@@ -424,7 +424,7 @@ class MarketDataAutomation:
                 ),
             })
         if self.decision_scheduler is not None:
-            for row in self.decision_scheduler.events(market,max(200,limit*4)):
+            for row in self.decision_scheduler.events(market,max(80,limit)):
                 decision=row.get("decision") or {}
                 assessment=row.get("assessment") or {}
                 change=decision.get("weight_change_l1_vs_reference")
