@@ -71,6 +71,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/status",
     "/api/market-data/registry",
     "/api/accounts/status",
+    "/api/ui/market-clocks",
     "/api/risk-warning/latest",
     "/api/risk-control/latest",
     "/api/strategy-population/rules/US",
@@ -211,6 +212,7 @@ def runtime_checks()->list[dict]:
     market_status=payloads.get("/api/market-data/status") or {}
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
+    market_clocks=payloads.get("/api/ui/market-clocks") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
     home=payloads.get("/") or ""
@@ -244,6 +246,22 @@ def runtime_checks()->list[dict]:
     pools=(account_registry.get("strategy_pools") or {})
     check("global_account_present","GLOBAL" in accounts,sorted(accounts))
     check("global_strategy_pool_present","GLOBAL" in pools,sorted(pools))
+
+    clock_rows=market_clocks.get("markets") or []
+    clock_map={
+        str(row.get("market_id") or "").upper():row
+        for row in clock_rows if isinstance(row,dict)
+    }
+    check("market_clock_base_market_coverage",base_markets.issubset(set(clock_map)),sorted(clock_map))
+    expected_timezones={"US":"America/New_York","CN":"Asia/Shanghai","HK":"Asia/Hong_Kong"}
+    for market,timezone_name in expected_timezones.items():
+        row=clock_map.get(market) or {}
+        phase=str(row.get("session_phase") or "")
+        check(f"{market}_market_clock_timezone",row.get("timezone")==timezone_name,row)
+        check(f"{market}_market_clock_phase_present",phase in {"OPEN","PREOPEN","BREAK","POSTCLOSE","CLOSED","CALENDAR_UNAVAILABLE"},row)
+        check(f"{market}_market_clock_green_semantics",bool(row.get("is_open"))==(phase=="OPEN"),row)
+        check(f"{market}_market_clock_local_time_present",bool(row.get("local_iso")),row)
+
     deployment=status.get("deployment") or {}
     railway_sha=deployment.get("railway_git_commit_sha")
     declared_sha=deployment.get("declared_source_revision")
@@ -302,6 +320,19 @@ def runtime_checks()->list[dict]:
         ):
             check("ui_marker:"+marker,marker in home,None if marker in home else "missing")
         check("ui_no_raw_json_dump","JSON.stringify(d,null,2)" not in home,None)
+        for marker in ('data-clock-market="US"','data-clock-market="CN"','data-clock-market="HK"','id="marketHero"'):
+            check("ui_market_identity_marker:"+marker,marker in home,None if marker in home else "missing")
+        risk_pos=home.find('id="riskWarningPanel"')
+        specialty_positions=[
+            home.find('id="usReturnMaxPanel"'),
+            home.find('id="prospectivePanel"'),
+            home.find('id="recoveryWavePanel"'),
+        ]
+        check(
+            "ui_market_specific_content_precedes_cross_market_risk",
+            risk_pos>max(specialty_positions) and min(specialty_positions)>=0,
+            {"risk_pos":risk_pos,"specialty_positions":specialty_positions},
+        )
 
     maintenance=live.get("startup_maintenance_receipt")
     if isinstance(maintenance,dict):
