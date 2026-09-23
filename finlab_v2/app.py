@@ -1808,12 +1808,49 @@ const UI_TIPS={
  }
 };
 
+function uiTipUseGuide(id){
+ const zh=lang==='zh';
+ if(['resultTitle','baseReturnLabel','triaidReturnLabel','gainLabel','dailyAnalysisLabel','prospectiveHoldLabel','prospectiveTriaidLabel','prospectiveGapLabel','recoveryPrevReturnLabel','recoveryPrevGapLabel','curveTitle'].includes(id)){
+  return zh
+   ? '用途：用它判断冻结决策有没有被真实后验支持。下一步：优先看同周期对照和累计路径；单次领先不作为规则升级依据，持续领先或持续落后才进入复核。'
+   : 'Use: judge whether the frozen decision is supported by realized posterior evidence. Next: prioritize same-period controls and cumulative paths; one win does not justify rule promotion, while persistent out/under-performance triggers review.';
+ }
+ if(['liveTitle','indexWindowTitle','activityWindowTitle','dateLabel','runStateLabel','overviewTitle'].includes(id)){
+  return zh
+   ? '用途：先确认数据是不是最新、系统是不是在正常运行，再解读策略结果。下一步：若时间、数据源或运行状态异常，先修数据/运行链，不要把基础设施问题误判成模型信号。'
+   : 'Use: confirm data freshness and runtime health before interpreting strategy results. Next: if timestamp, provider or run state is abnormal, fix the data/runtime path before treating it as a model signal.';
+ }
+ if(['strategyTitle','selectedNamesLabel','selectedLabel','usrmStrategyTitle','prospectiveStrategyTitle','recoveryOpinionTitle'].includes(id)){
+  return zh
+   ? '用途：看系统当前真正选了谁、为什么选、权重如何变化。下一步：打开策略说明和底层价格，检查选择理由、风险、容量与后验是否一致；不一致才进入替换/降级评估。'
+   : 'Use: see what the system actually selected, why, and how weights changed. Next: inspect rationale and underlying prices, then compare selection logic with risk, capacity and posterior outcomes before replacement/downgrade.';
+ }
+ if(['usrmCapitalTitle','usrmRealizedTitle','capitalSleeveTitle','capitalRealizedTitle','usrmRiskLabel','recoveryCashLabel'].includes(id)){
+  return zh
+   ? '用途：判断策略在真实资金规模下是否还能执行，而不是只看理论收益。下一步：容量不足、成本过高或成交周期过长时，先缩规模/延长执行/淘汰方案，再谈放大收益。'
+   : 'Use: test whether the strategy remains executable at real capital size rather than only on paper. Next: when capacity, cost or execution time is poor, reduce scale, extend execution or reject the route before scaling return.';
+ }
+ if(['evolutionTitle','evoObservedLabel','evoNegLabel','evoCandidateLabel'].includes(id)){
+  return zh
+   ? '用途：判断当前证据是否足够支持 Core 或策略进化。下一步：候选只在 replay、holdout、shadow、前瞻和审计共同通过后才晋升；否则继续积累证据。'
+   : 'Use: judge whether evidence is strong enough for Core/strategy evolution. Next: promote only after replay, holdout, shadow, prospective and audit checks agree; otherwise keep collecting evidence.';
+ }
+ if(['regimeLabel','coreLabel','usrmExpectedLabel','usrmGenericLabel','usrmSpyLabel','prospectiveDaysLabel','recoveryPrevDaysLabel','cumLabel'].includes(id)){
+  return zh
+   ? '用途：提供当前结论的上下文和比较口径。下一步：先确认口径一致，再把它与同页的对照、风险和真实后验一起使用，不要单独把一个状态值当成行动指令。'
+   : 'Use: provide context and comparison convention for the current conclusion. Next: confirm the convention first, then read it with controls, risk and realized posterior evidence rather than treating one state value as an action signal.';
+ }
+ return zh
+  ? '用途：帮助判断当前页面结论是否值得继续追踪。下一步：结合相邻对照项和真实后验决定是继续观察、补证据还是进入更深审计。'
+  : 'Use: help decide whether the current page conclusion deserves further attention. Next: combine it with nearby controls and realized posterior evidence to choose observation, more evidence or deeper audit.';
+}
 function applyUiTooltips(){
  Object.entries(UI_TIPS[lang]||{}).forEach(([id,tip])=>{
   const node=el(id); if(!node)return;
+  const full=tip+'\n'+uiTipUseGuide(id);
   node.classList.add('has-tip','tip-mark');
-  node.dataset.tip=tip;
-  node.setAttribute('aria-label',(node.textContent||'').trim()+' — '+tip);
+  node.dataset.tip=full;
+  node.setAttribute('aria-label',(node.textContent||'').trim()+' — '+full);
  });
 }
 
@@ -2787,7 +2824,7 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
     '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
     '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
-    '<td class="num has-tip" data-tip="'+esc(rationale||'')+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\n'+(lang==='zh'?'用途：这里的样本数和理由用于判断历史相似状态是否足以支持当前研究意见。下一步：样本太少或理由只由单一历史情形支撑时继续观察，不因一个高收益代理直接扩大配置。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
  }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
  const capacity=d.capital_capacity||{};
  const capModel=capacity.model||{};
