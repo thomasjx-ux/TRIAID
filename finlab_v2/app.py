@@ -994,6 +994,21 @@ tbody tr:hover td{background:#f8fbff}
 @media(max-width:900px){.risk-center-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.riskgrid,.risk-subgrid{grid-template-columns:repeat(2,1fr)}.riskdetailgrid{grid-template-columns:1fr}}
 @media(max-width:760px){.compare,.livegrid{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
+
+.flow-stage{margin:16px 0 8px;padding:0 0 20px;border-bottom:1px solid #e7ebf0}
+.flow-stage-head{display:flex;align-items:flex-start;gap:10px;margin:20px 0 8px}
+.flow-step-no{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;padding:0 7px;border-radius:999px;background:#172033;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em}
+.flow-stage-title{font-size:18px;font-weight:800;line-height:1.25}
+.flow-stage-desc{font-size:12px;color:#748091;line-height:1.5;margin-top:3px}
+.flow-stage h2{margin-top:16px}
+.livegrid-single{grid-template-columns:1fr}
+.ops-details{margin:20px 0 8px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:0 14px}
+.ops-details>summary{cursor:pointer;padding:13px 0;color:#5f6b7a;font-size:13px}
+.ops-livepanel{border:0;border-top:1px solid #edf0f3;border-radius:0;padding:14px 0;min-height:0}
+.evidence-details{margin-top:12px;border:1px solid #e5eaf0;border-radius:10px;background:#fbfcfe;padding:0 11px}
+.evidence-details>summary{cursor:pointer;padding:11px 0;color:#43546a;font-size:12px;font-weight:700}
+.evidence-details[open]>summary{border-bottom:1px solid #edf0f3;margin-bottom:10px}
+@media(max-width:760px){.flow-stage-head{gap:8px}.flow-stage-title{font-size:16px}}
 </style>
 </head>
 <body>
@@ -1074,29 +1089,31 @@ tbody tr:hover td{background:#f8fbff}
       <div class="market-hero-meta" id="selectedMarketMeta">-</div>
     </div>
   </section>
-  <div class="market-section-note" id="marketSectionNote">以下先展示当前所选市场的结果、行情、策略池和该市场专属实验。三市场联动风险中心放在单市场内容之后。</div>
+  <div class="market-section-note" id="marketSectionNote">下面按一条主线阅读：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属路线与可实现性 → 三市场风险 → Core进化。</div>
 
-  <h2 id="resultTitle">TRIAID 结果比较</h2>
-  <div class="compare">
-    <div class="card">
-      <div class="label" id="baseReturnLabel">基线组合后验收益</div>
-      <div class="value base" id="baseReturn">等待后验</div>
-      <div class="sub" id="baseReturnSub">冻结基线</div>
+  <section class="flow-stage" id="stageMarket">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">01</span>
+      <div><div class="flow-stage-title" id="stageMarketTitle">当前市场与状态</div><div class="flow-stage-desc" id="stageMarketDesc">先确认市场、交易阶段、数据日期与当前状态，再读任何策略结论。</div></div>
     </div>
-    <div class="card">
-      <div class="label" id="triaidReturnLabel">TRIAID 配置后验收益</div>
-      <div class="value triaid" id="triaidReturn">等待后验</div>
-      <div class="sub" id="triaidReturnSub">冻结 TRIAID 配置</div>
-    </div>
-    <div class="card gain" id="gainCard">
-      <div class="label" id="gainLabel">TRIAID 相对收益差</div>
-      <div class="value" id="gain">等待后验</div>
-      <div class="sub" id="gainSub">TRIAID 配置后验收益 − 基线后验收益</div>
-    </div>
+    <h2 id="dailyTitle">最新数据摘要</h2>
+  <div class="summary">
+    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
+    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
+    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
+    <div class="item"><span class="label" id="dailyAnalysisLabel">最新后验结论</span><b id="dailyAnalysis">-</b></div>
   </div>
 
-  <h2 id="liveTitle">市场数据与后台运行指示</h2>
-  <div class="livegrid">
+  <h2 id="overviewTitle">当前状态</h2>
+  <div class="grid">
+    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
+    <div class="card"><div class="label" id="coreLabel">通用 Core</div><div class="value triaid" id="core">-</div></div>
+    <div class="card"><div class="label" id="selectedLabel">当前入选策略数</div><div class="value" id="selectedCount">-</div></div>
+    <div class="card"><div class="label" id="cumLabel">累计单期超额和</div><div class="value" id="cumExcess">-</div></div>
+  </div>
+
+  <h2 id="liveTitle">当前市场数据</h2>
+  <div class="livegrid livegrid-single">
     <div class="livepanel">
       <div class="livehead">
         <div class="livehead-left"><span id="marketPulse" class="pulse"></span><span id="indexWindowTitle">最新市场标的窗口</span></div>
@@ -1105,17 +1122,15 @@ tbody tr:hover td{background:#f8fbff}
       <div class="live-meta" id="indexMeta">等待实时市场数据</div>
       <div class="indexgrid" id="indexRows"></div>
     </div>
-    <div class="livepanel">
-      <div class="livehead">
-        <div class="livehead-left"><span id="activityPulse" class="pulse"></span><span id="activityWindowTitle">后台运行事件</span></div>
-        <span class="small muted" id="activityPhase">-</span>
-      </div>
-      <div class="live-meta" id="scheduleMeta">等待调度状态</div>
-      <div class="commandlog" id="commandLog"></div>
-    </div>
   </div>
+  </section>
 
-  <h2 id="strategyTitle">策略群与 TRIAID 调整</h2>
+  <section class="flow-stage" id="stageDecision">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">02</span>
+      <div><div class="flow-stage-title" id="stageDecisionTitle">TRIAID 当前决策</div><div class="flow-stage-desc" id="stageDecisionDesc">看选了哪些策略、权重怎么变、为什么变；候选池只是对照，不混入正式配置。</div></div>
+    </div>
+    <h2 id="strategyTitle">策略群与 TRIAID 调整</h2>
   <div class="tablewrap">
     <table>
       <thead><tr>
@@ -1146,16 +1161,46 @@ tbody tr:hover td{background:#f8fbff}
       </table>
     </div>
   </details>
+  </section>
 
-  <h2 id="dailyTitle">最新数据摘要</h2>
-  <div class="summary">
-    <div class="item"><span class="label" id="regimeLabel">市场状态</span><b id="regime">-</b></div>
-    <div class="item"><span class="label" id="runStateLabel">运行状态</span><b id="runState">-</b></div>
-    <div class="item"><span class="label" id="selectedNamesLabel">当前入选</span><b id="selectedNames">-</b></div>
-    <div class="item"><span class="label" id="dailyAnalysisLabel">最新后验结论</span><b id="dailyAnalysis">-</b></div>
+  <section class="flow-stage" id="stageValidation">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">03</span>
+      <div><div class="flow-stage-title" id="stageValidationTitle">真实结果验证</div><div class="flow-stage-desc" id="stageValidationDesc">把冻结基线与冻结 TRIAID 放在同一结果期比较，再看累计路径是否持续。</div></div>
+    </div>
+    <h2 id="resultTitle">TRIAID 结果比较</h2>
+  <div class="compare">
+    <div class="card">
+      <div class="label" id="baseReturnLabel">基线组合后验收益</div>
+      <div class="value base" id="baseReturn">等待后验</div>
+      <div class="sub" id="baseReturnSub">冻结基线</div>
+    </div>
+    <div class="card">
+      <div class="label" id="triaidReturnLabel">TRIAID 配置后验收益</div>
+      <div class="value triaid" id="triaidReturn">等待后验</div>
+      <div class="sub" id="triaidReturnSub">冻结 TRIAID 配置</div>
+    </div>
+    <div class="card gain" id="gainCard">
+      <div class="label" id="gainLabel">TRIAID 相对收益差</div>
+      <div class="value" id="gain">等待后验</div>
+      <div class="sub" id="gainSub">TRIAID 配置后验收益 − 基线后验收益</div>
+    </div>
   </div>
 
-  <div class="prospective-panel" id="usReturnMaxPanel">
+  <h2 id="curveTitle">连续回顾</h2>
+  <div class="legend">
+    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
+    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
+  </div>
+  <canvas id="curve" width="1220" height="270"></canvas>
+  </section>
+
+  <section class="flow-stage" id="stageRoute">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">04</span>
+      <div><div class="flow-stage-title" id="stageRouteTitle">市场专属路线与可实现性</div><div class="flow-stage-desc" id="stageRouteDesc">进入当前市场自己的主实验路线，检查底层敞口、资金容量、执行成本和前瞻/后验。</div></div>
+    </div>
+    <div class="prospective-panel" id="usReturnMaxPanel">
     <div class="prospective-head">
       <div>
         <b id="usReturnMaxTitle">美股 Return-Max 路线</b>
@@ -1328,8 +1373,14 @@ tbody tr:hover td{background:#f8fbff}
       </table>
     </div>
   </div>
+  </section>
 
-  <div class="market-section-note" id="crossMarketRiskNote">以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。</div>
+  <section class="flow-stage" id="stageRisk">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">05</span>
+      <div><div class="flow-stage-title" id="stageRiskTitle">三市场联动风险</div><div class="flow-stage-desc" id="stageRiskDesc">从单市场决策切到 US/A股/港股联合风险层：先看风险结论和主要驱动，再按需展开深层证据。</div></div>
+    </div>
+    <div class="market-section-note" id="crossMarketRiskNote">以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。</div>
   <section class="riskpanel" id="riskWarningPanel">
     <div class="riskhead">
       <div>
@@ -1364,82 +1415,86 @@ tbody tr:hover td{background:#f8fbff}
       <div class="risk-sub"><span class="label" id="riskCreditLabel">信用/流动性</span><b id="riskCredit">-</b></div>
       <div class="risk-sub"><span class="label" id="riskMarketLabel">价格结构恶化</span><b id="riskMarket">-</b></div>
     </div>
-    <div class="risk-center-grid">
-      <div class="riskbox">
-        <h3 id="riskThreeMarketTitle">三市场联动状态</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>市场</th><th>252日回撤压力</th><th>63日负向动量特征</th><th>动量异常分位</th><th>63日波动</th><th>风控实验阶段</th></tr></thead>
-            <tbody id="riskThreeMarketRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskDynamicsTitle">动力链 / 传导路径</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>环节</th><th>状态</th><th>强度</th><th>主要证据</th></tr></thead>
-            <tbody id="riskDynamicsRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskMacroTitle">利率、政策、信用与流动性</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>指标</th><th>当前值</th><th>历史状态分位</th></tr></thead>
-            <tbody id="riskMacroRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskTermTitle">Fed Funds / SOFR 期限曲线</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>曲线</th><th>真实合约点</th><th>前端隐含利率</th><th>远端隐含利率</th><th>远端−前端</th></tr></thead>
-            <tbody id="riskTermRows"></tbody>
-          </table>
-        </div>
-        <details style="margin-top:8px">
-          <summary id="riskCurveDetailTitle" style="cursor:pointer;color:#5f6b7a">展开期限合约明细</summary>
-          <div class="tablewrap risk-center-table" style="margin-top:8px">
-            <table>
-              <thead><tr><th>曲线</th><th>合约月</th><th>代码</th><th>价格</th><th>隐含利率</th></tr></thead>
-              <tbody id="riskCurveContractRows"></tbody>
-            </table>
-          </div>
-        </details>
-      </div>
-      <div class="riskbox">
-        <h3 id="riskHistoryTableTitle">历史危机回溯与统计支持</h3>
-        <div class="tablewrap risk-center-table">
-          <table>
-            <thead><tr><th>联合状态</th><th>领先期</th><th>危机命中</th><th>正常误报</th><th>Lift</th><th>p</th><th>q</th><th>稳健性</th></tr></thead>
-            <tbody id="riskHistoryRows"></tbody>
-          </table>
-        </div>
-      </div>
-      <details class="riskbox">
-        <summary id="riskDataQualityTitle" style="cursor:pointer;font-weight:700">数据完整性与降级状态</summary>
-        <div class="small" id="riskDataQuality" style="margin-top:8px">-</div>
-        <ul class="risklist" id="riskDataGaps"></ul>
-      </details>
-      <div class="riskbox">
-        <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
-        <div class="risknote" id="riskControlMeta">-</div>
-        <div class="tablewrap risk-center-table" style="margin-top:8px">
-          <table>
-            <thead><tr><th>市场</th><th>实验阶段</th><th>风险敞口倍率候选</th><th>防御敞口底线候选</th><th>是否已作用生产权重</th></tr></thead>
-            <tbody id="riskControlRows"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <div class="riskdetailgrid">
       <div class="riskbox"><h3 id="riskDriversTitle">主要风险驱动</h3><ul class="risklist" id="riskDrivers"></ul></div>
       <div class="riskbox"><h3 id="riskBlockersTitle">尚未确认 / 风险阻断项</h3><ul class="risklist" id="riskBlockers"></ul></div>
     </div>
+    <details class="evidence-details" id="riskDeepEvidence">
+      <summary id="riskDeepEvidenceTitle">展开深层风险证据：传导、利率曲线、历史回溯与 Shadow 风控实验</summary>
+      <div class="risk-center-grid">
+        <div class="riskbox">
+          <h3 id="riskThreeMarketTitle">三市场联动状态</h3>
+          <div class="tablewrap risk-center-table">
+            <table>
+              <thead><tr><th>市场</th><th>252日回撤压力</th><th>63日负向动量特征</th><th>动量异常分位</th><th>63日波动</th><th>风控实验阶段</th></tr></thead>
+              <tbody id="riskThreeMarketRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="riskbox">
+          <h3 id="riskDynamicsTitle">动力链 / 传导路径</h3>
+          <div class="tablewrap risk-center-table">
+            <table>
+              <thead><tr><th>环节</th><th>状态</th><th>强度</th><th>主要证据</th></tr></thead>
+              <tbody id="riskDynamicsRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="riskbox">
+          <h3 id="riskMacroTitle">利率、政策、信用与流动性</h3>
+          <div class="tablewrap risk-center-table">
+            <table>
+              <thead><tr><th>指标</th><th>当前值</th><th>历史状态分位</th></tr></thead>
+              <tbody id="riskMacroRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="riskbox">
+          <h3 id="riskTermTitle">Fed Funds / SOFR 期限曲线</h3>
+          <div class="tablewrap risk-center-table">
+            <table>
+              <thead><tr><th>曲线</th><th>真实合约点</th><th>前端隐含利率</th><th>远端隐含利率</th><th>远端−前端</th></tr></thead>
+              <tbody id="riskTermRows"></tbody>
+            </table>
+          </div>
+          <details style="margin-top:8px">
+            <summary id="riskCurveDetailTitle" style="cursor:pointer;color:#5f6b7a">展开期限合约明细</summary>
+            <div class="tablewrap risk-center-table" style="margin-top:8px">
+              <table>
+                <thead><tr><th>曲线</th><th>合约月</th><th>代码</th><th>价格</th><th>隐含利率</th></tr></thead>
+                <tbody id="riskCurveContractRows"></tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+        <div class="riskbox">
+          <h3 id="riskHistoryTableTitle">历史危机回溯与统计支持</h3>
+          <div class="tablewrap risk-center-table">
+            <table>
+              <thead><tr><th>联合状态</th><th>领先期</th><th>危机命中</th><th>正常误报</th><th>Lift</th><th>p</th><th>q</th><th>稳健性</th></tr></thead>
+              <tbody id="riskHistoryRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <details class="riskbox">
+          <summary id="riskDataQualityTitle" style="cursor:pointer;font-weight:700">数据完整性与降级状态</summary>
+          <div class="small" id="riskDataQuality" style="margin-top:8px">-</div>
+          <ul class="risklist" id="riskDataGaps"></ul>
+        </details>
+        <div class="riskbox">
+          <h3 id="riskControlTitle">三市场风控 Shadow 实验</h3>
+          <div class="risknote" id="riskControlMeta">-</div>
+          <div class="tablewrap risk-center-table" style="margin-top:8px">
+            <table>
+              <thead><tr><th>市场</th><th>实验阶段</th><th>风险敞口倍率候选</th><th>防御敞口底线候选</th><th>是否已作用生产权重</th></tr></thead>
+              <tbody id="riskControlRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </details>
+
     <details style="margin-top:10px">
       <summary id="riskDetailsTitle" style="cursor:pointer;color:#5f6b7a">展开完整证据与验证状态</summary>
       <div class="riskdetailgrid">
@@ -1452,23 +1507,14 @@ tbody tr:hover td{background:#f8fbff}
       <div class="risknote" id="riskSemantics">风险指数是状态/证据压力评分，不是股灾概率；风险预警层不自动改变组合权重。</div>
     </details>
   </section>
+  </section>
 
-  <h2 id="overviewTitle">当前状态</h2>
-  <div class="grid">
-    <div class="card"><div class="label" id="dateLabel">最新数据日</div><div class="value" id="date">-</div></div>
-    <div class="card"><div class="label" id="coreLabel">通用 Core</div><div class="value triaid" id="core">-</div></div>
-    <div class="card"><div class="label" id="selectedLabel">当前入选策略数</div><div class="value" id="selectedCount">-</div></div>
-    <div class="card"><div class="label" id="cumLabel">累计单期超额和</div><div class="value" id="cumExcess">-</div></div>
-  </div>
-
-  <h2 id="curveTitle">连续回顾</h2>
-  <div class="legend">
-    <span><span class="dot" style="background:#6f7782"></span><span id="legendBase">策略群基线</span></span>
-    <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
-  </div>
-  <canvas id="curve" width="1220" height="270"></canvas>
-
-  <h2 id="evolutionTitle">Core 进化状态</h2>
+  <section class="flow-stage" id="stageEvolution">
+    <div class="flow-stage-head">
+      <span class="flow-step-no">06</span>
+      <div><div class="flow-stage-title" id="stageEvolutionTitle">Core 进化</div><div class="flow-stage-desc" id="stageEvolutionDesc">只有已经完成的真实后验与审计证据，才能推动 Candidate 与 Core 变化。</div></div>
+    </div>
+    <h2 id="evolutionTitle">Core 进化状态</h2>
   <div class="corebox">
     <div class="card">
       <div class="label" id="evoObservedLabel">已后验评价运行</div>
@@ -1486,7 +1532,21 @@ tbody tr:hover td{background:#f8fbff}
       <br><button onclick="propose()" id="proposeBtn">生成 Candidate Core</button>
     </div>
   </div>
-</div>
+  </section>
+
+  <details class="ops-details" id="systemOpsPanel">
+    <summary><b id="systemOpsTitle">系统运行明细</b><span id="systemOpsSummary"> · 后台调度、刷新和事件日志</span></summary>
+    <div class="livepanel ops-livepanel">
+      <div class="livehead">
+        <div class="livehead-left"><span id="activityPulse" class="pulse"></span><span id="activityWindowTitle">后台运行事件</span></div>
+        <span class="small muted" id="activityPhase">-</span>
+      </div>
+      <div class="live-meta" id="scheduleMeta">等待调度状态</div>
+      <div class="commandlog" id="commandLog"></div>
+    </div>
+  </details>
+
+  </div>
 <div id="hoverTip" role="tooltip"></div>
 
 <script>
@@ -1499,7 +1559,7 @@ const T={
  zh:{
   title:'TRIAID FIN 进化实验台 V2',subtitle:'真实市场 → 动态策略群 → TRIAID Core → 后验验证 → 持续进化',
   result:'TRIAID 结果比较',baseReturn:'基线组合后验收益',triaidReturn:'TRIAID 配置后验收益',gain:'TRIAID 相对收益差',
-  live:'市场数据与后台运行指示',indexWindow:'最新市场标的窗口',activityWindow:'后台运行事件',
+  live:'当前市场数据',indexWindow:'最新市场标的窗口',activityWindow:'后台运行事件',
   baseSub:'冻结基线',triaidSub:'冻结 TRIAID 配置',gainSub:'TRIAID 配置后验收益 − 基线后验收益',
   overview:'当前状态',date:'最新数据日',core:'通用 Core',selected:'当前入选策略数',cum:'累计单期超额和',
   curve:'连续回顾',legendBase:'策略群基线',legendTriaid:'TRIAID',
@@ -2043,6 +2103,26 @@ function strategyMarketTip(strategyId,name){
  );
  return lines.join('\\n');
 }
+function applyFlowLabels(){
+ const zh=lang==='zh';
+ const labels={
+  stageMarket:[zh?'当前市场与状态':'Market and current state',zh?'先确认市场、交易阶段、数据日期与当前状态，再读任何策略结论。':'Confirm market, session, data date and current state before interpreting strategy conclusions.'],
+  stageDecision:[zh?'TRIAID 当前决策':'Current TRIAID decision',zh?'看选了哪些策略、权重怎么变、为什么变；候选池只是对照，不混入正式配置。':'See what was selected, how weights changed and why; candidates remain a separate control set.'],
+  stageValidation:[zh?'真实结果验证':'Realized outcome validation',zh?'把冻结基线与冻结 TRIAID 放在同一结果期比较，再看累计路径是否持续。':'Compare frozen baseline and frozen TRIAID over the same outcome period, then check persistence on the cumulative path.'],
+  stageRoute:[zh?'市场专属路线与可实现性':'Market-specific route and realizability',zh?'进入当前市场自己的主实验路线，检查底层敞口、资金容量、执行成本和前瞻/后验。':'Use the selected market’s own route to inspect underlying exposure, capacity, execution cost and prospective/posterior evidence.'],
+  stageRisk:[zh?'三市场联动风险':'Three-market linked risk',zh?'从单市场决策切到 US/A股/港股联合风险层：先看风险结论和主要驱动，再按需展开深层证据。':'Move from single-market decisions to the joint US/CN/HK risk layer: read the conclusion and main drivers first, then open deep evidence as needed.'],
+  stageEvolution:[zh?'Core 进化':'Core evolution',zh?'只有已经完成的真实后验与审计证据，才能推动 Candidate 与 Core 变化。':'Only completed realized posterior and audit evidence can change a Candidate or Core.']
+ };
+ Object.entries(labels).forEach(([id,v])=>{
+  if(el(id+'Title'))el(id+'Title').textContent=v[0];
+  if(el(id+'Desc'))el(id+'Desc').textContent=v[1];
+ });
+ if(el('systemOpsTitle'))el('systemOpsTitle').textContent=zh?'系统运行明细':'System operations';
+ if(el('systemOpsSummary'))el('systemOpsSummary').textContent=zh?' · 后台调度、刷新和事件日志':' · scheduler, refresh and event logs';
+ if(el('riskDeepEvidenceTitle'))el('riskDeepEvidenceTitle').textContent=zh
+  ?'展开深层风险证据：传导、利率曲线、历史回溯与 Shadow 风控实验'
+  :'Open deep risk evidence: transmission, rate curves, historical replay and shadow risk-control experiments';
+}
 function applyText(){
  const t=T[lang];
  const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
@@ -2071,13 +2151,14 @@ function applyText(){
  Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
  applyTableHeaderTooltips();
  applyUiTooltips();
+ applyFlowLabels();
  if(el('selectedMarketKicker'))el('selectedMarketKicker').textContent=lang==='zh'?'当前市场':'Selected market';
  if(el('marketSectionNote'))el('marketSectionNote').textContent=lang==='zh'
-  ?'以下先展示当前所选市场的结果、行情、策略池和该市场专属实验。三市场联动风险中心放在单市场内容之后。'
-  :'The selected market’s results, live data, strategy pool and market-specific experiments appear first. The three-market linked risk center follows later.';
+  ?'下面按一条主线阅读：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属路线与可实现性 → 三市场风险 → Core进化。'
+  :'Read the page as one chain: market/state → TRIAID decision → realized validation → market-specific realizability → three-market risk → Core evolution.';
  if(el('crossMarketRiskNote'))el('crossMarketRiskNote').textContent=lang==='zh'
-  ?'以下为跨市场联动风险层。它始终联合分析 US、A股、港股，不随上方单市场选择器切换。'
-  :'The section below is the cross-market risk layer. It always analyzes US, CN and HK jointly and does not switch with the selected market.';
+  ?'从这里开始切换到三市场联合风险层：它始终同时分析 US、A股、港股，不随上方单市场选择器切换。'
+  :'From here the page switches to the joint three-market risk layer. It always analyzes US, CN and HK together and does not follow the single-market selector.';
 }
 function statusActionGuide(status){
  const key=String(status||'').toLowerCase();
@@ -2257,8 +2338,8 @@ function renderHomeSummary(){
   ? ('现在你看到的是 '+marketName+'；TRIAID 当前从策略池中选入 '+(count==null?'若干':count)+' 个策略，'+(changed==null?'并根据证据调整权重':('其中 '+changed+' 个发生权重调整'))+'；'+validationPhrase+'；'+riskPhrase+'。')
   : ('You are viewing '+marketName+'. TRIAID currently selected '+(count==null?'a set of':count)+' strategies, '+(changed==null?'with evidence-based reweighting':changed+' of them reweighted')+'; '+validationPhrase+'; '+riskPhrase+'.');
  el('homeSummaryGuide').textContent=zh
-  ? '阅读顺序：当前市场与交易状态 → 策略选择/权重调整 → 真实后验结果 → 三市场风险。下面的复杂表格主要用于追溯证据，第一次使用不需要逐项读完。'
-  : 'Read in this order: current market/session → strategy selection and reweighting → realized outcome → three-market risk. The detailed tables below are mainly for evidence traceability; first-time users do not need to read every row.';
+  ? '阅读顺序：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属可实现性 → 三市场风险 → Core进化。深层证据和系统日志默认放在后面或折叠区。'
+  : 'Read in this order: market/state → TRIAID decision → realized validation → market-specific realizability → three-market risk → Core evolution. Deep evidence and system logs are moved later or collapsed.';
 }
 function phaseText(phase){
  const p=String(phase||'');
