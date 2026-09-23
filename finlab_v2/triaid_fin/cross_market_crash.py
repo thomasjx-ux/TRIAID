@@ -367,9 +367,9 @@ class CrossMarketCrashExperiment:
         previous=self.latest()
         errors={}
         indexes={}
-        market_indexes=market_indexes()
-        primary_index=primary_indexes()
-        for market,specs in market_indexes.items():
+        registered_indexes=market_indexes()
+        registered_primary=primary_indexes()
+        for market,specs in registered_indexes.items():
             rows={}
             for label,symbol in specs.items():
                 try:
@@ -379,11 +379,14 @@ class CrossMarketCrashExperiment:
             indexes[market]=rows
 
         primary_series={}
-        for market,label in primary_index.items():
+        for market,label in registered_primary.items():
             row=(indexes.get(market) or {}).get(label)
             if row is None:
-                raise RuntimeError(f"primary_index_unavailable:{market}:{label}:{errors}")
+                errors[f"{market}:{label}:PRIMARY"]="primary_index_unavailable"
+                continue
             primary_series[market]=row
+        if len(primary_series)<2:
+            raise RuntimeError(f"insufficient_primary_markets:{sorted(primary_series)}:{errors}")
 
         as_of=min(
             datetime.fromtimestamp(int(series["ts"][-1]),timezone.utc).date()
@@ -428,12 +431,12 @@ class CrossMarketCrashExperiment:
             "production_action":"NONE",
             "markets":sorted(primary_series),
             "primary_indexes":{
-                market:f"{label} ({(market_indexes.get(market) or {}).get(label)})"
-                for market,label in primary_index.items()
+                market:f"{label} ({(registered_indexes.get(market) or {}).get(label)})"
+                for market,label in registered_primary.items()
             },
             "secondary_indexes":{
                 market:list(specs)
-                for market,specs in market_indexes.items()
+                for market,specs in registered_indexes.items()
             },
             "crash_definition":{
                 "trigger":"20% peak-to-current drawdown",
@@ -451,16 +454,18 @@ class CrossMarketCrashExperiment:
             "data_completeness":{
                 **{
                     f"{market}_indexes":len(indexes.get(market) or {})
-                    for market in market_indexes
+                    for market in registered_indexes
                 },
                 **{
                     f"{market}_indexes_requested":len(specs)
-                    for market,specs in market_indexes.items()
+                    for market,specs in registered_indexes.items()
                 },
                 "primary_indexes_complete":all(
                     (indexes.get(market) or {}).get(label) is not None
-                    for market,label in primary_index.items()
+                    for market,label in registered_primary.items()
                 ),
+                "primary_markets_available":sorted(primary_series),
+                "primary_markets_unavailable":sorted(set(registered_primary)-set(primary_series)),
                 "errors":errors,
             },
             "interpretation":{
