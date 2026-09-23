@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - backend-full-audit-20260921
+      - arch/n-market-multi-account-final
     paths:
       - "finlab_v2/**"
       - ".github/workflows/finlab-v2-audit.yml"
@@ -27,31 +28,6 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r finlab_v2/requirements.txt
-      - name: Compile audited backend
+      - name: Run canonical release audit
         working-directory: finlab_v2
-        run: |
-          python -m py_compile app.py triaid_fin/*.py *.py
-      - name: Run deterministic regression suite
-        working-directory: finlab_v2
-        run: |
-          python selftest.py
-          python backend_audit_regression.py
-          python manual_preview_isolation_smoke.py
-          python bootstrap_persistence_guard_smoke.py
-          python startup_readonly_contract_smoke.py
-          python primary_revision_migration_smoke.py
-          python strategy_contract_smoke.py
-          python provider_adjustment_smoke.py
-          python provider_freshness_smoke.py
-          python tushare_auction_smoke.py
-          python close_transition_regression.py
-          python prospective_experiment_smoke.py
-          python recovery_wave_smoke.py
-          python capital_capacity_smoke.py
-          python us_return_max_smoke.py
-          python adaptive_alpha_promotion_smoke.py
-          python core_evolution_validation_smoke.py
-          python strategy_evolution_validation_smoke.py
-          python ui_smoke.py
-          python production_smoke_contract_static.py
-          python deployment_reproducibility_smoke.py
+        run: python release_audit.py build

@@ -1,7 +1,26 @@
 from __future__ import annotations
 
 from .contracts import BilingualText, StrategyDefinition
-from .cn_incubator import CN_SHADOW_IDS, definitions as cn_shadow_definitions
+from .cn_incubator import definitions as cn_shadow_definitions, positions as cn_shadow_positions
+from .market_registry import normalize_market_id
+
+
+_MARKET_STRATEGY_PACKS: dict[str, dict] = {}
+
+
+def register_market_strategy_pack(market_id: str, *, definitions_fn, positions_fn) -> None:
+    key=normalize_market_id(market_id)
+    _MARKET_STRATEGY_PACKS[key]={
+        "definitions_fn":definitions_fn,
+        "positions_fn":positions_fn,
+    }
+
+
+register_market_strategy_pack(
+    "CN",
+    definitions_fn=cn_shadow_definitions,
+    positions_fn=cn_shadow_positions,
+)
 
 POLICY_IDS = (
     "P00_BUY_HOLD","P01_VOL10","P02_VOL15","P03_DD_GUARD","P04_TREND50",
@@ -192,12 +211,41 @@ def build_definitions() -> list[StrategyDefinition]:
                 main_risks=BilingualText(zh=zh_risk,en=en_risk),
             )
         )
-    out.extend(cn_shadow_definitions())
+    for pack in _MARKET_STRATEGY_PACKS.values():
+        out.extend(pack["definitions_fn"]())
     return out
 
 
-def strategy_ids_for_market(market_id: str) -> tuple[str, ...]:
-    key=market_id.upper()
-    if key in {"CN","A","A_SHARE","ASHARE"}:
-        return POLICY_IDS + CN_SHADOW_IDS
-    return POLICY_IDS
+def strategy_ids_for_market(
+    market_id: str,
+    *,
+    account_id: str = "GLOBAL",
+    strategy_pool_id: str | None = None,
+) -> tuple[str, ...]:
+    key=normalize_market_id(market_id)
+    eligible=tuple(
+        row.strategy_id
+        for row in build_definitions()
+        if (
+            row.strategy_id in POLICY_IDS
+            or "*" in {str(x).upper() for x in row.market_support}
+            or key in {str(x).upper() for x in row.market_support}
+        )
+    )
+    if account_id=="GLOBAL" and strategy_pool_id in {None,"GLOBAL"}:
+        return eligible
+    from .account_registry import account_strategy_ids
+    return account_strategy_ids(
+        key,
+        eligible,
+        account_id=account_id,
+        pool_id=strategy_pool_id,
+    )
+
+
+def market_extension_positions(panel, i: int) -> dict[str, list[float]]:
+    key=normalize_market_id(panel.spec.market_id)
+    pack=_MARKET_STRATEGY_PACKS.get(key)
+    if not pack:
+        return {}
+    return dict(pack["positions_fn"](panel,i))

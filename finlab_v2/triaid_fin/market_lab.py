@@ -12,40 +12,8 @@ from zoneinfo import ZoneInfo
 from .contracts import BilingualText, MarketSnapshot, StrategyState
 from .market_data import MarketDataError, get_market_data_hub, session_phase
 from .trading_calendar import trading_day_info
-from .cn_incubator import CN_SHADOW_IDS, positions as cn_shadow_positions
-from .strategy_registry import POLICY_IDS, strategy_ids_for_market
-
-
-@dataclass(frozen=True)
-class MarketSpec:
-    market_id:str
-    benchmark:str
-    assets:tuple[str,...]
-    risk_assets:tuple[str,...]
-    defensive_assets:tuple[str,...]
-    currency:str
-    reference_capital:float
-    base_cost_bps:float
-    impact_coefficient_bps:float
-    max_participation_adv:float
-
-
-MARKETS={
-    "US":MarketSpec(
-        "US","SPY",("SPY","QQQ","IWM","TLT","GLD"),("SPY","QQQ","IWM"),("TLT","GLD"),
-        "USD",10_000_000.0,1.5,45.0,0.03,
-    ),
-    "CN":MarketSpec(
-        "CN","510300.SS",("510300.SS","510500.SS","159915.SZ","512100.SS","511010.SS"),
-        ("510300.SS","510500.SS","159915.SZ","512100.SS"),("511010.SS",),
-        "CNY",50_000_000.0,2.5,60.0,0.02,
-    ),
-    "HK":MarketSpec(
-        "HK","2800.HK",("2800.HK","2828.HK","3033.HK","2819.HK"),
-        ("2800.HK","2828.HK","3033.HK"),("2819.HK",),
-        "HKD",50_000_000.0,2.0,55.0,0.02,
-    ),
-}
+from .market_registry import MarketSpec, MARKETS, normalize_market_id
+from .strategy_registry import POLICY_IDS, strategy_ids_for_market, market_extension_positions
 
 
 @dataclass
@@ -89,9 +57,10 @@ def fetch_yahoo(symbol:str,range_:str="10y",interval:str="1d",timeout:int=20)->S
 
 
 def fetch_panel(market_id:str,mode:str="DAILY",force:bool=False)->MarketPanel:
-    key=market_id.upper()
-    if key not in MARKETS:
-        raise MarketDataError(f"unsupported_market:{market_id}")
+    try:
+        key=normalize_market_id(market_id)
+    except KeyError as exc:
+        raise MarketDataError(f"unsupported_market:{market_id}") from exc
     spec=MARKETS[key]
     raw=get_market_data_hub().refresh_panel(
         key,
@@ -175,16 +144,16 @@ def market_data_instrument_series(market_id:str,symbol:str,mode:str="DAILY")->di
 
 
 def strategy_market_context(market_id:str)->dict:
-    key=market_id.upper()
-    if key not in MARKETS:
-        raise MarketDataError(f"unsupported_market:{market_id}")
+    try:
+        key=normalize_market_id(market_id)
+    except KeyError as exc:
+        raise MarketDataError(f"unsupported_market:{market_id}") from exc
     daily=fetch_panel(key,"DAILY",force=False)
     if len(daily.ts)<2:
         raise MarketDataError(f"insufficient_daily_history:{key}")
     i=len(daily.ts)-1
     current_positions=policy_positions(daily,i)
-    if key=="CN":
-        current_positions.update(cn_shadow_positions(daily,i))
+    current_positions.update(market_extension_positions(daily,i))
 
     live=get_market_data_hub().cached_panel(key,"REALTIME")
     price_panel=(
@@ -386,7 +355,7 @@ def policy_positions(panel:MarketPanel,i:int)->dict[str,list[float]]:
 
     balanced=[0.0]*len(assets)
     if b in assets:
-        balanced[assets.index(b)]=0.70 if spec.market_id=="CN" else 0.60
+        balanced[assets.index(b)]=spec.balanced_risk_weight
     if defensive:
         remaining=1.0-sum(balanced)
         for asset in defensive:
@@ -455,8 +424,7 @@ def policy_return_history(panel:MarketPanel)->dict[str,list[float]]:
     prev={pid:[0.0]*len(assets) for pid in ids}
     for i in range(n-1):
         positions=policy_positions(panel,i)
-        if panel.spec.market_id=="CN":
-            positions.update(cn_shadow_positions(panel,i))
+        positions.update(market_extension_positions(panel,i))
         next_returns=[asset_returns[a][i+1] for a in assets]
         for pid in ids:
             pos=positions[pid]
@@ -569,7 +537,7 @@ def prepare_live_market(
     daily_content_fingerprint=hashlib.sha256(
         json.dumps(final_payload,sort_keys=True,separators=(",",":")).encode("utf-8")
     ).hexdigest()
-    local_tz=ZoneInfo("America/New_York" if panel.spec.market_id=="US" else "Asia/Hong_Kong" if panel.spec.market_id=="HK" else "Asia/Shanghai")
+    local_tz=ZoneInfo(panel.spec.timezone)
     local_now=datetime.now(local_tz)
     local_today=local_now.date().isoformat()
     settle_seconds=max(0,int(os.getenv("TRIAID_CLOSE_SETTLE_SECONDS","300")))

@@ -5,6 +5,8 @@ import math
 from dataclasses import dataclass,asdict
 from datetime import datetime,timezone
 
+from .market_registry import market_ids
+
 
 @dataclass
 class FrequencyEvidence:
@@ -182,7 +184,7 @@ class FrequencyPolicy:
                     mode:self.status_one(market,mode)
                     for mode in self.LADDERS
                 }
-                for market in ("US","CN","HK")
+                for market in market_ids()
             },
         }
 

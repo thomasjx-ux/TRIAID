@@ -9,12 +9,14 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from .audit import AuditModule
+from .account_registry import ACCOUNT_REGISTRY, register_account, register_strategy_pool
 from .alpha_evidence import AlphaEvidenceLedger
-from .contracts import MarketSnapshot, OutcomeRequest, RunRecord, RunRequest
+from .contracts import AccountProfile, DecisionContext, MarketSnapshot, OutcomeRequest, RunRecord, RunRequest, StrategyPoolSpec
 from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
+from .market_registry import MARKET_REGISTRY, evidence_market_ids, market_ids, normalize_market_id
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
@@ -33,6 +35,7 @@ from .review import ReviewModule
 from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
+from .strategy_registry import strategy_ids_for_market
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
@@ -44,6 +47,9 @@ class EvolutionLabEngine:
 
     def __init__(self) -> None:
         self.store=RunStore()
+        MARKET_REGISTRY.load_from_store(self.store)
+        self.account_registry=ACCOUNT_REGISTRY
+        self.account_registry.load_from_store(self.store)
         self.observations=MarketObservationStore(self.store)
         self.evolution=EvolutionModule(self.store)
         self.strategy_evolution=StrategyEvolutionModule(self.store)
@@ -85,16 +91,20 @@ class EvolutionLabEngine:
             self.store.save_run(run)
 
     def _prune_manual_previews(self,max_per_market:int=5)->None:
-        for market_id in ("US","CN","HK"):
-            previews=sorted(
-                [
-                    r for r in self._runs.values()
-                    if r.market.market_id.upper()==market_id
-                    and str((r.market.metadata or {}).get("run_scope") or "")=="MANUAL_PREVIEW"
-                    and r.status!="FETCHING_DATA"
-                ],
-                key=lambda r:r.created_at,
+        buckets:dict[tuple[str,str,str],list[RunRecord]]={}
+        for row in self._runs.values():
+            if str((row.market.metadata or {}).get("run_scope") or "")!="MANUAL_PREVIEW":
+                continue
+            if row.status=="FETCHING_DATA":
+                continue
+            key=(
+                str(row.market.market_id).upper(),
+                str(row.account_id or "GLOBAL"),
+                str(row.strategy_pool_id or "GLOBAL"),
             )
+            buckets.setdefault(key,[]).append(row)
+        for previews in buckets.values():
+            previews.sort(key=lambda row:row.created_at)
             for row in previews[:-max_per_market]:
                 self._runs.pop(row.run_id,None)
 
@@ -124,8 +134,19 @@ class EvolutionLabEngine:
         return receipt
 
     def _apply_strategy_profiles(self)->None:
-        for market_id in ("US","CN","HK"):
+        for market_id in market_ids():
             self.strategy_population.configure_market(self.strategy_evolution.active(market_id))
+
+    def account_registry_status(self)->dict:
+        return self.account_registry.snapshot()
+
+    def upsert_strategy_pool(self,pool:StrategyPoolSpec)->dict:
+        row=register_strategy_pool(pool,replace=True,persist=True)
+        return row.model_dump(mode="json")
+
+    def upsert_account(self,account:AccountProfile)->dict:
+        row=register_account(account,replace=True,persist=True)
+        return row.model_dump(mode="json")
 
     def refresh_core(self)->None:
         params=self.evolution.active()
@@ -136,6 +157,8 @@ class EvolutionLabEngine:
     def module_manifest(self)->Dict[str,str]:
         return {
             "architecture":self.architecture_version,
+            "account_registry":self.account_registry.version,
+            "market_registry":MARKET_REGISTRY.version,
             "objective_constitution":OBJECTIVE_CONSTITUTION_VERSION,
             "market_data":self.market_adapter_version,
             "market_data_hub":market_data_status().get("version","market-data-hub@unknown"),
@@ -173,10 +196,15 @@ class EvolutionLabEngine:
 
     def create_run(self,request:RunRequest,run_id:str|None=None)->RunRecord:
         run_id=run_id or f"{request.market.market_id}-{uuid4().hex[:12]}"
+        account_id=(request.account.account_id if request.account else (request.decision_context.account_id if request.decision_context else "GLOBAL"))
+        strategy_pool_id=(request.strategy_pool.pool_id if request.strategy_pool else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL"))
         run=RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
             market=request.market,
+            account_id=account_id,
+            strategy_pool_id=strategy_pool_id,
+            decision_context=request.decision_context,
             strategy_states=list(request.strategy_states),
         )
         with self._lock:
@@ -187,8 +215,11 @@ class EvolutionLabEngine:
     def claim_manual_preview_run(
         self,
         market_id:str,
+        account_id:str="GLOBAL",
     )->tuple[RunRecord,bool,str]:
-        market_id=market_id.upper()
+        market_id=normalize_market_id(market_id)
+        account=self.account_registry.get_account(account_id)
+        strategy_pool=self.account_registry.get_pool(account.strategy_pool_id)
         cooldown_seconds=max(
             0,
             int(os.getenv("TRIAID_MANUAL_PREVIEW_COOLDOWN_SECONDS","60") or "60"),
@@ -224,10 +255,12 @@ class EvolutionLabEngine:
                     return recent,False,"COOLDOWN_REUSED"
 
             self._prune_manual_previews()
-            run_id=f"{market_id}-live-{uuid4().hex[:12]}"
+            run_id=f"{market_id}-{account.account_id}-live-{uuid4().hex[:12]}"
             run=RunRecord(
                 run_id=run_id,
                 module_manifest=self.module_manifest,
+                account_id=account.account_id,
+                strategy_pool_id=strategy_pool.pool_id,
                 market=MarketSnapshot(
                     market_id=market_id,
                     as_of="",
@@ -236,6 +269,8 @@ class EvolutionLabEngine:
                         "run_scope":"MANUAL_PREVIEW",
                         "evidence_eligible":False,
                         "research_only":True,
+                        "account_id":account.account_id,
+                        "strategy_pool_id":strategy_pool.pool_id,
                     },
                 ),
                 status="FETCHING_DATA",
@@ -248,19 +283,24 @@ class EvolutionLabEngine:
         self,
         market_id:str,
         run_scope:str="OFFICIAL_EVIDENCE",
+        account_id:str="GLOBAL",
     )->RunRecord:
-        market_id=market_id.upper()
+        market_id=normalize_market_id(market_id)
+        account=self.account_registry.get_account(account_id)
+        strategy_pool=self.account_registry.get_pool(account.strategy_pool_id)
         run_scope=str(run_scope or "OFFICIAL_EVIDENCE").upper()
         if run_scope not in {"OFFICIAL_EVIDENCE","MANUAL_PREVIEW"}:
             raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
         if run_scope=="MANUAL_PREVIEW":
-            run,_,_=self.claim_manual_preview_run(market_id)
+            run,_,_=self.claim_manual_preview_run(market_id,account.account_id)
             return run
 
-        run_id=f"{market_id}-live-{uuid4().hex[:12]}"
+        run_id=f"{market_id}-{account.account_id}-live-{uuid4().hex[:12]}"
         run=RunRecord(
             run_id=run_id,
             module_manifest=self.module_manifest,
+            account_id=account.account_id,
+            strategy_pool_id=strategy_pool.pool_id,
             market=MarketSnapshot(
                 market_id=market_id,
                 as_of="",
@@ -269,6 +309,8 @@ class EvolutionLabEngine:
                     "run_scope":"OFFICIAL_EVIDENCE",
                     "evidence_eligible":True,
                     "research_only":True,
+                    "account_id":account.account_id,
+                    "strategy_pool_id":strategy_pool.pool_id,
                 },
             ),
             status="FETCHING_DATA",
@@ -300,12 +342,16 @@ class EvolutionLabEngine:
         market_id:str,
         exclude_run_id:str|None=None,
         experiment_mode:str|None=None,
+        account_id:str="GLOBAL",
+        strategy_pool_id:str="GLOBAL",
     ):
         mode=str(experiment_mode or "").upper()
         rows=[
             r for r in self.all_runs()
             if r.run_id!=exclude_run_id
             and r.market.market_id.upper()==market_id.upper()
+            and str(r.account_id or "GLOBAL")==str(account_id or "GLOBAL")
+            and str(r.strategy_pool_id or "GLOBAL")==str(strategy_pool_id or "GLOBAL")
             and r.strategy_group is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
             and self._complete_daily_evidence_run(r)
@@ -319,15 +365,32 @@ class EvolutionLabEngine:
     def execute(self,run_id:str,request:RunRequest)->None:
         try:
             current_mode=str(request.market.metadata.get("experiment_mode") or "")
+            request_account_id=(
+                request.account.account_id
+                if request.account
+                else (request.decision_context.account_id if request.decision_context else "GLOBAL")
+            )
             previous_group=self._previous_group_for(
                 request.market.market_id,
                 run_id,
                 current_mode,
+                request_account_id,
+                (
+                    request.strategy_pool.pool_id
+                    if request.strategy_pool
+                    else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL")
+                ),
             )
             previous_state_rows=[
                 r for r in self.all_runs()
                 if r.run_id!=run_id
                 and r.market.market_id.upper()==request.market.market_id.upper()
+                and str(r.account_id or "GLOBAL")==str(request_account_id or "GLOBAL")
+                and str(r.strategy_pool_id or "GLOBAL")==str(
+                    request.strategy_pool.pool_id
+                    if request.strategy_pool
+                    else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL")
+                )
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_states
                 and self._complete_daily_evidence_run(r)
@@ -382,6 +445,13 @@ class EvolutionLabEngine:
             with self._lock:
                 run=self._runs[run_id]
                 run.market=request.market
+                run.account_id=request_account_id
+                run.strategy_pool_id=(
+                    request.strategy_pool.pool_id
+                    if request.strategy_pool
+                    else (request.decision_context.strategy_pool_id if request.decision_context else "GLOBAL")
+                )
+                run.decision_context=request.decision_context
                 run.strategy_states=list(request.strategy_states)
                 run.module_manifest=self.module_manifest
                 run.strategy_group=group
@@ -474,14 +544,35 @@ class EvolutionLabEngine:
             raise ValueError("run_scope must be OFFICIAL_EVIDENCE or MANUAL_PREVIEW")
         evidence_eligible=run_scope=="OFFICIAL_EVIDENCE"
         try:
+            with self._lock:
+                run_context=self._runs[run_id]
+                account_id=str(run_context.account_id or "GLOBAL")
+                strategy_pool_id=str(run_context.strategy_pool_id or "GLOBAL")
+            account=self.account_registry.get_account(account_id)
+            strategy_pool=self.account_registry.get_pool(strategy_pool_id)
             profile=self.strategy_evolution.active(market_id)
             prepared=prepare_live_market(market_id,profile.window_weights)
+            eligible_strategy_ids=set(
+                strategy_ids_for_market(
+                    market_id,
+                    account_id=account_id,
+                    strategy_pool_id=strategy_pool_id,
+                )
+            )
+            prepared["strategy_states"]=[
+                state for state in prepared["strategy_states"]
+                if state.strategy_id in eligible_strategy_ids
+            ]
             snapshot=prepared["snapshot"]
             snapshot.metadata["strategy_rules_version"]=profile.version
             snapshot.metadata["run_scope"]=run_scope
             snapshot.metadata["evidence_eligible"]=evidence_eligible
             snapshot.metadata["research_only"]=True
             snapshot.metadata["broker_execution_enabled"]=False
+            snapshot.metadata["account_id"]=account_id
+            snapshot.metadata["strategy_pool_id"]=strategy_pool_id
+            snapshot.metadata["account_capital"]=account.capital
+            snapshot.metadata["account_objective"]=account.objective
 
             phase=str(snapshot.metadata.get("session_phase") or "").upper()
             daily_bar_complete=bool(snapshot.metadata.get("daily_bar_complete"))
@@ -688,7 +779,21 @@ class EvolutionLabEngine:
             request=RunRequest(
                 market=snapshot,
                 strategy_states=states,
-                max_group_size=profile.max_group_size,
+                account=account,
+                strategy_pool=strategy_pool,
+                decision_context=DecisionContext(
+                    market_id=market_id,
+                    account_id=account_id,
+                    strategy_pool_id=strategy_pool_id,
+                    objective=account.objective,
+                    capital_state={"capital":account.capital,"base_currency":account.base_currency},
+                    risk_state={
+                        "risk_budget":account.risk_budget,
+                        "max_drawdown_constraint":account.max_drawdown_constraint,
+                    },
+                    cross_market_state={},
+                ),
+                max_group_size=min(profile.max_group_size,strategy_pool.max_group_size),
             )
             with self._lock:
                 run=self._runs[run_id]
@@ -910,14 +1015,11 @@ class EvolutionLabEngine:
 
     @staticmethod
     def primary_experiment_mode(market_id:str)->str:
-        market_id=market_id.upper()
-        if market_id=="CN":
-            return "CN_RETURN_MAX_CAPACITY"
-        if market_id=="US":
-            return "US_RETURN_MAX_CAPACITY"
-        if market_id=="HK":
-            return "HK_RETURN_MAX_CAPACITY"
-        raise ValueError(f"unsupported market_id: {market_id}")
+        market=normalize_market_id(market_id)
+        mode=str(MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or "").upper()
+        if not mode:
+            raise ValueError(f"primary experiment adapter not registered for market_id: {market}")
+        return mode
 
     def latest_decision_run(
         self,
@@ -943,8 +1045,8 @@ class EvolutionLabEngine:
         ]
         return rows[-1] if rows else None
 
-    def run_live_research(self,market_id:str)->RunRecord:
-        run=self.create_pending_live_run(market_id,"OFFICIAL_EVIDENCE")
+    def run_live_research(self,market_id:str,account_id:str="GLOBAL")->RunRecord:
+        run=self.create_pending_live_run(market_id,"OFFICIAL_EVIDENCE",account_id)
         self.execute_live(run.run_id,market_id,"OFFICIAL_EVIDENCE")
         return self.get_run(run.run_id)
 
@@ -1194,10 +1296,13 @@ class EvolutionLabEngine:
             "active_core":self.evolution.active().__dict__,
             "active_strategy_rules":{
                 market_id:self.strategy_evolution.active(market_id).__dict__
-                for market_id in ("US","CN","HK")
+                for market_id in market_ids()
             },
             "strategy_registry_count":len(self.strategy_population.definitions()),
-            "markets":["US","CN","HK"],
+            "markets":list(market_ids()),
+            "evidence_markets":list(evidence_market_ids()),
+            "market_registry":MARKET_REGISTRY.snapshot(),
+            "account_registry":self.account_registry.snapshot(),
             "run_counts":counts,
             "run_scope_counts":{
                 "official_evidence":sum(1 for r in runs if self._evidence_eligible_run(r)),
@@ -1378,7 +1483,7 @@ class EvolutionLabEngine:
             if created_at and r.created_at>created_at
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
-            and str(r.market.market_id).upper() in {"US","CN","HK"}
+            and str(r.market.market_id).upper() in set(evidence_market_ids())
             and str((r.market.metadata or {}).get("experiment_mode") or "").upper()
                 == self.primary_experiment_mode(str(r.market.market_id).upper())
             and r.run_id not in known_ids
@@ -1419,7 +1524,7 @@ class EvolutionLabEngine:
         def replay_by_market(rows:list[RunRecord])->dict:
             return {
                 market:replay([r for r in rows if str(r.market.market_id).upper()==market])
-                for market in ("US","CN","HK")
+                for market in evidence_market_ids()
             }
 
         dev_result=replay(dev)
@@ -1437,10 +1542,10 @@ class EvolutionLabEngine:
                 and result["candidate_mean"]>=result["parent_mean"]-1e-12
             )
 
-        replay_pass=all(nondegrading(dev_by_market[m],1) for m in ("US","CN","HK"))
-        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in ("US","CN","HK"))
+        replay_pass=all(nondegrading(dev_by_market[m],1) for m in evidence_market_ids())
+        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in evidence_market_ids())
         shadow_min_per_market=5
-        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in ("US","CN","HK"))
+        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in evidence_market_ids())
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
             and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
@@ -1484,7 +1589,7 @@ class EvolutionLabEngine:
             }
         return {
             market_id:self.strategy_evolution_status(market_id)
-            for market_id in ("US","CN","HK")
+            for market_id in market_ids()
         }
 
     def propose_strategy_candidate(self,market_id:str)->dict:
