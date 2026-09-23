@@ -466,8 +466,19 @@ def submit_outcome(run_id: str, outcome: OutcomeRequest, _admin:None=Depends(req
 
 
 @app.get("/api/daily")
-def daily(market_id: str | None = None) -> dict:
-    return engine.daily_summary(market_id)
+def daily(
+    market_id: str | None = None,
+    compact: bool = Query(default=False),
+) -> dict:
+    return engine.daily_summary(market_id,compact=compact)
+
+
+@app.get("/api/ui/core")
+def ui_core_status()->dict:
+    return {
+        "version":engine.core.version,
+        "architecture_version":engine.architecture_version,
+    }
 
 
 @app.get("/api/curves")
@@ -1795,7 +1806,7 @@ function clearMarketCache(m){
 }
 function warmMarketCache(m){
  const urls=[
-   '/api/daily?market_id='+m,
+   '/api/daily?compact=true&market_id='+m,
    '/api/strategies?market_id='+m+'&lang='+lang,
    '/api/curves?market_id='+m,
    '/api/runs?market_id='+m+'&limit=100',
@@ -1822,11 +1833,11 @@ function setPulse(id,on,warn=false){
 async function refreshLiveWindows(){
  const m=el('market').value;
  const seq=++liveSeq;
+ const idxPromise=jsonCached('/api/market-data/live-indicators/'+m,2000);
+ const actPromise=jsonCached('/api/market-data/activity/'+m+'?limit=80',2500);
+
  try{
-  const [idx,act]=await Promise.all([
-   jsonCached('/api/market-data/live-indicators/'+m,2000),
-   jsonCached('/api/market-data/activity/'+m+'?limit=80',2500)
-  ]);
+  const idx=await idxPromise;
   if(seq!==liveSeq||el('market').value!==m)return;
   const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
   setPulse('marketPulse',fresh,idx.available&&!fresh);
@@ -1843,6 +1854,16 @@ async function refreshLiveWindows(){
     '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
     '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
   }).join('');
+ }catch(e){
+  if(seq===liveSeq&&el('market').value===m){
+   setPulse('marketPulse',false,true);
+   el('indexMeta').textContent='Live data error: '+e.message;
+  }
+ }
+
+ try{
+  const act=await actPromise;
+  if(seq!==liveSeq||el('market').value!==m)return;
   const events=act.events||[];
   const last=events.length?events[events.length-1]:null;
   const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
@@ -1855,18 +1876,16 @@ async function refreshLiveWindows(){
     '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
     esc(e.message||'')+'</div>';
   }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
-
-  // Strategy context is tooltip enrichment only. It must never block the
-  // visible market switch path.
-  jsonCached('/api/market-data/strategy-context/'+m,60000)
-    .then(ctx=>{strategyMarketContext[m]=ctx;})
-    .catch(()=>{});
  }catch(e){
-  if(seq!==liveSeq||el('market').value!==m)return;
-  setPulse('marketPulse',false,true);setPulse('activityPulse',false,true);
-  el('indexMeta').textContent='Live data error: '+e.message;
-  el('scheduleMeta').textContent='Activity error: '+e.message;
+  if(seq===liveSeq&&el('market').value===m){
+   setPulse('activityPulse',false,true);
+   el('scheduleMeta').textContent='Activity error: '+e.message;
+  }
  }
+
+ jsonCached('/api/market-data/strategy-context/'+m,60000)
+   .then(ctx=>{strategyMarketContext[m]=ctx;})
+   .catch(()=>{});
 }
 function applyMarketScope(){
  const m=el('market').value;
@@ -2235,12 +2254,10 @@ async function refreshAll(){
  const previewId=previewRunIds[m];
  try{
   const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
-  const [s,d,cards,curves,evo,runs,previewRun,riskWarning,riskControl]=await Promise.all([
-   jsonCached('/api/status',15000),jsonCached('/api/daily?market_id='+m,12000),jsonCached(cardsUrl,12000),
+  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+   jsonCached('/api/ui/core',60000),jsonCached('/api/daily?compact=true&market_id='+m,12000),jsonCached(cardsUrl,12000),
    jsonCached('/api/curves?market_id='+m,12000),jsonCached('/api/evolution',15000),jsonCached('/api/runs?market_id='+m+'&limit=100',12000),
-   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null),
-   jsonOrNullCached('/api/risk-warning/latest',10000),
-   jsonOrNullCached('/api/risk-control/latest',10000)
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
   if(seq!==refreshSeq||el('market').value!==m)return;
   const isCN=m==='CN';
@@ -2276,11 +2293,9 @@ async function refreshAll(){
     : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
-  renderRiskWarning(riskWarning);
-  renderRiskControl(riskControl);
   renderComparison(evaluated);
   el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
-  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
+  el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.version;
   el('selectedCount').textContent=selected.length;
   const cum=lastCurve?lastCurve.cumulative_excess_return:null;el('cumExcess').textContent=fmtPct(cum);el('cumExcess').className='value '+cls(cum||0);
   el('regime').textContent=previewRun?.market?.regime||latest?.regime||'-';
@@ -2341,6 +2356,14 @@ async function refreshAll(){
     : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
  }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
 }
+async function refreshRiskPanels(){
+ const [riskWarning,riskControl]=await Promise.all([
+  jsonOrNullCached('/api/risk-warning/latest',10000),
+  jsonOrNullCached('/api/risk-control/latest',10000)
+ ]);
+ renderRiskWarning(riskWarning);
+ renderRiskControl(riskControl);
+}
 async function propose(){
  const x=await json('/api/evolution/propose',{method:'POST'});
  el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
@@ -2372,8 +2395,8 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows()}
-applyText();applyMarketScope();refreshAll();refreshLiveWindows();setTimeout(warmAllMarkets,300);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();refreshAll();refreshLiveWindows();refreshRiskPanels()}
+applyText();applyMarketScope();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,300);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
 </script>
 </body>
 </html>
