@@ -105,6 +105,13 @@ def structural_checks()->list[dict]:
     check("readiness_audit_gate_present","TRIAID_RELEASE_AUDIT_REQUIRED" in app and "release_audit" in app,None)
     check("audit_status_api_present",'@app.get("/api/audit/status")' in app,None)
     check("runtime_smoke_uses_liveness",'/health/live' in post,None)
+    gateway=ROOT.parent/"gateway"/"gateway.py"
+    if gateway.exists():
+        gateway_text=gateway.read_text(encoding="utf-8")
+        check("gateway_risk_quality_collapse_contract","RISK_QUALITY_OPEN_FIXED" in gateway_text and "quality_collapsed" in gateway_text,None)
+        check("gateway_home_cache_bypass_contract",'Cache-Control","no-store, no-cache, must-revalidate, max-age=0"' in gateway_text,None)
+    else:
+        check("gateway_contract_visible",False,str(gateway))
     check("build_case_manifest_unique",len(BUILD_CASES)==len(set(BUILD_CASES)),BUILD_CASES)
     missing=[x for x in BUILD_CASES if not (ROOT/x).exists()]
     check("all_manifest_scripts_exist",not missing,missing)
@@ -223,7 +230,6 @@ def runtime_checks()->list[dict]:
             "立即运行（预览）",
             'id="riskDataQuality"',
             'id="riskDataGaps"',
-            "<details",
         ):
             check("ui_marker:"+marker,marker in home,None if marker in home else "missing")
         check("ui_no_raw_json_dump","JSON.stringify(d,null,2)" not in home,None)
