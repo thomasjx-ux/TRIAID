@@ -2167,6 +2167,20 @@ function applyFlowLabels(){
  if(el('riskDeepEvidenceTitle'))el('riskDeepEvidenceTitle').textContent=zh
   ?'展开深层风险证据：传导、利率曲线、历史回溯与 Shadow 风控实验'
   :'Open deep risk evidence: transmission, rate curves, historical replay and shadow risk-control experiments';
+ const routeLabels={
+  marketRouteModeLabel:[zh?'主实验模式':'Primary experiment mode'],
+  marketRouteBaselineLabel:[zh?'验证基线':'Validation control'],
+  marketRoutePosteriorLabel:[zh?'该路线最近后验':'Latest route posterior'],
+  marketRouteRealizabilityLabel:[zh?'可实现性证据':'Realizability evidence'],
+  hkSelectedLabel:[zh?'当前入选策略':'Selected strategies'],
+  hkChangedLabel:[zh?'发生权重调整':'Reweighted strategies'],
+  hkPosteriorLabel:[zh?'最近路线后验差':'Latest route posterior gap'],
+  hkCapacityLabel:[zh?'独立容量证据':'HK capacity evidence'],
+  hkAssetTitle:[zh?'港股主路线资产角色':'HK primary-route asset roles'],
+  hkAssetSymbolHeader:[zh?'ETF':'ETF'],
+  hkAssetRoleHeader:[zh?'角色':'Role']
+ };
+ Object.entries(routeLabels).forEach(([id,v])=>{if(el(id))el(id).textContent=v[0]});
 }
 function applyText(){
  const t=T[lang];
