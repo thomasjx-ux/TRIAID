@@ -34,7 +34,7 @@ _LEGACY_PRIMARY_INDEX={
 }
 
 
-def _market_indexes() -> dict[str, dict[str, str]]:
+def market_indexes() -> dict[str, dict[str, str]]:
     out={}
     for market in market_ids():
         spec=MARKET_REGISTRY.get(market)
@@ -46,7 +46,7 @@ def _market_indexes() -> dict[str, dict[str, str]]:
     return out
 
 
-def _primary_index() -> dict[str, str]:
+def primary_indexes() -> dict[str, str]:
     out={}
     for market in market_ids():
         spec=MARKET_REGISTRY.get(market)
@@ -367,8 +367,8 @@ class CrossMarketCrashExperiment:
         previous=self.latest()
         errors={}
         indexes={}
-        market_indexes=_market_indexes()
-        primary_index=_primary_index()
+        market_indexes=market_indexes()
+        primary_index=primary_indexes()
         for market,specs in market_indexes.items():
             rows={}
             for label,symbol in specs.items():
