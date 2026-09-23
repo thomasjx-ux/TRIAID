@@ -10,6 +10,7 @@ from .contracts import RunRecord
 from .objective import PRIMARY_OBJECTIVE
 from .store import RunStore
 from .strategy_population import StrategyPopulationModule
+from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 
 
 @dataclass
@@ -72,9 +73,10 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
             switch_uncertainty_fraction=0.0,
             switch_guard_enabled=True,
         )
-    return StrategyRuleProfile(
-        version="strategy-rules-us@0.3.0",
-        market_id="US",
+    if market_id=="US":
+        return StrategyRuleProfile(
+            version="strategy-rules-us@0.3.0",
+            market_id="US",
         window_weights=(0.35,0.30,0.20,0.15),
         max_group_size=12,
         max_weight=0.28,
@@ -88,6 +90,23 @@ def _seed_profile(market_id: str) -> StrategyRuleProfile:
         switch_hurdle_bps=0.0,
         switch_uncertainty_fraction=0.0,
         switch_guard_enabled=False,
+        )
+    return StrategyRuleProfile(
+        version=f"strategy-rules-{market_id.lower()}@0.1.0",
+        market_id=market_id,
+        window_weights=(0.35,0.30,0.20,0.15),
+        max_group_size=10,
+        max_weight=0.25,
+        entry_confirm_days=3,
+        exit_confirm_days=3,
+        cooldown_days=5,
+        near_duplicate_corr=1.01,
+        family_cap=10,
+        redundancy_penalty=0.0,
+        uncertainty_penalty=0.0,
+        switch_hurdle_bps=0.0,
+        switch_uncertainty_fraction=0.0,
+        switch_guard_enabled=True,
     )
 
 
@@ -102,7 +121,7 @@ class StrategyEvolutionModule:
         raw=store.load_json("strategy_evolution.json",default={})
         if not raw:
             raw={"markets":{}}
-        for market_id in ("US","CN","HK"):
+        for market_id in market_ids():
             if market_id not in raw.setdefault("markets",{}):
                 seed=_seed_profile(market_id)
                 raw["markets"][market_id]={
@@ -136,8 +155,11 @@ class StrategyEvolutionModule:
 
     @staticmethod
     def _primary_mode(market_id:str)->str:
-        market_id=str(market_id).upper()
-        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else "HK_RETURN_MAX_CAPACITY" if market_id=="HK" else ""
+        try:
+            market=normalize_market_id(market_id)
+            return str(MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or "").upper()
+        except KeyError:
+            return ""
 
     @classmethod
     def _primary_evidence(cls,run:RunRecord,market_id:str|None=None)->bool:
