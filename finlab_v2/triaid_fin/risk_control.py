@@ -8,7 +8,7 @@ from .store import RunStore
 
 
 class CrossMarketRiskControlExperiment:
-    version="cross-market-risk-control@0.1.0"
+    version="cross-market-risk-control@0.2.0"
     latest_file="cross_market_risk_control_latest.json"
     history_file="cross_market_risk_control_history.jsonl"
 
@@ -237,6 +237,7 @@ class CrossMarketRiskControlExperiment:
         cross_market:dict|None,
         policy_curve:dict|None,
         prospective:dict|None,
+        market_data_status:dict|None=None,
         force:bool=False,
     )->dict:
         risk_warning=risk_warning or {}
@@ -245,9 +246,24 @@ class CrossMarketRiskControlExperiment:
         cross_market=cross_market or {}
         policy_curve=policy_curve or {}
         prospective=prospective or {}
+        market_data_status=market_data_status or {}
         current=latent.get("current_state") or {}
 
         market_rows=[self._market_row(m,current,risk_warning) for m in ("US","CN","HK")]
+        warning_coverage=risk_warning.get("data_coverage") or {}
+        market_errors=dict(market_data_status.get("errors") or {})
+        hk_hf_errors={
+            k:v for k,v in market_errors.items()
+            if str(k).startswith("HK:") and any(x in str(k) for x in ("INTRADAY","REALTIME"))
+        }
+        data_quality={
+            "risk_evidence_coverage":warning_coverage,
+            "market_data_errors":market_errors,
+            "hk_high_frequency_degraded":bool(hk_hf_errors),
+            "hk_high_frequency_errors":hk_hf_errors,
+            "evidence_critical_daily_data_affected":False,
+            "evidence_boundary":"Daily/long-history evidence remains strict. HK high-frequency sparse defensive data may degrade independently and must not be interpolated into formal evidence.",
+        }
         payload={
             "version":self.version,
             "as_of":max(
@@ -284,6 +300,7 @@ class CrossMarketRiskControlExperiment:
                 "outcomes":prospective.get("outcomes") or {},
             },
             "risk_control_experiment":self._experiment_stage(risk_warning,market_rows,latent),
+            "data_quality":data_quality,
             "warnings":risk_warning.get("warnings") or [],
             "main_drivers":risk_warning.get("main_drivers") or [],
             "missing_confirmations":risk_warning.get("missing_confirmations") or [],
