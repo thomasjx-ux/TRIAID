@@ -56,6 +56,7 @@ BUILD_CASES=[
     "all_market_page_layout_smoke.py",
     "compact_status_overview_smoke.py",
     "empty_posterior_layout_smoke.py",
+    "all_table_surface_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
     "runtime_env_config_smoke.py",
@@ -281,6 +282,52 @@ def runtime_checks()->list[dict]:
         check(f"{market}_market_clock_phase_present",phase in {"OPEN","PREOPEN","BREAK","POSTCLOSE","CLOSED","CALENDAR_UNAVAILABLE"},row)
         check(f"{market}_market_clock_green_semantics",bool(row.get("is_open"))==(phase=="OPEN"),row)
         check(f"{market}_market_clock_local_time_present",bool(row.get("local_iso")),row)
+
+    table_runtime_summary={}
+    for market in ("US","CN","HK"):
+        daily_payload=payloads.get(f"/api/daily?compact=true&market_id={market}")
+        strategy_payload=payloads.get(f"/api/strategies?market_id={market}&lang=zh")
+        curve_payload=payloads.get(f"/api/curves?market_id={market}")
+        live_payload=payloads.get(f"/api/market-data/live-indicators/{market}")
+        check(f"{market}_table_daily_payload",isinstance(daily_payload,dict),type(daily_payload).__name__)
+        check(f"{market}_table_strategy_payload",isinstance(strategy_payload,list) and len(strategy_payload)>0,{"type":type(strategy_payload).__name__,"rows":len(strategy_payload) if isinstance(strategy_payload,list) else None})
+        check(f"{market}_table_curve_payload",isinstance(curve_payload,list),type(curve_payload).__name__)
+        check(f"{market}_table_live_payload",isinstance(live_payload,dict),type(live_payload).__name__)
+        if isinstance(strategy_payload,list):
+            malformed=[
+                row.get("strategy_id") if isinstance(row,dict) else None
+                for row in strategy_payload
+                if not isinstance(row,dict) or not row.get("strategy_id") or "selected" not in row
+            ]
+            check(f"{market}_strategy_table_required_fields",not malformed,malformed[:10])
+            selected_count=sum(1 for row in strategy_payload if isinstance(row,dict) and row.get("selected"))
+        else:
+            selected_count=None
+        daily_payload=daily_payload if isinstance(daily_payload,dict) else {}
+        table_runtime_summary[market]={
+            "date":daily_payload.get("date"),
+            "strategy_rows":len(strategy_payload) if isinstance(strategy_payload,list) else None,
+            "selected_rows":selected_count,
+            "curve_rows":len(curve_payload) if isinstance(curve_payload,list) else None,
+            "live_payload_keys":len(live_payload) if isinstance(live_payload,dict) else None,
+            "has_us_return_max":bool(daily_payload.get("us_return_max")),
+            "has_cn_prospective":bool(daily_payload.get("prospective_experiment")),
+            "has_cn_recovery_wave":bool(daily_payload.get("recovery_wave")),
+        }
+
+    risk_table_summary={
+        "three_market_rows":len((risk_control.get("three_market_state") or risk_control.get("market_states") or [])) if isinstance(risk_control,dict) else None,
+        "dynamics_rows":len((risk_control.get("dynamics_chain") or [])) if isinstance(risk_control,dict) else None,
+        "macro_rows":len((risk_control.get("rates_policy_credit_snapshot") or {})) if isinstance(risk_control,dict) else None,
+        "term_curve_contract_rows":sum(
+            len(x or []) for k,x in ((risk_control.get("term_curve") or {}) if isinstance(risk_control,dict) else {}).items()
+            if k in {"fed_funds","sofr_1m","sofr_3m"} and isinstance(x,list)
+        ),
+        "history_supported_rows":len((((risk_control.get("historical_validation") or {}).get("statistically_supported_composites") or []))) if isinstance(risk_control,dict) else None,
+        "risk_control_rows":len((risk_control.get("three_market_state") or risk_control.get("market_states") or [])) if isinstance(risk_control,dict) else None,
+    }
+    check("risk_table_three_market_rows",isinstance(risk_table_summary["three_market_rows"],int) and risk_table_summary["three_market_rows"]>=3,risk_table_summary)
+    print("TRIAID_TABLE_RUNTIME_AUDIT_SUMMARY",json.dumps({"markets":table_runtime_summary,"risk":risk_table_summary},ensure_ascii=False,separators=(",",":")),flush=True)
 
     deployment=status.get("deployment") or {}
     railway_sha=deployment.get("railway_git_commit_sha")
