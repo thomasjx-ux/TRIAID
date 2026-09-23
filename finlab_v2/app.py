@@ -13,9 +13,11 @@ from fastapi.responses import HTMLResponse
 from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.decision_api import build_decision_router
+from triaid_fin.account_api import build_account_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
+from triaid_fin.market_registry import market_ids, normalize_market_id
 from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
 
@@ -62,7 +64,7 @@ async def bootstrap_startup_maintenance(app:FastAPI)->None:
     try:
         receipt=await asyncio.to_thread(engine.recover_stale_runs)
         primary_references={}
-        for market_id in ("US","CN","HK"):
+        for market_id in market_ids():
             try:
                 primary_references[market_id]=await asyncio.to_thread(
                     engine.ensure_primary_reference,
@@ -253,6 +255,7 @@ app=FastAPI(
 )
 app.include_router(build_market_data_router(engine,market_automation,calendar_sync))
 app.include_router(build_decision_router(decision_scheduler))
+app.include_router(build_account_router(engine))
 
 
 @app.get("/health")
@@ -297,9 +300,10 @@ def storage_status()->dict:
 
 @app.post("/api/live/run/{market_id}", status_code=202)
 def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
-    market_id = market_id.upper()
-    if market_id not in {"US", "CN", "HK"}:
-        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
+    try:
+        market_id = normalize_market_id(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     run,scheduled,claim_reason=engine.claim_manual_preview_run(market_id)
     if scheduled:
         background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
@@ -317,7 +321,7 @@ def live_run(market_id: str, background_tasks: BackgroundTasks) -> dict:
 @app.post("/api/live/run-all", status_code=202)
 def live_run_all(background_tasks: BackgroundTasks) -> dict:
     runs = []
-    for market_id in ("US", "CN", "HK"):
+    for market_id in market_ids():
         run,scheduled,claim_reason=engine.claim_manual_preview_run(market_id)
         if scheduled:
             background_tasks.add_task(engine.execute_live, run.run_id, market_id, "MANUAL_PREVIEW")
@@ -726,9 +730,10 @@ def strategy_evolution_status(market_id: str | None = None) -> dict:
 
 @app.post("/api/strategy-evolution/propose/{market_id}")
 def strategy_evolution_propose(market_id: str, _admin:None=Depends(require_admin_token)) -> dict:
-    market_id=market_id.upper()
-    if market_id not in {"US","CN","HK"}:
-        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
+    try:
+        market_id=normalize_market_id(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return engine.propose_strategy_candidate(market_id)
 
 
