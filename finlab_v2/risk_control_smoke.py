@@ -34,7 +34,7 @@ risk_warning={
         "market_deterioration":{"score_0_100":31.0},
     },
     "confidence":{"level":"MODERATE"},
-    "data_coverage":{"ratio":1.0},
+    "data_coverage":{"source_presence_ratio":1.0,"coverage_grade":"PARTIAL","known_gaps":[{"source":"CN:CSI300","error":"missing-history"}],"term_curve_usable":True},
     "historical_support":{"historical_event_count":4},
     "prospective_validation":{"maturity":"EARLY_UNRESOLVED"},
     "warnings":[{"code":"POLICY_REPRICING_STRESS_ACTIVE"}],
@@ -124,7 +124,9 @@ prospective={
 exp=CrossMarketRiskControlExperiment(FakeStore())
 r=exp.build(
     risk_warning=risk_warning,latent=latent,long_cycle=long_cycle,
-    cross_market=cross_market,policy_curve=policy_curve,prospective=prospective,force=True,
+    cross_market=cross_market,policy_curve=policy_curve,prospective=prospective,
+    market_data_status={"errors":{"HK:REALTIME":{"errors":["2819.HK:sparse"]}}},
+    force=True,
 )
 assert r["experiment_type"]=="THREE_MARKET_RISK_CONTROL_SHADOW"
 assert r["shadow_only"] is True
@@ -140,6 +142,9 @@ assert r["dynamics_chain"][4]["state"]=="NOT_CONFIRMED"
 assert r["term_curve"]["data_quality"]["term_curve_usable"] is True
 assert r["prospective_validation"]["pending_horizons"]==[20,60,120,250]
 assert "not calibrated crash probabilities" in r["semantics"]["probability_guard"]
+assert r["data_quality"]["risk_evidence_coverage"]["coverage_grade"]=="PARTIAL"
+assert r["data_quality"]["hk_high_frequency_degraded"] is True
+assert r["data_quality"]["evidence_critical_daily_data_affected"] is False
 
 print("TRIAID_RISK_CONTROL_SMOKE_PASS",{
     "stage":r["risk_control_experiment"]["stage"],
