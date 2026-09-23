@@ -66,6 +66,8 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/audit/status",
     "/api/storage/status",
     "/api/market-data/status",
+    "/api/market-data/registry",
+    "/api/accounts/status",
     "/api/risk-warning/latest",
     "/api/risk-control/latest",
     "/api/strategy-population/rules/US",
@@ -204,12 +206,41 @@ def runtime_checks()->list[dict]:
     status=payloads.get("/api/status") or {}
     storage=payloads.get("/api/storage/status") or {}
     market_status=payloads.get("/api/market-data/status") or {}
+    market_registry=payloads.get("/api/market-data/registry") or {}
+    account_registry=payloads.get("/api/accounts/status") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
     home=payloads.get("/") or ""
 
-    check("markets_exact",status.get("markets")==["US","CN","HK"],status.get("markets"))
-    check("strategy_registry_count",status.get("strategy_registry_count")==33,status.get("strategy_registry_count"))
+    registered_markets=[str(x).upper() for x in (status.get("markets") or [])]
+    base_markets={"US","CN","HK"}
+    check(
+        "base_markets_present",
+        base_markets.issubset(set(registered_markets)),
+        registered_markets,
+    )
+    check(
+        "registered_markets_unique",
+        len(registered_markets)==len(set(registered_markets)),
+        registered_markets,
+    )
+    strategy_count=status.get("strategy_registry_count")
+    check(
+        "strategy_registry_baseline_or_higher",
+        isinstance(strategy_count,int) and strategy_count>=33,
+        strategy_count,
+    )
+    registry_rows=market_registry.get("markets") or []
+    registry_ids={str(x.get("market_id") or "").upper() for x in registry_rows if isinstance(x,dict)}
+    check(
+        "market_registry_matches_status",
+        set(registered_markets)==registry_ids,
+        {"status":registered_markets,"registry":sorted(registry_ids)},
+    )
+    accounts=(account_registry.get("accounts") or {})
+    pools=(account_registry.get("strategy_pools") or {})
+    check("global_account_present","GLOBAL" in accounts,sorted(accounts))
+    check("global_strategy_pool_present","GLOBAL" in pools,sorted(pools))
     deployment=status.get("deployment") or {}
     railway_sha=deployment.get("railway_git_commit_sha")
     declared_sha=deployment.get("declared_source_revision")
@@ -235,8 +266,18 @@ def runtime_checks()->list[dict]:
         events=payloads.get(f"/api/decision-scheduler/events?market_id={market}&limit=1")
         check(f"{market}_scheduler_api",isinstance(events,list),type(events).__name__)
 
-    market_rows=(risk_control.get("three_market_state") or [])
-    check("risk_control_three_market_symmetry",[x.get("market") for x in market_rows]==["US","CN","HK"],[x.get("market") for x in market_rows])
+    market_rows=(risk_control.get("market_states") or risk_control.get("three_market_state") or [])
+    risk_market_ids=[str(x.get("market") or "").upper() for x in market_rows if isinstance(x,dict)]
+    check(
+        "risk_control_base_market_coverage",
+        base_markets.issubset(set(risk_market_ids)),
+        risk_market_ids,
+    )
+    check(
+        "risk_control_registered_market_scope",
+        set(risk_market_ids).issubset(set(registered_markets)),
+        {"risk":risk_market_ids,"registered":registered_markets},
+    )
     overall=(risk_warning.get("overall") or {})
     score=overall.get("risk_pressure_index")
     check("risk_warning_score_present",isinstance(score,(int,float)),score)
@@ -250,7 +291,8 @@ def runtime_checks()->list[dict]:
     if isinstance(home,str):
         for marker in (
             "TRIAID FIN",
-            "TRIAID 三市场联动风险中心",
+            "TRIAID",
+            "风险中心",
             "立即运行（预览）",
             'id="riskDataQuality"',
             'id="riskDataGaps"',

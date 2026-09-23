@@ -6,6 +6,16 @@ export TRIAID_LONG_RESEARCH_BOOTSTRAP="${TRIAID_LONG_RESEARCH_BOOTSTRAP:-1}"
 export TRIAID_RELEASE_AUDIT_REQUIRED="${TRIAID_RELEASE_AUDIT_REQUIRED:-1}"
 export TRIAID_RELEASE_AUDIT_RECEIPT_PATH="${TRIAID_RELEASE_AUDIT_RECEIPT_PATH:-/tmp/triaid_release_audit.json}"
 
+# Railway's injected Git SHA is the authoritative runtime source identity.
+# Bind both declared and runtime revisions to it before app import/audit so
+# stale dashboard variables cannot describe a different source than the
+# container that is actually running.
+if [ -n "${RAILWAY_GIT_COMMIT_SHA:-}" ]; then
+  export TRIAID_DEPLOY_REVISION="$RAILWAY_GIT_COMMIT_SHA"
+  export TRIAID_DEPLOY_REV="$RAILWAY_GIT_COMMIT_SHA"
+  export TRIAID_V2_REV="$RAILWAY_GIT_COMMIT_SHA"
+fi
+
 if [ -x /app/.venv/bin/python ]; then
   PYTHON_BIN=/app/.venv/bin/python
   UVICORN_BIN=/app/.venv/bin/uvicorn
