@@ -59,7 +59,10 @@ checks={
     "status_hover_has_next_action":"function statusActionGuide(status)" in app and "statusActionGuide(status)" in app,
     "strategy_hover_has_next_action":"不要仅凭单日涨跌直接改策略权重" in app,
     "market_clock_hover_is_actionable":"确认当前页面是不是处于官方交易时段" in app and "午休或休市本身不代表系统异常" in app,
-    "risk_hover_is_action_oriented":"function riskActionGuide(score)" in app and "当前动作：进入专项风险复核" in app and "当前动作：进入最高级人工复核" in app,
+    "risk_hover_uses_dynamic_evidence":"function riskSubscoreTip(key,score,report)" in app and "((report||{}).detail||{})[key]" in app and "riskDriverSummary" in app,
+    "overall_risk_hover_uses_drivers_and_blockers":"function riskOverallTip(score,report)" in app and "main_drivers" in app and "missing_confirmations" in app and "deescalation_conditions" in app,
+    "horizon_risk_hover_uses_weighted_components":"function riskHorizonTip(h,entry,report)" in app and "entry?.weights" in app and "report?.subscores" in app,
+    "derived_risk_metrics_do_not_inherit_global_actions":"单个指标不直接触发风控动作" in app,
     "risk_hover_does_not_dump_thresholds":"统一阈值：低<25" not in app[app.find("function riskScaleTip"):app.find("function setRiskScoreNode")],
     "rationale_hover_has_usefulness":"这里的样本数和理由用于判断历史相似状态" in app,
 }
