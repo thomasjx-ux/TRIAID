@@ -1615,7 +1615,12 @@ function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 function fmtPrice(x,currency){
  const v=Number(x);if(!Number.isFinite(v))return '-';
  const digits=v>=100?2:v>=10?3:4;
- return (currency==='USD'?'
+ let prefix='';
+ if(currency==='USD')prefix=String.fromCharCode(36);
+ else if(currency==='CNY')prefix=String.fromCharCode(165);
+ else if(currency==='HKD')prefix='HK'+String.fromCharCode(36);
+ return prefix+v.toFixed(digits);
+}
 function strategyLabelHtml(name,strategyId){
  const n=name||strategyId||'-',sid=strategyId||'';
  return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
