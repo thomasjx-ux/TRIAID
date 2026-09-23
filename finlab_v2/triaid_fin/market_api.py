@@ -5,11 +5,10 @@ import secrets
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
-from .market_lab import MARKETS
+from .market_registry import market_ids, normalize_market_id
 from .trading_calendar import calendar_status, trading_day_info
 
 
-VALID_MARKETS={"US","CN","HK"}
 VALID_MODES={"DAILY","INTRADAY","PREOPEN","REALTIME"}
 
 def _require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
@@ -21,10 +20,11 @@ def _require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->No
 
 
 def _market(value:str)->str:
-    key=value.upper()
-    if key not in VALID_MARKETS:
-        raise HTTPException(status_code=400,detail="market_id must be US, CN or HK")
-    return key
+    try:
+        return normalize_market_id(value)
+    except KeyError as exc:
+        supported=", ".join(market_ids())
+        raise HTTPException(status_code=400,detail=f"unsupported market_id; registered markets: {supported}") from exc
 
 
 def _mode(value:str)->str:
