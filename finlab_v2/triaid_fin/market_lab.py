@@ -148,7 +148,24 @@ def strategy_market_context(market_id:str)->dict:
         key=normalize_market_id(market_id)
     except KeyError as exc:
         raise MarketDataError(f"unsupported_market:{market_id}") from exc
-    daily=fetch_panel(key,"DAILY",force=False)
+    # UI strategy context must be a read path, not a market-data refresh path.
+    # The market automation owns freshness. Reuse the latest cached DAILY panel
+    # so switching markets never waits on external providers. Only bootstrap
+    # from the provider when this process has no DAILY panel yet.
+    hub=get_market_data_hub()
+    cached_daily=hub.cached_panel(key,"DAILY")
+    if cached_daily is None:
+        daily=fetch_panel(key,"DAILY",force=False)
+    else:
+        daily=MarketPanel(
+            spec=MARKETS[key],
+            ts=list(cached_daily.ts),
+            close={k:list(v) for k,v in cached_daily.close.items()},
+            volume={k:list(v) for k,v in cached_daily.volume.items()},
+            data_mode=cached_daily.mode,
+            provider=cached_daily.provider,
+            quality=cached_daily.quality,
+        )
     if len(daily.ts)<2:
         raise MarketDataError(f"insufficient_daily_history:{key}")
     i=len(daily.ts)-1
