@@ -93,11 +93,10 @@ class MarketRegistry:
         return self._specs[self.resolve_id(value)]
 
     def ids(self, *, enabled_only: bool = True) -> tuple[str, ...]:
-        rows = [
+        return tuple(
             key for key, spec in self._specs.items()
             if spec.enabled or not enabled_only
-        ]
-        return tuple(sorted(rows))
+        )
 
     def mapping(self) -> Mapping[str, MarketSpec]:
         return MappingProxyType(self._specs)
