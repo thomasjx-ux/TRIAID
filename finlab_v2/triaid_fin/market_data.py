@@ -228,6 +228,31 @@ class MarketDataHub:
         self._failovers:list[dict]=[]
         self._lock=RLock()
 
+    def register_market_provider(
+        self,
+        market_id:str,
+        provider_name:str,
+        provider,
+        *,
+        modes:list[str]|tuple[str,...]=("DAILY",),
+        fallbacks:list[str]|tuple[str,...]=(),
+    )->dict:
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise MarketDataError(f"unsupported_market:{market_id}") from exc
+        routes=tuple(f"{market}:{str(mode).upper()}" for mode in modes)
+        self.registry.register(provider_name,provider,routes=routes)
+        for fallback_name in fallbacks:
+            for route in routes:
+                self.registry.add_fallback(route,str(fallback_name))
+        return {
+            "market_id":market,
+            "provider_name":provider_name,
+            "routes":list(routes),
+            "provider_version":getattr(provider,"version",type(provider).__name__),
+        }
+
     def provider_status(self)->dict:
         registry=self.registry.status()
         routing={}
