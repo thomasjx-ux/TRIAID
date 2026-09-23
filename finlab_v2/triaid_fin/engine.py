@@ -16,7 +16,7 @@ from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
-from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+from .market_registry import MARKET_REGISTRY, evidence_market_ids, market_ids, normalize_market_id
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
@@ -1293,7 +1293,7 @@ class EvolutionLabEngine:
             "active_core":self.evolution.active().__dict__,
             "active_strategy_rules":{
                 market_id:self.strategy_evolution.active(market_id).__dict__
-                for market_id in ("US","CN","HK")
+                for market_id in market_ids()
             },
             "strategy_registry_count":len(self.strategy_population.definitions()),
             "markets":["US","CN","HK"],
@@ -1477,7 +1477,7 @@ class EvolutionLabEngine:
             if created_at and r.created_at>created_at
             and r.evaluation and r.evaluation.status=="EVALUATED"
             and self._complete_daily_evidence_run(r)
-            and str(r.market.market_id).upper() in set(market_ids())
+            and str(r.market.market_id).upper() in set(evidence_market_ids())
             and str((r.market.metadata or {}).get("experiment_mode") or "").upper()
                 == self.primary_experiment_mode(str(r.market.market_id).upper())
             and r.run_id not in known_ids
@@ -1518,7 +1518,7 @@ class EvolutionLabEngine:
         def replay_by_market(rows:list[RunRecord])->dict:
             return {
                 market:replay([r for r in rows if str(r.market.market_id).upper()==market])
-                for market in market_ids()
+                for market in evidence_market_ids()
             }
 
         dev_result=replay(dev)
@@ -1536,10 +1536,10 @@ class EvolutionLabEngine:
                 and result["candidate_mean"]>=result["parent_mean"]-1e-12
             )
 
-        replay_pass=all(nondegrading(dev_by_market[m],1) for m in market_ids())
-        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in market_ids())
+        replay_pass=all(nondegrading(dev_by_market[m],1) for m in evidence_market_ids())
+        holdout_pass=all(nondegrading(holdout_by_market[m],1) for m in evidence_market_ids())
         shadow_min_per_market=5
-        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in market_ids())
+        shadow_pass=all(nondegrading(shadow_by_market[m],shadow_min_per_market) for m in evidence_market_ids())
         audit_pass=bool(
             0.0<=candidate.intervention_strength<=1.0
             and dev_result["valid"] and holdout_result["valid"] and shadow_result["valid"]
@@ -1583,7 +1583,7 @@ class EvolutionLabEngine:
             }
         return {
             market_id:self.strategy_evolution_status(market_id)
-            for market_id in ("US","CN","HK")
+            for market_id in market_ids()
         }
 
     def propose_strategy_candidate(self,market_id:str)->dict:
