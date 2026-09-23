@@ -86,7 +86,7 @@ assert [r.run_id for r in engine.store.list_runs()]==persisted_before
 engine.execute_live(pending.run_id,"US","MANUAL_PREVIEW")
 preview=engine.get_run(pending.run_id)
 
-assert preview.status=="PREVIEW_READY"
+assert preview.status=="PREVIEW_READY", {"status":preview.status,"diagnostic_summary":preview.diagnostic_summary,"audit":preview.audit.model_dump(mode="json") if preview.audit else None}
 assert preview.strategy_group is not None
 assert preview.triaid_decision is not None
 assert preview.market.metadata["run_scope"]=="MANUAL_PREVIEW"
