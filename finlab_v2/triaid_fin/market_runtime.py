@@ -12,7 +12,7 @@ from .trading_calendar import calendar_status
 
 
 class MarketDataAutomation:
-    version="market-data-automation@0.7.0"
+    version="market-data-automation@0.8.0"
 
     def __init__(self,engine,decision_scheduler=None)->None:
         self.engine=engine
@@ -237,6 +237,10 @@ class MarketDataAutomation:
                         asyncio.to_thread(self.engine.risk_warning_run,True),
                         timeout=max(120,self.refresh_timeout_seconds),
                     )
+                    risk_control=await asyncio.wait_for(
+                        asyncio.to_thread(self.engine.risk_control_run,True),
+                        timeout=max(120,self.refresh_timeout_seconds),
+                    )
                     self.hazard_research_latest={
                         "experiment_id":latent.get("experiment_id"),
                         "as_of":latent.get("as_of"),
@@ -253,6 +257,8 @@ class MarketDataAutomation:
                         "risk_60d":((risk_warning.get("horizon_estimates") or {}).get("60") or {}).get("risk_pressure_index"),
                         "risk_120d":((risk_warning.get("horizon_estimates") or {}).get("120") or {}).get("risk_pressure_index"),
                         "risk_250d":((risk_warning.get("horizon_estimates") or {}).get("250") or {}).get("risk_pressure_index"),
+                        "risk_control_experiment_id":risk_control.get("experiment_id"),
+                        "risk_control_stage":(risk_control.get("risk_control_experiment") or {}).get("stage"),
                     }
                     self.hazard_research_day=day
                     self.errors.pop("US:LATENT_HAZARD",None)
@@ -266,6 +272,7 @@ class MarketDataAutomation:
                         self.hazard_research_latest.get("updated_outcomes"),
                         self.hazard_research_latest.get("risk_pressure_index"),
                         self.hazard_research_latest.get("risk_band"),
+                        self.hazard_research_latest.get("risk_control_stage"),
                     )
                 except Exception as exc:
                     self.errors["US:HAZARD_PROSPECTIVE"]=f"{type(exc).__name__}:{exc}"
