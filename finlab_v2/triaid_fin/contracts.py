@@ -18,7 +18,7 @@ class BilingualText(BaseModel):
 class StrategyDefinition(BaseModel):
     strategy_id: str
     version: str
-    market_support: List[str] = Field(default_factory=lambda: ["US","CN","HK"])
+    market_support: List[str] = Field(default_factory=lambda: ["*"])
     name: BilingualText
     summary: BilingualText
     logic: BilingualText
