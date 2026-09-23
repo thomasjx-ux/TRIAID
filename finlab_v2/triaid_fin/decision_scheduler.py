@@ -9,6 +9,21 @@ from zoneinfo import ZoneInfo
 from .trading_calendar import trading_day_info
 from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 
+def _env_int(name:str,default:int)->int:
+    raw=(os.getenv(name) or str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return int(default)
+
+def _env_float(name:str,default:float)->float:
+    raw=(os.getenv(name) or str(default)).strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return float(default)
+
+
 
 class DecisionScheduler:
     version="decision-scheduler@0.2.3"
@@ -19,18 +34,18 @@ class DecisionScheduler:
         self.enabled=os.getenv("TRIAID_DECISION_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.state_name="decision_scheduler_state.json"
         self.events_name="decision_events.jsonl"
-        self.warmup_transitions=max(5,int(os.getenv("TRIAID_DECISION_WARMUP_TRANSITIONS","20")))
-        self.mad_multiplier=max(1.0,float(os.getenv("TRIAID_DECISION_MAD_MULTIPLIER","2.0")))
-        self.state_confirmations=max(2,int(os.getenv("TRIAID_DECISION_STATE_CONFIRMATIONS","3")))
+        self.warmup_transitions=max(5,_env_int("TRIAID_DECISION_WARMUP_TRANSITIONS",20))
+        self.mad_multiplier=max(1.0,_env_float("TRIAID_DECISION_MAD_MULTIPLIER",2.0))
+        self.state_confirmations=max(2,_env_int("TRIAID_DECISION_STATE_CONFIRMATIONS",3))
         self.min_recompute_seconds={
-            "REALTIME":max(0,int(os.getenv("TRIAID_DECISION_MIN_REALTIME_SECONDS","300"))),
-            "INTRADAY":max(0,int(os.getenv("TRIAID_DECISION_MIN_INTRADAY_SECONDS","600"))),
+            "REALTIME":max(0,_env_int("TRIAID_DECISION_MIN_REALTIME_SECONDS",300)),
+            "INTRADAY":max(0,_env_int("TRIAID_DECISION_MIN_INTRADAY_SECONDS",600)),
         }
         self.allocation_action_l1_threshold=max(
-            0.0,float(os.getenv("TRIAID_ALLOCATION_ACTION_L1_THRESHOLD","0.05"))
+            0.0,_env_float("TRIAID_ALLOCATION_ACTION_L1_THRESHOLD",0.05)
         )
         self.close_settle_seconds=max(
-            0,int(os.getenv("TRIAID_CLOSE_SETTLE_SECONDS","300"))
+            0,_env_int("TRIAID_CLOSE_SETTLE_SECONDS",300)
         )
         self.state=self.store.load_json(self.state_name,default={}) or {}
         self.state.setdefault("markets",{})
