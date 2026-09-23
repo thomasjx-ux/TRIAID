@@ -13,7 +13,8 @@ from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
 
 
-LEADS=(20,60,120,250)\nDATA_SOURCE_REVISION="market-provider-split@0.1.0"
+LEADS=(20,60,120,250)
+DATA_SOURCE_REVISION="market-provider-split@0.1.0"
 FACTOR_ALERT_PERCENTILE=0.80
 CONTROL_STEP=63
 CRASH_EXCLUSION_SESSIONS=250
