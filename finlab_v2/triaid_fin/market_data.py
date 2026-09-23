@@ -182,11 +182,23 @@ class MarketDataHub:
         self.tencent_cn=TencentCNMarketDataProvider()
         self.tushare_auction=TushareETFAuctionProvider()
         self.registry=ProviderRegistry()
+
+        # Market-specific routing: do not make one public endpoint a
+        # cross-market single point of failure.
         self.registry.register(
-            "research_bars",
+            "yahoo_bars",
             self.provider,
+            routes=("US:PREOPEN","US:REALTIME"),
+        )
+        self.registry.register(
+            "sina_us_primary",
+            self.sina_us,
+            routes=("US:DAILY","US:INTRADAY"),
+        )
+        self.registry.register(
+            "tencent_equity_primary",
+            self.tencent_cn,
             routes=(
-                "US:DAILY","US:INTRADAY","US:PREOPEN","US:REALTIME",
                 "CN:DAILY","CN:INTRADAY","CN:REALTIME",
                 "HK:DAILY","HK:INTRADAY","HK:REALTIME",
             ),
@@ -196,17 +208,20 @@ class MarketDataHub:
             self.alpaca,
             routes=("US:QUOTE_L1",),
         )
-        self.registry.register("sina_us_backup",self.sina_us)
-        self.registry.register("tencent_cn_backup",self.tencent_cn)
         self.registry.register("tushare_cn_auction",self.tushare_auction,routes=("CN:PREOPEN",))
-        # Eastmoney adapter remains available for research, but its public hosts
-        # are not in the automatic failover chain because Railway smoke observed
-        # remote disconnects from the current egress.
+        # Eastmoney remains research-only because Railway has observed remote
+        # disconnects from the current egress.
         self.registry.register("eastmoney_experimental",self.eastmoney)
-        for route in ("US:DAILY","US:INTRADAY","US:REALTIME"):
-            self.registry.add_fallback(route,"sina_us_backup")
-        for route in ("CN:DAILY","CN:INTRADAY","CN:REALTIME"):
-            self.registry.add_fallback(route,"tencent_cn_backup")
+
+        # Yahoo is now a last-resort bar fallback for regular-session equity
+        # data rather than the default provider for all three markets.
+        for route in ("US:DAILY","US:INTRADAY"):
+            self.registry.add_fallback(route,"yahoo_bars")
+        for route in (
+            "CN:DAILY","CN:INTRADAY","CN:REALTIME",
+            "HK:DAILY","HK:INTRADAY","HK:REALTIME",
+        ):
+            self.registry.add_fallback(route,"yahoo_bars")
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
         self._failovers:list[dict]=[]
@@ -237,20 +252,26 @@ class MarketDataHub:
         return {
             "registry":registry,
             "bar_provider":{
-                "provider":getattr(self.registry.provider("research_bars"),"version",None),
+                "provider":"market_specific",
                 "configured":True,
-                "role":"default research bars",
+                "role":"US regular=Sina; CN/HK=Tencent; US preopen/realtime=Yahoo",
+            },
+            "primary_bar_providers":{
+                "US_REGULAR":self.sina_us.version,
+                "US_PREOPEN_REALTIME":self.provider.version,
+                "CN":self.tencent_cn.version,
+                "HK":self.tencent_cn.version,
             },
             "backup_bar_providers":{
                 "US":{
-                    "provider":self.sina_us.version,
+                    "provider":self.provider.version,
                     "configured":True,
-                    "role":"automatic regular-session US fallback",
+                    "role":"Yahoo fallback for US daily/intraday",
                 },
-                "CN":{
-                    "provider":self.tencent_cn.version,
+                "CN_HK":{
+                    "provider":self.provider.version,
                     "configured":True,
-                    "role":"automatic A-share fallback",
+                    "role":"Yahoo last-resort fallback after Tencent",
                 },
                 "experimental":{
                     "provider":self.eastmoney.version,
@@ -294,7 +315,7 @@ class MarketDataHub:
                     },
                     "STOCK_BARS":{
                         "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"Arbitrary Yahoo-supported US symbols can be requested for research bars; not yet part of the active strategy universe.",
+                        "note":"US regular-session research bars use Sina first with Yahoo fallback; not execution-grade.",
                     },
                     "DERIVATIVES_CHAIN":{
                         "available":False,"provider":None,"grade":"interface_reserved",
@@ -307,8 +328,8 @@ class MarketDataHub:
                 }
             elif market=="CN":
                 out[market]={
-                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
-                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "BAR_DAILY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
+                    "BAR_INTRADAY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
                     "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
                     "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
                     "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_applicable"},
@@ -324,7 +345,7 @@ class MarketDataHub:
                     },
                     "STOCK_BARS":{
                         "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"Yahoo-supported A-share symbols can be requested for research bars; not execution-grade.",
+                        "note":"A-share research bars use Tencent first with Yahoo fallback; not execution-grade.",
                     },
                     "DERIVATIVES_CHAIN":{
                         "available":False,"provider":None,"grade":"interface_reserved",
@@ -336,8 +357,8 @@ class MarketDataHub:
                 }
             elif market=="HK":
                 out[market]={
-                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
-                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
+                    "BAR_DAILY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
+                    "BAR_INTRADAY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
                     "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
                     "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
                     "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_connected"},
@@ -345,7 +366,7 @@ class MarketDataHub:
                     "SECTOR_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
                     "STOCK_BARS":{
                         "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"Yahoo-supported Hong Kong symbols can be requested for research bars; not execution-grade.",
+                        "note":"Hong Kong research bars use Tencent first with Yahoo fallback; not execution-grade.",
                     },
                     "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
                     "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
