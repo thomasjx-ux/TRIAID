@@ -744,9 +744,10 @@ def strategy_evolution_promote(
     validation: dict[str, Any] = Body(default={}),
     _admin:None=Depends(require_admin_token),
 ) -> dict:
-    market_id=market_id.upper()
-    if market_id not in {"US","CN","HK"}:
-        raise HTTPException(status_code=400, detail="market_id must be US, CN or HK")
+    try:
+        market_id=normalize_market_id(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         return engine.promote_strategy_rules(market_id,version,validation)
     except KeyError as exc:
