@@ -343,7 +343,8 @@ class LatentHazardExperiment:
         d=dates[i]
         out={}
         drawdowns={}
-        for market in ("US","CN","HK"):
+        markets=sorted(prices)
+        for market in markets:
             px=prices[market]
             dd=cls._dd(px,i,252)
             r63=cls._ret(px,i,63)
@@ -359,19 +360,30 @@ class LatentHazardExperiment:
             if r5y is not None:
                 out[f"{market}_FIVE_YEAR_RETURN_STRETCH"]=r5y
 
-        cn_hk=cls._pair_corr(prices["CN"],prices["HK"],i,60)
-        hk_us=cls._pair_corr(prices["HK"],prices["US"],i,60)
-        cn_us=cls._pair_corr(prices["CN"],prices["US"],i,60)
-        if cn_hk is not None:
-            out["CORR_CN_HK_60"]=cn_hk
-        if hk_us is not None:
-            out["CORR_HK_US_60"]=hk_us
-        if cn_us is not None:
-            out["CORR_CN_US_60"]=cn_us
+        pair_corrs={}
+        for left_index,left in enumerate(markets):
+            for right in markets[left_index+1:]:
+                corr=cls._pair_corr(prices[left],prices[right],i,60)
+                if corr is None:
+                    continue
+                pair_corrs[(left,right)]=corr
+                out[f"CORR_{left}_{right}_60"]=corr
+                out[f"CORR_{right}_{left}_60"]=corr
+        if pair_corrs:
+            out["CROSS_MARKET_CORR_MEAN_60"]=sum(pair_corrs.values())/len(pair_corrs)
+            out["CROSS_MARKET_CORR_MAX_60"]=max(pair_corrs.values())
+
+        cn_hk=pair_corrs.get(tuple(sorted(("CN","HK"))))
+        hk_us=pair_corrs.get(tuple(sorted(("HK","US"))))
+        cn_us=pair_corrs.get(tuple(sorted(("CN","US"))))
         if cn_hk is not None and hk_us is not None and cn_us is not None:
             out["HK_BRIDGE_DIFFERENTIAL_60"]=(cn_hk+hk_us)/2.0-cn_us
-        if len(drawdowns)==3:
-            out["CROSS_MARKET_STRESS_COUNT_10PCT"]=float(sum(1 for x in drawdowns.values() if x<=-0.10))
+
+        if len(drawdowns)>=2:
+            stressed=sum(1 for x in drawdowns.values() if x<=-0.10)
+            out["CROSS_MARKET_STRESS_COUNT_10PCT"]=float(stressed)
+            out["CROSS_MARKET_STRESS_SHARE_10PCT"]=float(stressed)/len(drawdowns)
+        if {"US","CN","HK"}<=set(drawdowns):
             out["HK_STRESS_AMPLIFICATION"]=max(
                 0.0,
                 ((drawdowns["US"]+drawdowns["CN"])/2.0)-drawdowns["HK"],
@@ -882,10 +894,10 @@ class LatentHazardExperiment:
             "shadow_only":True,
             "applied_to_weights":False,
             "production_action":"NONE",
-            "markets":["US","CN","HK"],
+            "markets":sorted(primary),
             "lead_trading_days":list(LEADS),
             "alert_percentile":FACTOR_ALERT_PERCENTILE,
-            "crash_definition":"Automatic 20% peak-to-current drawdown clusters across US/CN/HK; event anchors use the first 20% breach in each <=180-day cluster.",
+            "crash_definition":"Automatic 20% peak-to-current drawdown clusters across all available registered primary markets; event anchors use the first 20% breach in each <=180-day cluster.",
             "anti_hindsight":{
                 "point_in_time_only":True,
                 "event_cutoff_rule":"At each lead, features use only prices and macro observations available on or before the historical cutoff.",
@@ -910,6 +922,8 @@ class LatentHazardExperiment:
             "current_state":current_state,
             "data_completeness":{
                 "primary_markets":len(primary),
+                "primary_market_ids":sorted(primary),
+                "unavailable_primary_market_ids":sorted(set(registered_primary)-set(primary)),
                 "common_sessions":len(dates),
                 "fred_and_market_expectation_series":len(fred),
                 "fred_series_requested":10,
