@@ -729,6 +729,19 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
 .live-meta{font-size:11px;color:#748091;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .has-tip{cursor:help;text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:#aeb7c4;text-underline-offset:4px}.tip-mark::after{content:' ⓘ';font-size:10px;color:#7f8c9e;text-decoration:none;white-space:nowrap}
 #hoverTip{position:fixed;display:none;z-index:9999;max-width:430px;padding:9px 11px;border-radius:8px;background:#172033;color:#fff;font-size:12px;line-height:1.5;white-space:pre-line;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:none}
+.riskpanel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin:16px 0}
+.riskhead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.riskhead h2{margin:0}.risk-meta{font-size:12px;color:#748091;margin-top:5px}
+.risk-overall{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.risk-score{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
+.risk-band{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef1f5}
+.risk-band.low{background:#edf8f1;color:#138a4b}.risk-band.elevated{background:#fff7df;color:#946200}.risk-band.high{background:#fff0df;color:#ad5b00}.risk-band.severe{background:#fff1ef;color:#b42318}.risk-band.critical{background:#5a1520;color:#fff}
+.riskgrid{display:grid;grid-template-columns:repeat(5,minmax(125px,1fr));gap:9px;margin-top:12px}
+.riskcell{border:1px solid #edf0f3;border-radius:10px;padding:10px;background:#fbfcfe}.riskcell .rv{font-size:21px;font-weight:750;margin-top:4px;font-variant-numeric:tabular-nums}
+.riskdetailgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.riskbox{border:1px solid #edf0f3;border-radius:10px;padding:11px}.riskbox h3{margin:0 0 7px;font-size:14px}
+.risklist{margin:0;padding-left:18px;font-size:12px;line-height:1.55}.risklist li{margin:3px 0}
+.risk-subgrid{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin-top:10px}.risk-sub{border:1px solid #edf0f3;border-radius:8px;padding:9px}.risk-sub b{display:block;font-size:18px;margin-top:3px}
+.risknote{font-size:12px;line-height:1.55;color:#5f6b7a;margin-top:10px}
+@media(max-width:900px){.riskgrid,.risk-subgrid{grid-template-columns:repeat(2,1fr)}.riskdetailgrid{grid-template-columns:1fr}}
 @media(max-width:760px){.compare,.livegrid{grid-template-columns:1fr}.wrap{padding:15px}th,td{font-size:12px}.reason{min-width:240px}}
 </style>
 </head>
@@ -748,6 +761,48 @@ th{background:#f8fafc;position:sticky;top:0;z-index:1}.selected{background:#f6fb
   </div>
   <div class="statusline" id="runStatus">Ready</div>
   <div class="statusline" id="marketScopeStatus" style="display:none"></div>
+
+  <section class="riskpanel" id="riskWarningPanel">
+    <div class="riskhead">
+      <div>
+        <h2 id="riskWarningTitle">TRIAID 风险预警</h2>
+        <div class="risk-meta" id="riskWarningMeta">等待风险状态</div>
+      </div>
+      <div>
+        <div class="risk-overall"><span class="risk-score" id="riskOverallScore">-</span><span>/100</span><span class="risk-band" id="riskOverallBand">-</span></div>
+        <div class="risk-meta" id="riskConfidence">-</div>
+      </div>
+    </div>
+    <div class="riskgrid">
+      <div class="riskcell"><span class="label" id="riskOverallLabel">当前综合风险</span><div class="rv" id="riskOverallMini">-</div></div>
+      <div class="riskcell"><span class="label">20日</span><div class="rv" id="risk20">-</div><div class="small muted" id="risk20Band">-</div></div>
+      <div class="riskcell"><span class="label">60日</span><div class="rv" id="risk60">-</div><div class="small muted" id="risk60Band">-</div></div>
+      <div class="riskcell"><span class="label">120日</span><div class="rv" id="risk120">-</div><div class="small muted" id="risk120Band">-</div></div>
+      <div class="riskcell"><span class="label">250日</span><div class="rv" id="risk250">-</div><div class="small muted" id="risk250Band">-</div></div>
+    </div>
+    <div class="risk-subgrid">
+      <div class="risk-sub"><span class="label" id="riskStructuralLabel">长期结构脆弱</span><b id="riskStructural">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskRatesLabel">利率/政策压力</span><b id="riskRates">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskTransmissionLabel">跨市场传导</span><b id="riskTransmission">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskCreditLabel">信用/流动性</span><b id="riskCredit">-</b></div>
+      <div class="risk-sub"><span class="label" id="riskMarketLabel">价格结构恶化</span><b id="riskMarket">-</b></div>
+    </div>
+    <div class="riskdetailgrid">
+      <div class="riskbox"><h3 id="riskDriversTitle">主要风险驱动</h3><ul class="risklist" id="riskDrivers"></ul></div>
+      <div class="riskbox"><h3 id="riskBlockersTitle">尚未确认 / 风险阻断项</h3><ul class="risklist" id="riskBlockers"></ul></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary id="riskDetailsTitle" style="cursor:pointer;color:#5f6b7a">展开完整证据与验证状态</summary>
+      <div class="riskdetailgrid">
+        <div class="riskbox"><h3 id="riskHistoricalTitle">历史支持</h3><div class="small" id="riskHistorical">-</div></div>
+        <div class="riskbox"><h3 id="riskProspectiveTitle">前瞻验证</h3><div class="small" id="riskProspective">-</div></div>
+        <div class="riskbox"><h3 id="riskEscalationTitle">升级条件</h3><ul class="risklist" id="riskEscalation"></ul></div>
+        <div class="riskbox"><h3 id="riskDeescalationTitle">降级条件</h3><ul class="risklist" id="riskDeescalation"></ul></div>
+      </div>
+      <div class="risknote" id="riskSourceStatus">-</div>
+      <div class="risknote" id="riskSemantics">风险指数是状态/证据压力评分，不是股灾概率；风险预警层不自动改变组合权重。</div>
+    </details>
+  </section>
 
   <h2 id="resultTitle">TRIAID 结果比较</h2>
   <div class="compare">
@@ -1471,6 +1526,7 @@ function statusTip(status){
  return TIP[lang][key]||TIP[lang].state;
 }
 async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
 function localClockFromEpoch(ts){
  if(ts===null||ts===undefined)return '-';
  try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
@@ -1573,6 +1629,63 @@ function drawCurve(points){
  [['baseline_equity','#6f7782'],['triaid_equity','#1769e0']].forEach(([key,color])=>{
   g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
  });
+}
+function renderRiskWarning(report){
+ const panel=el('riskWarningPanel');
+ if(!report){panel.style.display='none';return;}
+ panel.style.display='block';
+ const o=report.overall||{}, hs=report.horizon_estimates||{}, ss=report.subscores||{};
+ const score=Number(o.risk_pressure_index);
+ const band=String(o.risk_band||'-');
+ const bandText=lang==='zh'?(o.risk_band_zh||band):band;
+ const bandClass=band.toLowerCase();
+ el('riskWarningTitle').textContent=lang==='zh'?'TRIAID 风险预警':'TRIAID Risk Warning';
+ el('riskWarningMeta').textContent=(lang==='zh'?'状态日期 ':'As of ')+(report.as_of||'-')+' · '+(lang==='zh'?'预警ID ':'Warning ')+(report.warning_id||'-');
+ el('riskOverallScore').textContent=Number.isFinite(score)?score.toFixed(1):'-';
+ el('riskOverallBand').textContent=bandText;
+ el('riskOverallBand').className='risk-band '+bandClass;
+ el('riskOverallMini').textContent=(Number.isFinite(score)?score.toFixed(1):'-')+' / 100';
+ const conf=report.confidence||{};
+ el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
+ ['20','60','120','250'].forEach(h=>{
+   const x=hs[h]||{};
+   const n=Number(x.risk_pressure_index);
+   el('risk'+h).textContent=Number.isFinite(n)?n.toFixed(1)+'/100':'-';
+   el('risk'+h+'Band').textContent=lang==='zh'?(x.risk_band_zh||x.risk_band||'-'):(x.risk_band||'-');
+ });
+ const subMap={structural:'riskStructural',rates_policy:'riskRates',transmission:'riskTransmission',credit_liquidity:'riskCredit',market_deterioration:'riskMarket'};
+ Object.entries(subMap).forEach(([k,id])=>{
+   const n=Number((ss[k]||{}).score_0_100);
+   el(id).textContent=Number.isFinite(n)?n.toFixed(1)+'/100':'-';
+ });
+ el('riskOverallLabel').textContent=lang==='zh'?'当前综合风险':'Current overall risk';
+ el('riskStructuralLabel').textContent=lang==='zh'?'长期结构脆弱':'Structural vulnerability';
+ el('riskRatesLabel').textContent=lang==='zh'?'利率/政策压力':'Rates / policy pressure';
+ el('riskTransmissionLabel').textContent=lang==='zh'?'跨市场传导':'Cross-market transmission';
+ el('riskCreditLabel').textContent=lang==='zh'?'信用/流动性':'Credit / liquidity';
+ el('riskMarketLabel').textContent=lang==='zh'?'价格结构恶化':'Market deterioration';
+ el('riskDriversTitle').textContent=lang==='zh'?'主要风险驱动':'Main risk drivers';
+ el('riskBlockersTitle').textContent=lang==='zh'?'尚未确认 / 风险阻断项':'Missing confirmations / blockers';
+ el('riskDetailsTitle').textContent=lang==='zh'?'展开完整证据与验证状态':'Show full evidence and validation';
+ el('riskHistoricalTitle').textContent=lang==='zh'?'历史支持':'Historical support';
+ el('riskProspectiveTitle').textContent=lang==='zh'?'前瞻验证':'Prospective validation';
+ el('riskEscalationTitle').textContent=lang==='zh'?'升级条件':'Escalation conditions';
+ el('riskDeescalationTitle').textContent=lang==='zh'?'降级条件':'De-escalation conditions';
+ const drivers=report.main_drivers||[];
+ el('riskDrivers').innerHTML=drivers.length?drivers.map(x=>'<li>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+' · '+(x.severity==null?'':Math.round(Number(x.severity)*100)+'/100')+'</li>').join(''):'<li>'+(lang==='zh'?'当前没有达到主驱动阈值的项目':'No driver currently exceeds the primary threshold')+'</li>';
+ const blockers=report.missing_confirmations||[];
+ el('riskBlockers').innerHTML=blockers.length?blockers.map(x=>'<li>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</li>').join(''):'<li>'+(lang==='zh'?'无明显阻断项':'No material blocker')+'</li>';
+ const hist=report.historical_support||{}, best=hist.policy_repricing_best||{};
+ el('riskHistorical').textContent=(lang==='zh'?'危机簇 ':'Crash clusters ')+(hist.historical_event_count??'-')+' · '+(lang==='zh'?'正常对照 ':'controls ')+(hist.normal_control_count??'-')+' · POLICY_REPRICING_STRESS '+(best.lead_trading_days==null?'':best.lead_trading_days+'d')+' hit '+(best.event_hit_rate==null?'-':fmtPct(best.event_hit_rate))+' / false+ '+(best.control_false_positive_rate==null?'-':fmtPct(best.control_false_positive_rate))+' / q '+(best.bh_q_value==null?'-':Number(best.bh_q_value).toFixed(4));
+ const pv=report.prospective_validation||{};
+ el('riskProspective').textContent=(lang==='zh'?'成熟度 ':'Maturity ')+(pv.maturity||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-')+' · '+(lang==='zh'?'证据有效 ':'eligible ')+(pv.evidence_eligible===false?'NO':'YES');
+ el('riskEscalation').innerHTML=(report.escalation_conditions||[]).map(x=>'<li>'+esc(lang==='zh'?(x.meaning_zh||x.condition):x.condition)+'</li>').join('');
+ el('riskDeescalation').innerHTML=(report.deescalation_conditions||[]).map(x=>'<li>'+esc(lang==='zh'?(x.meaning_zh||x.condition):x.condition)+'</li>').join('');
+ const src=report.source_status||{};
+ el('riskSourceStatus').textContent=(lang==='zh'?'数据时点：':'Source dates: ')+'Long '+(src.long_cycle_as_of||'-')+' · Hazard '+(src.latent_hazard_as_of||'-')+' · US/CN/HK '+(src.cross_market_as_of||'-')+' · Curve '+(src.policy_curve_as_of||'-')+' · Shadow '+(src.prospective_as_of||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(src.term_curve_usable?'OK':'NOT READY');
+ el('riskSemantics').textContent=lang==='zh'
+  ? '风险指数是0–100的状态/证据压力评分，不是股灾概率，也不是未来收益预测。预警层目前为 shadow-only，不自动改变任何市场的组合权重。'
+  : 'The 0–100 risk index is a state/evidence pressure score, not a crash probability or return forecast. The warning layer is shadow-only and cannot automatically change portfolio weights.';
 }
 function renderComparison(evaluated){
  const t=T[lang];
@@ -1759,10 +1872,11 @@ async function refreshAll(){
  const previewId=previewRunIds[m];
  try{
   const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
-  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+  const [s,d,cards,curves,evo,runs,previewRun,riskWarning]=await Promise.all([
    json('/api/status'),json('/api/daily?market_id='+m),json(cardsUrl),
    json('/api/curves?market_id='+m),json('/api/evolution'),json('/api/runs?market_id='+m+'&limit=100'),
-   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null),
+   jsonOrNull('/api/risk-warning/latest')
   ]);
   const isCN=m==='CN';
   const isHK=m==='HK';
@@ -1797,6 +1911,7 @@ async function refreshAll(){
     : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
   const latest=previewRun||officialLatest;
   const lastCurve=curves.length?curves[curves.length-1]:null;
+  renderRiskWarning(riskWarning);
   renderComparison(evaluated);
   el('date').textContent=(previewRun?.market?.as_of)||d.date||'-';
   el('core').textContent=(previewRun?.triaid_decision?.core_version)||s.active_core.version;
