@@ -956,6 +956,13 @@ tbody tr:hover td{background:#f8fbff}
 .risk-overall{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.risk-score{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
 .risk-band{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef1f5}
 .risk-band.low{background:#edf8f1;color:#138a4b}.risk-band.elevated{background:#fff7df;color:#946200}.risk-band.high{background:#fff0df;color:#ad5b00}.risk-band.severe{background:#fff1ef;color:#b42318}.risk-band.critical{background:#5a1520;color:#fff}
+.risk-number{display:inline-block;border-radius:7px;padding:1px 6px;font-weight:800;font-variant-numeric:tabular-nums}
+.risk-number.low{color:#138a4b;background:#edf8f1}.risk-number.elevated{color:#946200;background:#fff7df}.risk-number.high{color:#ad5b00;background:#fff0df}.risk-number.severe{color:#b42318;background:#fff1ef}.risk-number.critical{color:#fff;background:#5a1520}
+.risk-cell-number{font-weight:750;font-variant-numeric:tabular-nums;border-radius:5px;padding:2px 5px;display:inline-block}
+.risk-cell-number.low{color:#138a4b;background:#edf8f1}.risk-cell-number.elevated{color:#946200;background:#fff7df}.risk-cell-number.high{color:#ad5b00;background:#fff0df}.risk-cell-number.severe{color:#b42318;background:#fff1ef}.risk-cell-number.critical{color:#fff;background:#5a1520}
+.risk-color-legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:11px;color:#6b7685}
+.risk-color-legend .risk-band{padding:2px 7px;font-size:10px}
+.risk-band-inline{display:inline-block;margin-top:4px;font-weight:700}.risk-band-inline.low{color:#138a4b}.risk-band-inline.elevated{color:#946200}.risk-band-inline.high{color:#ad5b00}.risk-band-inline.severe{color:#b42318}.risk-band-inline.critical{color:#7a1730}
 .riskgrid{display:grid;grid-template-columns:repeat(5,minmax(125px,1fr));gap:9px;margin-top:12px}
 .riskcell{border:1px solid #edf0f3;border-radius:10px;padding:10px;background:#fbfcfe}.riskcell .rv{font-size:21px;font-weight:750;margin-top:4px;font-variant-numeric:tabular-nums}
 .riskdetailgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.riskbox{border:1px solid #edf0f3;border-radius:10px;padding:11px}.riskbox h3{margin:0 0 7px;font-size:14px}
@@ -1281,6 +1288,14 @@ tbody tr:hover td{background:#f8fbff}
       <div>
         <div class="risk-overall"><span class="risk-score" id="riskOverallScore">-</span><span>/100</span><span class="risk-band" id="riskOverallBand">-</span></div>
         <div class="risk-meta" id="riskConfidence">-</div>
+        <div class="risk-color-legend" id="riskColorLegend">
+          <span>颜色阈值：</span>
+          <span class="risk-band low">低 0–24.9</span>
+          <span class="risk-band elevated">升高 25–44.9</span>
+          <span class="risk-band high">高 45–64.9</span>
+          <span class="risk-band severe">严重 65–79.9</span>
+          <span class="risk-band critical">临界 80–100</span>
+        </div>
       </div>
     </div>
     <div class="riskgrid">
@@ -1790,7 +1805,10 @@ const TABLE_HEADER_TIPS_EXTRA={
   '是否已作用生产权重':'明确标记Shadow风控结果是否真正写入生产权重。当前系统设计应保持为否。',
   'ETF':'当前研究路线使用的ETF或可交易产品标识。',
   '目标权重':'冻结决策中该ETF的目标配置比例，不代表券商真实成交持仓。',
-  '当前实际名次':'根据已经发生的真实后验结果重新排序的当前名次，不会反向修改冻结决策。'
+  '当前实际名次':'根据已经发生的真实后验结果重新排序的当前名次，不会反向修改冻结决策。',
+  '交易日':'该行对应的完整交易日。只展示满足该实验后验评价口径的数据日。',
+  '最差池':'冻结时定义的最差策略池或对照池表现，用作前瞻比较，不会以后验结果倒推重选。',
+  '差值':'当前方案相对对照方案的收益或指标差值。正负方向以对应表格标题定义为准。'
  },
  en:{
   'Market':'Market represented by this row: US, CN A-shares, or HK equities.',
@@ -1801,30 +1819,39 @@ const TABLE_HEADER_TIPS_EXTRA={
   'Risk-control stage':'Current stage of the three-market Shadow risk-control experiment. It does not automatically alter production weights.',
   'Lift':'Difference in occurrence between crisis-event samples and normal controls. It is not a probability.',
   'p':'Raw Fisher exact-test p-value.',
-  'q':'Benjamini-Hochberg multiple-testing adjusted q-value.'
+  'q':'Benjamini-Hochberg multiple-testing adjusted q-value.',
+  'Tradingday':'The complete trading day represented by the row, subject to the experiment’s posterior-evaluation eligibility rules.',
+  'Worstpool':'The frozen worst-pool/control result used for prospective comparison; it is not reselected using later outcomes.',
+  'Gap':'Difference between the current route and its stated control. Direction follows the table’s metric definition.'
  }
 };
 
-function tableHeaderTip(label){
+function tableHeaderTipMeta(label){
  const raw=String(label||'').trim();
  const key=normalizeHeaderLabel(raw);
  const extra=(TABLE_HEADER_TIPS_EXTRA[lang]||{})[key];
- if(extra)return extra;
+ if(extra)return {text:extra,explicit:true};
  const local=TABLE_HEADER_TIPS[lang]||{};
- if(local[key])return local[key];
+ if(local[key])return {text:local[key],explicit:true};
  const fallbackOther=lang==='zh'?(TABLE_HEADER_TIPS.en||{}):(TABLE_HEADER_TIPS.zh||{});
- if(fallbackOther[key])return fallbackOther[key];
- if(!raw)return lang==='zh'?'本列表头说明。':'Table-column explanation.';
- return lang==='zh'
-  ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
-  : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.';
+ if(fallbackOther[key])return {text:fallbackOther[key],explicit:true};
+ if(!raw)return {text:lang==='zh'?'本列表头说明。':'Table-column explanation.',explicit:false};
+ return {
+  text:lang==='zh'
+   ? '本列展示“'+raw+'”对应的数据。具体口径以当前表格的冻结决策、真实结果和页面说明为准。'
+   : 'This column shows data for “'+raw+'”. The exact definition follows the frozen decision, realized outcomes and the surrounding table context.',
+  explicit:false
+ };
 }
+function tableHeaderTip(label){return tableHeaderTipMeta(label).text}
 function applyTableHeaderTooltips(root=document){
  root.querySelectorAll('table th').forEach(th=>{
   const label=(th.dataset.headerLabel||th.textContent||'').trim();
   if(!label)return;
+  const meta=tableHeaderTipMeta(label);
   th.classList.add('has-tip','tip-mark');
-  th.dataset.tip=tableHeaderTip(label);
+  th.dataset.tip=meta.text;
+  th.dataset.tipContract=meta.explicit?'explicit':'fallback';
   th.setAttribute('aria-label',label+' — '+th.dataset.tip);
  });
 }
@@ -2161,6 +2188,53 @@ function drawCurve(points){
   g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
  });
 }
+function riskBandFromScore(score){
+ const n=Number(score);
+ if(!Number.isFinite(n))return '';
+ if(n>=80)return 'critical';
+ if(n>=65)return 'severe';
+ if(n>=45)return 'high';
+ if(n>=25)return 'elevated';
+ return 'low';
+}
+function riskBandText(score){
+ const band=riskBandFromScore(score);
+ const zh={low:'低',elevated:'升高',high:'高',severe:'严重',critical:'临界'};
+ const en={low:'LOW',elevated:'ELEVATED',high:'HIGH',severe:'SEVERE',critical:'CRITICAL'};
+ return (lang==='zh'?zh:en)[band]||'-';
+}
+function riskScaleTip(score,label){
+ const n=Number(score);
+ if(!Number.isFinite(n))return label||'Risk';
+ return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+
+  (lang==='zh'
+   ? '。统一阈值：低<25；升高25–44.9；高45–64.9；严重65–79.9；临界≥80。该颜色表示风险/压力级别，不是股灾概率。'
+   : '. Shared thresholds: LOW <25; ELEVATED 25–44.9; HIGH 45–64.9; SEVERE 65–79.9; CRITICAL ≥80. Color indicates pressure/risk level, not crash probability.');
+}
+function setRiskScoreNode(id,score,suffix,label,baseClass=''){
+ const node=el(id),n=Number(score);
+ if(!node)return;
+ const band=riskBandFromScore(n);
+ node.textContent=Number.isFinite(n)?n.toFixed(1)+(suffix||''):'-';
+ node.className=(baseClass?baseClass+' ':'')+'risk-number '+band+' has-tip';
+ node.dataset.tip=riskScaleTip(n,label);
+}
+function riskCellHtml(text,score,label){
+ const n=Number(score),band=riskBandFromScore(n);
+ if(!Number.isFinite(n))return esc(text);
+ return '<span class="risk-cell-number '+band+' has-tip" data-tip="'+esc(riskScaleTip(n,label))+'">'+esc(text)+'</span>';
+}
+function riskStageTip(stage){
+ const s=String(stage||'-');
+ const zh={
+  WATCH_ONLY:'观察阶段：风险证据达到关注条件，但不改变生产权重。',
+  NORMAL_OBSERVATION:'常规观察：当前没有达到提高约束的阈值。',
+  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧候选：仅实验性提出更严格风险约束，未作用于生产权重。',
+  SHADOW_DEFENSIVE_BIAS:'Shadow防御偏置候选：仅实验性提高防御配置，未作用于生产权重。',
+  DATA_UNAVAILABLE:'数据不足：该市场当前无法形成完整风险状态。'
+ };
+ return lang==='zh'?(zh[s]||('风控实验阶段：'+s)):'Risk-control experiment stage: '+s+'. Shadow-only unless explicitly promoted.';
+}
 function riskStageClass(stage){
  const s=String(stage||'');
  if(s.includes('DEFENSIVE'))return 'risk-stage defensive';
@@ -2178,20 +2252,26 @@ function renderRiskControl(report){
   : 'Independent of the US/CN/HK market selector below: this center always analyzes all three markets and feeds a shadow risk-control experiment. It is not a fourth market and cannot change production weights automatically.';
  const names={US:lang==='zh'?'美股 / US':'US',CN:lang==='zh'?'A股 / CN':'CN',HK:lang==='zh'?'港股 / HK':'HK'};
  el('riskThreeMarketTitle').textContent=lang==='zh'?'三市场联动状态':'Three-market linked state';
- el('riskThreeMarketRows').innerHTML=(report.three_market_state||[]).map(x=>
-   '<tr><td><b>'+esc(names[x.market]||x.market)+'</b></td>'+
-   '<td>'+fmtPct(x.drawdown_stress_252)+'</td>'+
-   '<td>'+fmtPct(x.negative_momentum_63)+'</td>'+
-   '<td>'+((x.negative_momentum_percentile==null)?'-':fmtPct(x.negative_momentum_percentile))+'</td>'+
-   '<td>'+fmtPct(x.volatility_63)+'</td>'+
-   '<td class="'+riskStageClass(x.risk_control_stage)+'">'+esc(x.risk_control_stage||'-')+'</td></tr>'
- ).join('');
+ el('riskThreeMarketRows').innerHTML=(report.three_market_state||[]).map(x=>{
+   const ddScore=x.drawdown_stress_252==null?null:Math.min(100,Math.max(0,Number(x.drawdown_stress_252)*500));
+   const momPct=x.negative_momentum_percentile==null?null:Math.min(100,Math.max(0,Number(x.negative_momentum_percentile)*100));
+   const volPct=x.volatility_percentile==null?null:Math.min(100,Math.max(0,Number(x.volatility_percentile)*100));
+   const stage=String(x.risk_control_stage||'-');
+   return '<tr><td><b>'+esc(names[x.market]||x.market)+'</b></td>'+
+    '<td>'+riskCellHtml(fmtPct(x.drawdown_stress_252),ddScore,lang==='zh'?'252日回撤压力（20%回撤映射为100分）':'252d drawdown pressure (20% drawdown maps to 100)')+'</td>'+
+    '<td>'+riskCellHtml(fmtPct(x.negative_momentum_63),momPct,lang==='zh'?'63日负向动量异常程度':'63d negative-momentum abnormality')+'</td>'+
+    '<td>'+riskCellHtml((x.negative_momentum_percentile==null?'-':fmtPct(x.negative_momentum_percentile)),momPct,lang==='zh'?'动量异常历史分位':'Momentum abnormality percentile')+'</td>'+
+    '<td>'+riskCellHtml(fmtPct(x.volatility_63),volPct,lang==='zh'?'63日波动历史分位':'63d volatility percentile')+'</td>'+
+    '<td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'">'+esc(stage)+'</td></tr>';
+ }).join('');
  el('riskDynamicsTitle').textContent=lang==='zh'?'动力链 / 传导路径':'Dynamics / transmission chain';
  el('riskDynamicsRows').innerHTML=(report.dynamics_chain||[]).map(x=>{
    const state=String(x.state||'-');
    const clsState=(state.includes('ACTIVE')||state.includes('STRESSED')||state.includes('DETERIORATING'))?'chain-active':(state.includes('NOT_CONFIRMED')||state.includes('PARTIAL'))?'chain-pending':'chain-normal';
    const score=Number(x.score);
-   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'">'+esc(state)+'</td><td>'+ (Number.isFinite(score)?score.toFixed(score<=1?2:1):'-') +'</td><td>'+esc((x.evidence||[]).join(' · ')||'-')+'</td></tr>';
+   const normalized=Number.isFinite(score)?(score<=1?score*100:score):null;
+   const shown=Number.isFinite(score)?score.toFixed(score<=1?2:1):'-';
+   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'">'+esc(state)+'</td><td>'+riskCellHtml(shown,normalized,lang==='zh'?'动力链节点风险强度':'Dynamics-node risk intensity')+'</td><td>'+esc((x.evidence||[]).join(' · ')||'-')+'</td></tr>';
  }).join('');
  el('riskMacroTitle').textContent=lang==='zh'?'利率、政策、信用与流动性':'Rates, policy, credit and liquidity';
  const macro=report.rates_policy_credit_snapshot||{};
@@ -2203,9 +2283,10 @@ function renderRiskControl(report){
   YIELD_CURVE_INVERSION:'10Y−2Y inversion stress',YIELD_CURVE_10Y3M_INVERSION:'10Y−3M inversion stress',
   FINANCIAL_CONDITIONS_NFCI:'NFCI',HY_CREDIT_SPREAD_LEVEL:'HY OAS'
  };
- el('riskMacroRows').innerHTML=Object.entries(macro).filter(([k])=>!k.endsWith('_LONG_CYCLE')).map(([k,v])=>
-   '<tr><td>'+esc(macroLabels[k]||k)+'</td><td>'+fmtRiskNumber(v.value,4)+'</td><td>'+((v.point_in_time_percentile==null)?'-':fmtPct(v.point_in_time_percentile))+'</td></tr>'
- ).join('');
+ el('riskMacroRows').innerHTML=Object.entries(macro).filter(([k])=>!k.endsWith('_LONG_CYCLE')).map(([k,v])=>{
+   const pct=v.point_in_time_percentile==null?null:Number(v.point_in_time_percentile)*100;
+   return '<tr><td>'+esc(macroLabels[k]||k)+'</td><td>'+fmtRiskNumber(v.value,4)+'</td><td>'+riskCellHtml((v.point_in_time_percentile==null?'-':fmtPct(v.point_in_time_percentile)),pct,lang==='zh'?'该风险因子的历史状态分位':'Historical state percentile for this risk factor')+'</td></tr>';
+ }).join('');
  el('riskTermTitle').textContent=lang==='zh'?'Fed Funds / SOFR 期限曲线':'Fed Funds / SOFR term curves';
  const tc=report.term_curve||{}, metrics=tc.metrics||{};
  const curveNames={fed_funds:'Fed Funds',sofr_1m:'SOFR 1M',sofr_3m:'SOFR 3M'};
@@ -2232,11 +2313,13 @@ function renderRiskControl(report){
  const rc=report.risk_control_experiment||{};
  el('riskControlMeta').textContent=(lang==='zh'?'当前阶段 ':'Stage ')+(rc.stage||'-')+' · '+(lang==='zh'?'生产动作 ':'Production action ')+(rc.production_action||'NONE')+' · '+(lang==='zh'?'目标纪律：风险只作为可执行约束/证据层，最大化可实现净收益仍是唯一优化目标。':rc.objective_guard||'');
  el('riskControlRows').innerHTML=(report.three_market_state||[]).map(x=>{
-  const q=x.shadow_candidate_constraints||{};
-  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(x.risk_control_stage)+'">'+esc(x.risk_control_stage||'-')+'</td><td>'+fmtPct(q.risky_exposure_multiplier)+'</td><td>'+fmtPct(q.defensive_exposure_floor)+'</td><td>'+(x.applied_to_production?'YES':'NO')+'</td></tr>';
+  const q=x.shadow_candidate_constraints||{},stage=String(x.risk_control_stage||'-');
+  const stageScore=stage==='SHADOW_DEFENSIVE_BIAS'?80:stage==='SHADOW_TIGHTEN_RISK_CONSTRAINTS'?65:stage==='WATCH_ONLY'?45:stage==='NORMAL_OBSERVATION'?0:null;
+  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'">'+esc(stage)+'</td><td>'+riskCellHtml(fmtPct(q.risky_exposure_multiplier),stageScore,lang==='zh'?'该阶段的Shadow风险资产敞口倍率候选':'Shadow risky-exposure multiplier for this stage')+'</td><td>'+riskCellHtml(fmtPct(q.defensive_exposure_floor),stageScore,lang==='zh'?'该阶段的Shadow防御敞口底线候选':'Shadow defensive-floor candidate for this stage')+'</td><td>'+(x.applied_to_production?'YES':'NO')+'</td></tr>';
  }).join('');
  const pv=report.prospective_validation||{};
  el('riskLedgerDetail').textContent=(lang==='zh'?'风控实验账本 ':'Risk-control ledger ')+(pv.ledger_id||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-');
+ applyTableHeaderTooltips();
 }
 function renderRiskWarning(report){
  const panel=el('riskWarningPanel');
@@ -2248,23 +2331,36 @@ function renderRiskWarning(report){
  const bandText=lang==='zh'?(o.risk_band_zh||band):band;
  const bandClass=band.toLowerCase();
  el('riskWarningTitle').textContent=lang==='zh'?'TRIAID 风险预警':'TRIAID Risk Warning';
+ el('riskColorLegend').innerHTML=lang==='zh'
+  ? '<span>颜色阈值：</span><span class="risk-band low">低 0–24.9</span><span class="risk-band elevated">升高 25–44.9</span><span class="risk-band high">高 45–64.9</span><span class="risk-band severe">严重 65–79.9</span><span class="risk-band critical">临界 80–100</span>'
+  : '<span>Color scale:</span><span class="risk-band low">LOW 0–24.9</span><span class="risk-band elevated">ELEVATED 25–44.9</span><span class="risk-band high">HIGH 45–64.9</span><span class="risk-band severe">SEVERE 65–79.9</span><span class="risk-band critical">CRITICAL 80–100</span>';
  el('riskWarningMeta').textContent=(lang==='zh'?'状态日期 ':'As of ')+(report.as_of||'-')+' · '+(lang==='zh'?'预警ID ':'Warning ')+(report.warning_id||'-');
- el('riskOverallScore').textContent=Number.isFinite(score)?score.toFixed(1):'-';
+ setRiskScoreNode('riskOverallScore',score,'',lang==='zh'?'当前综合风险':'Current overall risk','risk-score');
  el('riskOverallBand').textContent=bandText;
- el('riskOverallBand').className='risk-band '+bandClass;
- el('riskOverallMini').textContent=(Number.isFinite(score)?score.toFixed(1):'-')+' / 100';
+ el('riskOverallBand').className='risk-band '+bandClass+' has-tip';
+ el('riskOverallBand').dataset.tip=riskScaleTip(score,lang==='zh'?'当前综合风险':'Current overall risk');
+ setRiskScoreNode('riskOverallMini',score,' / 100',lang==='zh'?'当前综合风险':'Current overall risk','rv');
  const conf=report.confidence||{};
  el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples_tested??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
  ['20','60','120','250'].forEach(h=>{
    const x=hs[h]||{};
    const n=Number(x.risk_pressure_index);
-   el('risk'+h).textContent=Number.isFinite(n)?n.toFixed(1)+'/100':'-';
-   el('risk'+h+'Band').textContent=lang==='zh'?(x.risk_band_zh||x.risk_band||'-'):(x.risk_band||'-');
+   setRiskScoreNode('risk'+h,n,'/100',(lang==='zh'?h+'日风险压力':h+'d risk pressure'),'rv');
+   const hBand=String(x.risk_band||riskBandText(n)).toLowerCase();
+   el('risk'+h+'Band').textContent=lang==='zh'?(x.risk_band_zh||x.risk_band||riskBandText(n)):(x.risk_band||riskBandText(n));
+   el('risk'+h+'Band').className='small risk-band-inline '+hBand;
  });
  const subMap={structural:'riskStructural',rates_policy:'riskRates',transmission:'riskTransmission',credit_liquidity:'riskCredit',market_deterioration:'riskMarket'};
+ const subLabels={
+  structural:lang==='zh'?'长期结构脆弱':'Structural vulnerability',
+  rates_policy:lang==='zh'?'利率/政策压力':'Rates / policy pressure',
+  transmission:lang==='zh'?'跨市场传导':'Cross-market transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'Credit / liquidity',
+  market_deterioration:lang==='zh'?'价格结构恶化':'Market deterioration'
+ };
  Object.entries(subMap).forEach(([k,id])=>{
    const n=Number((ss[k]||{}).score_0_100);
-   el(id).textContent=Number.isFinite(n)?n.toFixed(1)+'/100':'-';
+   setRiskScoreNode(id,n,'/100',subLabels[k],'');
  });
  el('riskOverallLabel').textContent=lang==='zh'?'当前综合风险':'Current overall risk';
  el('riskStructuralLabel').textContent=lang==='zh'?'长期结构脆弱':'Structural vulnerability';
@@ -2292,8 +2388,9 @@ function renderRiskWarning(report){
  const src=report.source_status||{};
  el('riskSourceStatus').textContent=(lang==='zh'?'数据时点：':'Source dates: ')+'Long '+(src.long_cycle_as_of||'-')+' · Hazard '+(src.latent_hazard_as_of||'-')+' · US/CN/HK '+(src.cross_market_as_of||'-')+' · Curve '+(src.policy_curve_as_of||'-')+' · Shadow '+(src.prospective_as_of||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(src.term_curve_usable?'OK':'NOT READY');
  el('riskSemantics').textContent=lang==='zh'
-  ? '风险指数是0–100的状态/证据压力评分，不是股灾概率，也不是未来收益预测。预警层目前为 shadow-only，不自动改变任何市场的组合权重。'
-  : 'The 0–100 risk index is a state/evidence pressure score, not a crash probability or return forecast. The warning layer is shadow-only and cannot automatically change portfolio weights.';
+  ? '风险指数是0–100的状态/证据压力评分，不是股灾概率，也不是未来收益预测。颜色阈值与后台风险分级完全一致；预警层目前为 shadow-only，不自动改变任何市场的组合权重。'
+  : 'The 0–100 risk index is a state/evidence pressure score, not a crash probability or return forecast. Color thresholds exactly match backend risk bands; the warning layer is shadow-only and cannot automatically change portfolio weights.';
+ applyTableHeaderTooltips();
 }
 function renderComparison(evaluated){
  const t=T[lang];
