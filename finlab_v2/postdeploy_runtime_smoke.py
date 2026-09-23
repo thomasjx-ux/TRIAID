@@ -44,7 +44,7 @@ def call(path:str,expected=(200,),timeout=12):
 deadline=time.monotonic()+90
 while True:
     try:
-        health=call("/health",timeout=3)
+        health=call("/health/live",timeout=3)
         break
     except Exception:
         if time.monotonic()>=deadline:
