@@ -35,16 +35,27 @@ class CrossMarketRiskControlExperiment:
     def _market_row(cls,market:str,current:dict,overall_risk:dict)->dict:
         features=current.get("features") or {}
         pcts=current.get("point_in_time_percentiles") or {}
-        dd=float(features.get(f"{market}_DRAWDOWN_STRESS_252") or 0.0)
-        mom_value=features.get(f"{market}_NEGATIVE_MOMENTUM_63")
-        mom_pct=pcts.get(f"{market}_NEGATIVE_MOMENTUM_63")
-        vol=features.get(f"{market}_VOLATILITY_63")
-        vol_pct=pcts.get(f"{market}_VOLATILITY_63")
+        dd_key=f"{market}_DRAWDOWN_STRESS_252"
+        mom_key=f"{market}_NEGATIVE_MOMENTUM_63"
+        vol_key=f"{market}_VOLATILITY_63"
+        data_available=any(
+            key in features or key in pcts
+            for key in (dd_key,mom_key,vol_key)
+        )
+        dd=float(features.get(dd_key) or 0.0) if data_available else None
+        mom_value=features.get(mom_key)
+        mom_pct=pcts.get(mom_key)
+        vol=features.get(vol_key)
+        vol_pct=pcts.get(vol_key)
         risk_score=float((overall_risk.get("overall") or {}).get("risk_pressure_index") or 0.0)
         systemic=bool(
             ((current.get("composites") or {}).get("SYSTEMIC_TRANSMISSION") or {}).get("triggered")
         )
-        if risk_score>=80 and systemic:
+        if not data_available:
+            stage="DATA_UNAVAILABLE"
+            risky_multiplier=1.00
+            defensive_floor=0.00
+        elif risk_score>=80 and systemic:
             stage="SHADOW_DEFENSIVE_BIAS"
             risky_multiplier=0.65
             defensive_floor=0.35
@@ -62,6 +73,7 @@ class CrossMarketRiskControlExperiment:
             defensive_floor=0.00
         return {
             "market":market,
+            "data_available":data_available,
             "drawdown_stress_252":dd,
             "negative_momentum_63":mom_value,
             "negative_momentum_percentile":mom_pct,
