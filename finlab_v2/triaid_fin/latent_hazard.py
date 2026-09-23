@@ -8,7 +8,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from statistics import mean, pstdev
 
-from .cross_market_crash import CrossMarketCrashExperiment, MARKET_INDEXES, PRIMARY_INDEX
+from .cross_market_crash import CrossMarketCrashExperiment, market_indexes, primary_indexes
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .store import RunStore
 
@@ -509,7 +509,9 @@ class LatentHazardExperiment:
         previous=self.latest()
         indexes={}
         errors={}
-        for market,specs in MARKET_INDEXES.items():
+        registered_indexes=market_indexes()
+        registered_primary=primary_indexes()
+        for market,specs in registered_indexes.items():
             rows={}
             for label,symbol in specs.items():
                 try:
@@ -519,7 +521,7 @@ class LatentHazardExperiment:
             indexes[market]=rows
 
         primary={}
-        for market,label in PRIMARY_INDEX.items():
+        for market,label in registered_primary.items():
             row=(indexes.get(market) or {}).get(label)
             if row is None:
                 raise RuntimeError(f"primary_index_unavailable:{market}:{label}:{errors}")
