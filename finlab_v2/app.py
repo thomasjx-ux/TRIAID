@@ -2490,11 +2490,16 @@ function riskActionGuide(score){
 function riskScaleTip(score,label){
  const n=Number(score);
  if(!Number.isFinite(n))return label||'Risk';
- return (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n)+'\\n'+
-  riskActionGuide(n)+'\\n'+
-  (lang==='zh'
-   ? '用途：决定风险层需要常规观察、加密监控、专项复核、Shadow收紧还是人工冻结升级。这不是股灾概率，也不会单独触发自动交易。'
-   : 'Use: decide whether the risk layer calls for normal monitoring, tighter monitoring, focused review, shadow tightening or a manual promotion freeze. This is not crash probability and does not independently trigger trading.');
+ const lines=[
+  (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n),
+  lang==='zh'
+   ? '怎么用：把这个数当作当前这一项的异常/压力程度，只和同一口径的历史或同列对象比较；越高表示越值得继续追查原因。'
+   : 'How to use: treat this as the abnormality/pressure level for this specific metric and compare only within the same definition or column; higher values deserve deeper investigation.',
+  lang==='zh'
+   ? '边界：单个指标不直接触发风控动作，必须和驱动证据、跨市场确认及真实后验一起判断。'
+   : 'Boundary: one metric alone does not trigger risk action; combine it with driver evidence, cross-market confirmation and realized posterior outcomes.'
+ ];
+ return lines.join(String.fromCharCode(10));
 }
 function riskDriverSummary(d){
  if(!d||typeof d!=='object')return '';
