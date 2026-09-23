@@ -34,6 +34,10 @@ latent={
     "experiment_hash":"latent-hash",
     "event_count":4,
     "control_count":56,
+    "data_completeness":{
+        "common_sessions":6678,
+        "errors":{"CN:CSI300":"missing-history","YAHOO:SOFR_1M_FUTURE":"insufficient-history"},
+    },
     "statistically_supported_composite_rows":[
         {
             "composite":"POLICY_REPRICING_STRESS",
@@ -127,6 +131,9 @@ sem=report["semantics"]["risk_pressure_index"].lower()
 assert "not" in sem and "calibrated" in sem and "probability" in sem
 assert report["applied_to_weights"] is False
 assert report["production_action"]=="NONE"
+assert report["data_coverage"]["coverage_grade"]=="PARTIAL"
+assert report["data_coverage"]["source_presence_ratio"]==1.0
+assert len(report["data_coverage"]["known_gaps"])==2
 
 print("TRIAID_RISK_WARNING_SMOKE_PASS",{
     "overall":report["overall"],
