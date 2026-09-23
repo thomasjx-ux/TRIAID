@@ -149,7 +149,7 @@ class LatentHazardExperiment:
 
     @staticmethod
     def _yahoo_observations(symbol:str,transform:str="identity")->list[tuple[date,float]]:
-        series=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
+        series=LongCycleHypothesisExperiment._fetch_market_full(symbol,timeout=30)
         rows=[]
         for ts,price in zip(series["ts"],series["close"]):
             value=float(price)
@@ -512,7 +512,7 @@ class LatentHazardExperiment:
             rows={}
             for label,symbol in specs.items():
                 try:
-                    rows[label]=LongCycleHypothesisExperiment._fetch_yahoo_full(symbol,timeout=30)
+                    rows[label]=LongCycleHypothesisExperiment._fetch_market_full(symbol,timeout=30)
                 except Exception as exc:
                     errors[f"{market}:{label}"]=f"{type(exc).__name__}:{exc}"
             indexes[market]=rows
