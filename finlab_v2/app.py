@@ -1795,6 +1795,12 @@ function renderRiskControl(report){
  const hv=report.historical_validation||{};
  const supported=hv.statistically_supported_composites||[];
  el('riskHistoryRows').innerHTML=supported.map(x=>'<tr><td>'+esc(x.composite||'-')+'</td><td>'+esc(x.lead_trading_days??'-')+'d</td><td>'+fmtPct(x.event_hit_rate)+'</td><td>'+fmtPct(x.control_false_positive_rate)+'</td><td>'+fmtPct(x.hit_rate_lift)+'</td><td>'+fmtRiskNumber(x.fisher_p_value,4)+'</td><td>'+fmtRiskNumber(x.bh_q_value,4)+'</td><td>'+fmtPct(x.leave_one_event_out_min_hit_rate)+'</td></tr>').join('') || '<tr><td colspan="8">-</td></tr>';
+ el('riskDataQualityTitle').textContent=lang==='zh'?'数据完整性与降级状态':'Data completeness and degradation';
+ const dq=report.data_quality||{}, cov=dq.risk_evidence_coverage||{}, gaps=cov.known_gaps||[];
+ el('riskDataQuality').textContent=(lang==='zh'?'历史证据覆盖等级 ':'Evidence coverage ')+(cov.coverage_grade||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(cov.term_curve_usable?'OK':'NOT READY')+' · '+(lang==='zh'?'港股高频 ':'HK high-frequency ')+(dq.hk_high_frequency_degraded?'DEGRADED':'OK')+' · '+(lang==='zh'?'正式日线证据受影响 ':'daily evidence affected ')+(dq.evidence_critical_daily_data_affected?'YES':'NO');
+ const liveGapEntries=Object.entries(dq.hk_high_frequency_errors||{}).map(([k,v])=>({source:k,error:(v&&v.errors)?v.errors.join(' | '):String(v)}));
+ const allGaps=[...gaps,...liveGapEntries];
+ el('riskDataGaps').innerHTML=allGaps.length?allGaps.map(x=>'<li><b>'+esc(x.source||'-')+'</b> · '+esc(x.error||'-')+'</li>').join(''):'<li>'+(lang==='zh'?'当前未记录已知缺口':'No known gap recorded')+'</li>';
  el('riskControlTitle').textContent=lang==='zh'?'三市场风控 Shadow 实验':'Three-market risk-control shadow experiment';
  const rc=report.risk_control_experiment||{};
  el('riskControlMeta').textContent=(lang==='zh'?'当前阶段 ':'Stage ')+(rc.stage||'-')+' · '+(lang==='zh'?'生产动作 ':'Production action ')+(rc.production_action||'NONE')+' · '+(lang==='zh'?'目标纪律：风险只作为可执行约束/证据层，最大化可实现净收益仍是唯一优化目标。':rc.objective_guard||'');
