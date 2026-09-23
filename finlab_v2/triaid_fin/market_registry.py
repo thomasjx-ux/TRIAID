@@ -23,6 +23,7 @@ class MarketSpec:
     balanced_risk_weight: float = 0.60
     research_indexes: tuple[tuple[str, str], ...] = ()
     primary_index_label: str | None = None
+    session_schedule: Mapping[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     enabled: bool = True
 
@@ -54,6 +55,10 @@ class MarketRegistry:
             balanced_risk_weight=float(spec.balanced_risk_weight),
             research_indexes=tuple((str(a), str(b)) for a, b in spec.research_indexes),
             primary_index_label=spec.primary_index_label,
+            session_schedule={
+                str(k).upper(): tuple((str(a),str(b)) for a,b in v)
+                for k,v in dict(spec.session_schedule).items()
+            },
             metadata=dict(spec.metadata),
             enabled=bool(spec.enabled),
         )
@@ -104,6 +109,8 @@ class MarketRegistry:
                     "defensive_assets": list(spec.defensive_assets),
                     "aliases": list(spec.aliases),
                     "enabled": spec.enabled,
+                    "session_schedule":{k:[list(x) for x in v] for k,v in spec.session_schedule.items()},
+                    "metadata":dict(spec.metadata),
                 }
                 for spec in (self._specs[key] for key in self.ids(enabled_only=False))
             ]
@@ -122,6 +129,12 @@ for _spec in (
         balanced_risk_weight=0.60,
         research_indexes=(("SP500", "^GSPC"), ("NASDAQ_COMPOSITE", "^IXIC")),
         primary_index_label="SP500",
+        session_schedule={
+            "PREOPEN":(("04:00","09:30"),),
+            "OPEN":(("09:30","16:00"),),
+            "POSTCLOSE":(("16:00","20:00"),),
+        },
+        metadata={"primary_experiment_mode":"US_RETURN_MAX_CAPACITY"},
     ),
     MarketSpec(
         "CN", "510300.SS", ("510300.SS", "510500.SS", "159915.SZ", "512100.SS", "511010.SS"),
@@ -137,6 +150,13 @@ for _spec in (
             ("CHINEXT", "399006.SZ"),
         ),
         primary_index_label="SHANGHAI_COMPOSITE",
+        session_schedule={
+            "PREOPEN":(("09:15","09:30"),),
+            "OPEN":(("09:30","11:30"),("13:00","15:00")),
+            "BREAK":(("11:30","13:00"),),
+            "POSTCLOSE":(("15:00","18:00"),),
+        },
+        metadata={"primary_experiment_mode":"CN_RETURN_MAX_CAPACITY"},
     ),
     MarketSpec(
         "HK", "2800.HK", ("2800.HK", "2828.HK", "3033.HK", "2819.HK"),
@@ -147,6 +167,13 @@ for _spec in (
         balanced_risk_weight=0.60,
         research_indexes=(("HANG_SENG", "^HSI"), ("HANG_SENG_CHINA_ENTERPRISES", "^HSCE")),
         primary_index_label="HANG_SENG",
+        session_schedule={
+            "PREOPEN":(("09:00","09:30"),),
+            "OPEN":(("09:30","12:00"),("13:00","16:10")),
+            "BREAK":(("12:00","13:00"),),
+            "POSTCLOSE":(("16:10","19:00"),),
+        },
+        metadata={"primary_experiment_mode":"HK_RETURN_MAX_CAPACITY"},
     ),
 ):
     MARKET_REGISTRY.register(_spec)
