@@ -172,7 +172,7 @@ class YahooChartProvider:
 
 
 class MarketDataHub:
-    version="market-data-hub@0.6.0"
+    version="market-data-hub@0.7.0"
 
     def __init__(self,provider:YahooChartProvider|None=None)->None:
         self.provider=provider or YahooChartProvider()
