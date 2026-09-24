@@ -144,4 +144,20 @@ assert comparison["outcome_status"]=="EVALUATED"
 assert abs(comparison["realized_excess_return"]-0.001)<1e-12
 assert abs(comparison["contribution_deltas"]["P02_VOL15"]-0.0025)<1e-12
 assert any("策略成员变化" in line for line in report["analysis_zh"])
+
+compact_report=ReviewModule().daily_summary([previous,current],compact=True)
+assert compact_report["date"]=="2026-09-22"
+assert len(compact_report["runs_detail"])==1
+compact_run=compact_report["runs_detail"][0]
+assert compact_run["run_id"]=="US-current"
+assert compact_run["experiment_mode"]=="US_RETURN_MAX_CAPACITY"
+assert compact_run["status"]=="VERIFIED"
+assert "strategy_states" not in compact_run
+assert "strategy_group" not in compact_run
+assert "triaid_decision" not in compact_run
+assert "evaluation" not in compact_run
+assert "audit" not in compact_run
+assert "module_manifest" not in compact_run
+assert set(compact_run["diagnostic_summary"]).issubset({"experiment_mode","projected_excess_expected_return"})
+assert report["runs_detail"][0].get("strategy_states") is not None
 print("TRIAID_DAILY_REPORT_CHANGE_ATTRIBUTION_SMOKE_PASS")
