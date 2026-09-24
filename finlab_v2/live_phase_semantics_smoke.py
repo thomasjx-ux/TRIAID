@@ -31,7 +31,7 @@ class FakeEngine:
 
 
 automation=object.__new__(MarketDataAutomation)
-automation.services=FakeEngine()
+automation.services=type("FakeServices",(),{"market_data":FakeEngine()})()
 
 original=runtime.session_phase
 try:
