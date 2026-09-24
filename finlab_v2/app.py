@@ -475,6 +475,21 @@ def daily(
     return engine.daily_summary(market_id,compact=compact)
 
 
+@app.get("/api/volatility-forecast")
+def volatility_forecasts() -> dict:
+    return engine.volatility_forecasts()
+
+
+@app.get("/api/volatility-forecast/{market_id}")
+def volatility_forecast_market(market_id: str) -> dict:
+    try:
+        return engine.volatility_forecast(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail="market not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
+
+
 @app.get("/api/ui/core")
 def ui_core_status()->dict:
     return {
@@ -974,6 +989,21 @@ tbody tr:hover td{background:#f8fbff}
 .home-summary-risk{font-size:17px}
 .home-summary-story{margin-top:11px;padding-top:10px;border-top:1px solid #e4eaf1;font-size:12px;line-height:1.6;color:#43546a}
 .home-summary-guide{margin-top:4px;font-size:11px;color:#748091}
+.home-volatility{margin-top:12px;padding-top:11px;border-top:1px solid #e4eaf1}
+.home-volatility-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
+.home-volatility-title{font-size:13px;font-weight:800;color:#26384f}
+.home-volatility-sub{font-size:11px;color:#748091;line-height:1.45}
+.home-volatility-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.home-volatility-card{border:1px solid #e4eaf1;border-radius:11px;background:#fff;padding:11px 12px;min-height:112px}
+.home-volatility-card .vh{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.home-volatility-market{font-size:12px;font-weight:800;color:#43546a}
+.home-volatility-band{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef1f5;font-size:10px;font-weight:800}
+.home-volatility-band.low{background:#edf8f1;color:#138a4b}.home-volatility-band.normal{background:#eef3f9;color:#526174}.home-volatility-band.elevated{background:#fff7df;color:#946200}.home-volatility-band.high{background:#fff1ef;color:#b42318}
+.home-volatility-move{font-size:22px;font-weight:850;margin-top:5px;font-variant-numeric:tabular-nums}
+.home-volatility-range{font-size:11px;color:#5f6b7a;margin-top:3px;line-height:1.4}
+.home-volatility-accuracy{font-size:11px;color:#43546a;margin-top:6px;line-height:1.45}
+.home-volatility-note{font-size:10.5px;color:#87909d;margin-top:7px;line-height:1.45}
+@media(max-width:850px){.home-volatility-grid{grid-template-columns:1fr}}
 @media(max-width:950px){.home-summary-grid{grid-template-columns:repeat(2,1fr)}.home-summary-head{display:block}.home-summary-mode{display:inline-block;margin-top:8px}}
 @media(max-width:600px){.home-summary-grid{grid-template-columns:1fr}}
 .market-clock-strip{display:grid;grid-template-columns:repeat(3,minmax(190px,1fr));gap:10px;margin:12px 0}
@@ -1093,6 +1123,36 @@ tbody tr:hover td{background:#f8fbff}
     </div>
     <div class="home-summary-story" id="homeSummaryStory">本页阅读顺序：先确认当前市场 → 看 TRIAID 选了什么、改了什么 → 看真实后验是否增值 → 最后看三市场联合风险与深层实验。</div>
     <div class="home-summary-guide" id="homeSummaryGuide">下面的复杂表格用于追溯证据；第一次使用不需要逐项读完。</div>
+    <div class="home-volatility" id="homeVolatility">
+      <div class="home-volatility-head">
+        <div>
+          <div class="home-volatility-title" id="homeVolatilityTitle">下一交易日波动预测</div>
+          <div class="home-volatility-sub" id="homeVolatilitySub">预测的是收盘到收盘的波动幅度，不预测涨跌方向。</div>
+        </div>
+        <div class="home-volatility-sub" id="homeVolatilityModel">读取模型与校准状态</div>
+      </div>
+      <div class="home-volatility-grid">
+        <div class="home-volatility-card" id="volCardUS">
+          <div class="vh"><span class="home-volatility-market" id="volMarketUS">美股 / US</span><span class="home-volatility-band normal" id="volBandUS">-</span></div>
+          <div class="home-volatility-move" id="volMoveUS">读取中</div>
+          <div class="home-volatility-range" id="volRangeUS">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyUS">等待历史校准</div>
+        </div>
+        <div class="home-volatility-card" id="volCardCN">
+          <div class="vh"><span class="home-volatility-market" id="volMarketCN">A股 / CN</span><span class="home-volatility-band normal" id="volBandCN">-</span></div>
+          <div class="home-volatility-move" id="volMoveCN">读取中</div>
+          <div class="home-volatility-range" id="volRangeCN">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyCN">等待历史校准</div>
+        </div>
+        <div class="home-volatility-card" id="volCardHK">
+          <div class="vh"><span class="home-volatility-market" id="volMarketHK">港股 / HK</span><span class="home-volatility-band normal" id="volBandHK">-</span></div>
+          <div class="home-volatility-move" id="volMoveHK">读取中</div>
+          <div class="home-volatility-range" id="volRangeHK">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyHK">等待历史校准</div>
+        </div>
+      </div>
+      <div class="home-volatility-note" id="homeVolatilityNote">68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用当时可见数据。</div>
+    </div>
   </section>
 
   <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
@@ -2471,6 +2531,82 @@ let homeSummaryState={
  riskScore:null,
  riskBand:null
 };
+let volatilityForecastState={markets:{},errors:{},model:null,version:null};
+
+function volatilityBandLabel(value){
+ const v=String(value||'UNKNOWN').toUpperCase();
+ const zh={LOW:'低',NORMAL:'正常',ELEVATED:'偏高',HIGH:'高',UNKNOWN:'未知'};
+ const en={LOW:'LOW',NORMAL:'NORMAL',ELEVATED:'ELEVATED',HIGH:'HIGH',UNKNOWN:'UNKNOWN'};
+ return (lang==='zh'?zh:en)[v]||v;
+}
+function volatilityBandClass(value){
+ const v=String(value||'UNKNOWN').toUpperCase();
+ return v==='LOW'?'low':v==='ELEVATED'?'elevated':v==='HIGH'?'high':'normal';
+}
+function volatilityCalibrationLabel(value){
+ const v=String(value||'INSUFFICIENT').toUpperCase();
+ const zh={WELL_CALIBRATED:'校准良好',USABLE:'可用',POORLY_CALIBRATED:'需校准',INSUFFICIENT:'样本不足'};
+ const en={WELL_CALIBRATED:'Well calibrated',USABLE:'Usable',POORLY_CALIBRATED:'Needs calibration',INSUFFICIENT:'Insufficient sample'};
+ return (lang==='zh'?zh:en)[v]||v;
+}
+function volatilityPrice(value){
+ const n=Number(value);
+ if(!Number.isFinite(n))return '-';
+ return Math.abs(n)<20?n.toFixed(3):n.toFixed(2);
+}
+function renderVolatilityForecast(){
+ const payload=volatilityForecastState||{},markets=payload.markets||{};
+ const zh=lang==='zh';
+ el('homeVolatilityTitle').textContent=zh?'下一交易日波动预测':'Next-session volatility forecast';
+ el('homeVolatilitySub').textContent=zh
+  ? '预测的是收盘到收盘的波动幅度，不预测涨跌方向。'
+  : 'Forecasts close-to-close move magnitude, not direction.';
+ el('homeVolatilityModel').textContent=(payload.model||'EWMA94_MULTI_WINDOW_REALIZED_VOL')+' · '+(payload.version||'-');
+ el('homeVolatilityNote').textContent=zh
+  ? '68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用每个预测时点之前的数据。'
+  : 'The 68% range is a model interval, not a guarantee. Historical calibration is daily walk-forward using only information available before each forecast.';
+ const marketNames=zh?{US:'美股 / US',CN:'A股 / CN',HK:'港股 / HK'}:{US:'US',CN:'China A-shares / CN',HK:'Hong Kong / HK'};
+ for(const m of ['US','CN','HK']){
+  el('volMarket'+m).textContent=marketNames[m];
+  const row=markets[m];
+  if(!row){
+   el('volMove'+m).textContent=zh?'暂不可用':'Unavailable';
+   el('volBand'+m).textContent='-';
+   el('volBand'+m).className='home-volatility-band normal';
+   el('volRange'+m).textContent=(payload.errors||{})[m]|| (zh?'等待完整日线数据':'Awaiting complete daily data');
+   el('volAccuracy'+m).textContent=zh?'暂无可验证校准结果':'No verifiable calibration result';
+   continue;
+  }
+  const move=Number(row.forecast_move_pct);
+  const expectedAbs=Number(row.expected_abs_move_pct);
+  const range=row.range_68||{},wf=row.walk_forward||{};
+  const coverage=Number(wf.coverage_68),ratio=Number(wf.rms_calibration_ratio),n=Number(wf.sample_count||0);
+  const band=String(row.volatility_band||'UNKNOWN');
+  el('volMove'+m).textContent=Number.isFinite(move)?('±'+move.toFixed(2)+'%'):'-';
+  el('volBand'+m).textContent=volatilityBandLabel(band);
+  el('volBand'+m).className='home-volatility-band '+volatilityBandClass(band);
+  el('volRange'+m).textContent=(row.benchmark||m)+' · '+(zh?'68%区间 ':'68% range ')+volatilityPrice(range.lower)+' – '+volatilityPrice(range.upper)
+   +(Number.isFinite(expectedAbs)?(' · '+(zh?'典型绝对波动 ':'typical absolute move ')+expectedAbs.toFixed(2)+'%'):'');
+  const coverageText=Number.isFinite(coverage)?(coverage*100).toFixed(1)+'%':'-';
+  const ratioText=Number.isFinite(ratio)?ratio.toFixed(2):'-';
+  el('volAccuracy'+m).textContent=(zh?'历史1σ命中 ':'Historical 1σ coverage ')+coverageText
+   +' · '+(zh?'校准比 ':'calibration ratio ')+ratioText
+   +' · N='+n+' · '+volatilityCalibrationLabel(wf.calibration_quality);
+  el('volCard'+m).dataset.tip=zh
+   ? '预测口径：下一交易日收盘到收盘的1σ波动幅度。1σ历史覆盖率理论参考约68%；RMS校准比接近1表示预测波动与真实波动量级更一致。'
+   : 'Forecast scope: next-session close-to-close 1σ move. Historical 1σ coverage has a ~68% reference target; an RMS calibration ratio near 1 means forecast and realized volatility are similar in scale.';
+  el('volCard'+m).classList.add('has-tip');
+ }
+}
+async function refreshVolatilityForecast(){
+ try{
+  const payload=await jsonCachedStale('/api/volatility-forecast',60000);
+  volatilityForecastState=payload||{markets:{},errors:{}};
+ }catch(e){
+  volatilityForecastState={markets:{},errors:{ALL:String(e)},model:'EWMA94_MULTI_WINDOW_REALIZED_VOL',version:null};
+ }
+ renderVolatilityForecast();
+}
 function renderHomeSummary(){
  const m=el('market').value;
  const meta=MARKET_UI[m]||{};
@@ -3576,8 +3712,8 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();renderVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels()}
+applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();renderVolatilityForecast();refreshVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);setInterval(refreshVolatilityForecast,60000);
 </script>
 </body>
 </html>
