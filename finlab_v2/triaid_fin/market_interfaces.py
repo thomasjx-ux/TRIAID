@@ -282,7 +282,11 @@ MARKET_INTERFACE_REGISTRY.register(MarketInterfaceProfile(
         ),
         **COMMON_RESERVED,
     },
-    runtime_jobs=("US_POSTCLOSE_RESEARCH",),
+    runtime_jobs=(
+        "LONG_CYCLE_POSTCLOSE",
+        "CROSS_MARKET_POSTCLOSE",
+        "HAZARD_RESEARCH_POSTCLOSE",
+    ),
 ))
 
 MARKET_INTERFACE_REGISTRY.register(MarketInterfaceProfile(
