@@ -27,6 +27,8 @@ from triaid_fin.trading_calendar_sync import TradingCalendarSync
 from triaid_fin.ui_projection import MarketPageProjection, strategy_rows
 from triaid_fin.risk_projection import RiskCenterProjection
 from triaid_fin.ui_ports import UiReadServices
+from triaid_fin.market_interfaces import MARKET_INTERFACE_REGISTRY
+from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -496,6 +498,32 @@ def volatility_forecast_market(market_id: str) -> dict:
         raise HTTPException(status_code=404,detail="market not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from exc
+
+
+@app.get("/api/system/interfaces")
+def system_interfaces()->dict:
+    market_data_status=runtime_services.market_data_status()
+    return {
+        "architecture":"MODULAR_INTERFACE_REGISTRY",
+        "market_interfaces":MARKET_INTERFACE_REGISTRY.status(),
+        "ports":{
+            "runtime_services":RuntimeServices.version,
+            "runtime_journal":runtime_services.journal.version,
+            "ui_read_services":UiReadServices.version,
+        },
+        "runtime_jobs":{
+            "version":RUNTIME_JOB_REGISTRY.version,
+            "registered":list(RUNTIME_JOB_REGISTRY.names()),
+        },
+        "ui_projections":{
+            "market_page":market_page_projection.version,
+            "risk_center":risk_center_projection.version,
+        },
+        "provider_registry":(
+            (market_data_status.get("providers") or {}).get("registry")
+            or (market_data_status.get("providers") or {})
+        ),
+    }
 
 
 @app.get("/api/ui/core")
