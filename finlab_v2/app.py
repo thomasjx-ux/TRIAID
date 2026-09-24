@@ -517,6 +517,7 @@ def system_interfaces()->dict:
             **runtime_services.status()["ports"],
             **ui_read_services.status()["ports"],
             "runtime_services":RuntimeServices.version,
+            "runtime_journal":runtime_services.journal.version,
             "ui_read_services":UiReadServices.version,
         },
         "formal_evidence_repository":{
