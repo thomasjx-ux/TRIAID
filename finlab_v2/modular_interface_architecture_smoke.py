@@ -81,7 +81,7 @@ checks={
     "observation_has_no_market_timezone_ternary":"America/New_York" not in observation_source and "Asia/Hong_Kong" not in observation_source and "Asia/Shanghai" not in observation_source,
     "app_composes_one_shared_runtime_services":"runtime_services=RuntimeServices(engine)" in app_source and "DecisionScheduler(runtime_services)" in app_source and "MarketDataAutomation(runtime_services,decision_scheduler)" in app_source,
     "risk_center_has_one_ui_projection_endpoint":'@app.get("/api/ui/risk-center")' in app_source,
-    "risk_center_frontend_uses_projection":"jsonCached('/api/ui/risk-center',10000)" in app_source,
+    "risk_center_frontend_uses_projection":"jsonCachedStale('/api/ui/risk-center',10000)" in app_source,
     "risk_center_frontend_no_domain_fanout":"jsonOrNullCached('/api/risk-warning/latest',10000)" not in app_source and "jsonOrNullCached('/api/risk-control/latest',10000)" not in app_source,
     "risk_projection_is_read_only":"risk_warning_run" not in risk_projection_source and "risk_control_run" not in risk_projection_source,
     "market_page_frontend_uses_projection":"projectionUrl='/api/ui/market-page/'+m" in app_source,
