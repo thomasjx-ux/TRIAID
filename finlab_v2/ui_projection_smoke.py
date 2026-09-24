@@ -250,7 +250,7 @@ page=projection.full("US","zh")
 sections=page["sections"]
 
 checks={
-    "contract_version":page["contract_version"]=="market-page-projection@1.2.0",
+    "contract_version":page["contract_version"]=="market-page-projection@1.3.0",
     "full_scope":page["projection_scope"]=="FULL",
     "daily_ready":sections["daily"]["state"]==READY,
     "strategies_ready":sections["strategies"]["state"]==READY,
@@ -265,6 +265,7 @@ checks={
     "expected_waiting_posterior_does_not_fail_page":page["integrity"]["passed"] is True,
     "waiting_posterior_makes_page_degraded":page["integrity"]["status"]=="DEGRADED",
     "no_unexplained_empty_sections":page["integrity"]["unexplained_non_ready_sections"]==[],
+    "formal_evidence_absence_is_explicit_without_repository":page["formal_evidence"]["state"]=="NOT_CONFIGURED",
     "four_us_capital_sleeves":len(sections["route"]["data"]["latest_decision"]["capital_capacity"]["sleeves"])==4,
 }
 
