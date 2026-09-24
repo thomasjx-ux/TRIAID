@@ -29,15 +29,22 @@ from triaid_fin.risk_projection import RiskCenterProjection
 from triaid_fin.ui_ports import UiReadServices
 from triaid_fin.market_interfaces import MARKET_INTERFACE_REGISTRY
 from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
+from triaid_fin.projection_repository import VerifiedProjectionRepository
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
 ui_read_services=UiReadServices(engine)
+verified_projection_repository=VerifiedProjectionRepository(runtime_services.journal)
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
-market_page_projection=MarketPageProjection(ui_read_services,market_automation,decision_scheduler)
-risk_center_projection=RiskCenterProjection(ui_read_services)
+market_page_projection=MarketPageProjection(
+    ui_read_services.market_page,
+    market_automation,
+    decision_scheduler,
+    verified_projection_repository,
+)
+risk_center_projection=RiskCenterProjection(ui_read_services.risk)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -115,7 +122,7 @@ async def bootstrap_startup_maintenance(app:FastAPI)->None:
 
 async def bootstrap_long_horizon_research()->None:
     try:
-        long_cycle=await asyncio.to_thread(engine.long_cycle_hypothesis_run,False)
+        long_cycle=await asyncio.to_thread(runtime_services.research.long_cycle_hypothesis_run,False)
         print(
             "TRIAID_LONG_CYCLE_BACKGROUND_PASS",
             long_cycle.get("experiment_id"),
@@ -126,7 +133,7 @@ async def bootstrap_long_horizon_research()->None:
     except Exception as exc:
         print("TRIAID_LONG_CYCLE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
     try:
-        linkage=await asyncio.to_thread(engine.cross_market_crash_run,False)
+        linkage=await asyncio.to_thread(runtime_services.research.cross_market_crash_run,False)
         print(
             "TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_PASS",
             linkage.get("experiment_id"),
@@ -137,7 +144,7 @@ async def bootstrap_long_horizon_research()->None:
         print("TRIAID_US_CN_HK_CRASH_LINKAGE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
     latent=None
     try:
-        latent=await asyncio.to_thread(engine.latent_hazard_run,False)
+        latent=await asyncio.to_thread(runtime_services.research.latent_hazard_run,False)
         print(
             "TRIAID_LATENT_HAZARD_BACKGROUND_PASS",
             latent.get("experiment_id"),
@@ -169,7 +176,7 @@ async def bootstrap_long_horizon_research()->None:
 
     policy_curve=None
     try:
-        policy_curve=await asyncio.to_thread(engine.policy_curve_run,False)
+        policy_curve=await asyncio.to_thread(runtime_services.research.policy_curve_run,False)
         print(
             "TRIAID_POLICY_CURVE_BACKGROUND_PASS",
             policy_curve.get("snapshot_id"),
@@ -181,10 +188,10 @@ async def bootstrap_long_horizon_research()->None:
 
     if latent is not None:
         try:
-            frozen=await asyncio.to_thread(engine.hazard_prospective_freeze,latent,policy_curve)
-            resolved=await asyncio.to_thread(engine.hazard_prospective_resolve)
-            risk_warning=await asyncio.to_thread(engine.risk_warning_run,True)
-            risk_control=await asyncio.to_thread(engine.risk_control_run,True)
+            frozen=await asyncio.to_thread(runtime_services.research.hazard_prospective_freeze,latent,policy_curve)
+            resolved=await asyncio.to_thread(runtime_services.research.hazard_prospective_resolve)
+            risk_warning=await asyncio.to_thread(runtime_services.research.risk_warning_run,True)
+            risk_control=await asyncio.to_thread(runtime_services.research.risk_control_run,True)
             print(
                 "TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_PASS",
                 frozen.get("ledger_id"),
@@ -502,14 +509,19 @@ def volatility_forecast_market(market_id: str) -> dict:
 
 @app.get("/api/system/interfaces")
 def system_interfaces()->dict:
-    market_data_status=runtime_services.market_data_status()
+    market_data_status=runtime_services.market_data.status()
     return {
         "architecture":"MODULAR_INTERFACE_REGISTRY",
         "market_interfaces":MARKET_INTERFACE_REGISTRY.status(),
         "ports":{
+            **runtime_services.status()["ports"],
+            **ui_read_services.status()["ports"],
             "runtime_services":RuntimeServices.version,
-            "runtime_journal":runtime_services.journal.version,
             "ui_read_services":UiReadServices.version,
+        },
+        "formal_evidence_repository":{
+            "version":verified_projection_repository.version,
+            "rule":"PROSPECTIVE_FORMAL_EVIDENCE_EXCLUDES_POSTERIOR_AND_INTRADAY_FUTURE_INFORMATION",
         },
         "runtime_jobs":{
             "version":RUNTIME_JOB_REGISTRY.version,
@@ -524,6 +536,15 @@ def system_interfaces()->dict:
             or (market_data_status.get("providers") or {})
         ),
     }
+
+
+@app.get("/api/experiments/evidence/{market_id}/latest")
+def experiment_evidence_latest(market_id:str)->dict:
+    market=normalize_market_id(market_id)
+    payload=verified_projection_repository.latest(market)
+    if not payload:
+        raise HTTPException(status_code=404,detail="no formal projection evidence")
+    return payload
 
 
 @app.get("/api/ui/core")
@@ -764,7 +785,7 @@ def risk_warning_latest() -> dict:
     row=engine.risk_warning_latest()
     if row is None:
         try:
-            row=engine.risk_warning_run(False)
+            row=runtime_services.research.risk_warning_run(False)
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
     return row
@@ -787,7 +808,7 @@ def risk_control_latest() -> dict:
     row=engine.risk_control_latest()
     if row is None:
         try:
-            row=engine.risk_control_run(False)
+            row=runtime_services.research.risk_control_run(False)
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"{type(exc).__name__}:{exc}") from exc
     return row
