@@ -5,7 +5,7 @@ from triaid_fin.market_runtime import MarketDataAutomation
 
 
 class FakeEngine:
-    def market_observations(self,market,mode,limit):
+    def observations(self,market,mode,limit):
         return [
             {
                 "market_id":market,
