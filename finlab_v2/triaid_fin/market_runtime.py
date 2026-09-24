@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from datetime import datetime, time as dt_time, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 from .market_data import session_phase
-from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+from .market_registry import market_ids
+from .market_interfaces import market_interface
+from .runtime_ports import RuntimeServices
+from .runtime_jobs import RUNTIME_JOB_REGISTRY, RuntimeJobContext
 from .frequency_policy import FrequencyPolicy
 from .trading_calendar import calendar_status
 
@@ -15,14 +17,21 @@ from .trading_calendar import calendar_status
 class MarketDataAutomation:
     version="market-data-automation@0.8.0"
 
-    def __init__(self,engine,decision_scheduler=None)->None:
-        self.engine=engine
+    def __init__(self,services,decision_scheduler=None)->None:
+        self.services=(
+            services
+            if isinstance(services,RuntimeServices)
+            else RuntimeServices(services)
+        )
         self.decision_scheduler=decision_scheduler
         self.enabled=os.getenv("TRIAID_DATA_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.last_refresh:dict[str,float]={}
         self.errors:dict[str,str]={}
         self.last_phase:dict[str,str]={}
-        self.frequency_policy=FrequencyPolicy(engine.store)
+        self.frequency_policy=FrequencyPolicy(self.services.journal)
+        self.runtime_job_state:dict[str,dict]={}
+        # Backward-compatible status mirrors. They are derived from plugin state
+        # and are never used to drive runtime control flow.
         self.auction_shadow_day:dict[str,str]={}
         self.auction_shadow_latest:dict[str,dict]={}
         self.long_cycle_day:str|None=None
@@ -71,6 +80,53 @@ class MarketDataAutomation:
         market=market_id.upper()
         return self.refresh_plan_for_phase(market,session_phase(market))
 
+    def _sync_legacy_job_state(self)->None:
+        auction=self.runtime_job_state.get("CN_PREOPEN_AUCTION_SHADOW") or {}
+        if auction.get("latest"):
+            latest=auction["latest"]
+            market=str(latest.get("market_id") or "CN").upper()
+            self.auction_shadow_latest[market]=latest
+            if auction.get("last_day"):
+                self.auction_shadow_day[market]=auction["last_day"]
+
+        long_cycle=self.runtime_job_state.get("LONG_CYCLE_POSTCLOSE") or {}
+        self.long_cycle_day=long_cycle.get("last_day")
+        self.long_cycle_latest=long_cycle.get("latest")
+
+        crash=self.runtime_job_state.get("CROSS_MARKET_POSTCLOSE") or {}
+        self.cross_market_crash_day=crash.get("last_day")
+        self.cross_market_crash_latest=crash.get("latest")
+
+        hazard=self.runtime_job_state.get("HAZARD_RESEARCH_POSTCLOSE") or {}
+        self.hazard_research_day=hazard.get("last_day")
+        self.hazard_research_latest=hazard.get("latest")
+
+    async def _run_registered_jobs(
+        self,
+        market_id:str,
+        phase:str,
+        stage:str,
+    )->None:
+        profile=market_interface(market_id)
+        for job_name in profile.runtime_jobs:
+            try:
+                if RUNTIME_JOB_REGISTRY.stage(job_name)!=stage:
+                    continue
+                context=RuntimeJobContext(
+                    services=self.services,
+                    market_id=market_id,
+                    phase=phase,
+                    timeout_seconds=self.refresh_timeout_seconds,
+                    state=self.runtime_job_state,
+                    errors=self.errors,
+                )
+                await RUNTIME_JOB_REGISTRY.run(job_name,context)
+            except Exception as exc:
+                key=f"{market_id}:{job_name}:PLUGIN"
+                self.errors[key]=f"{type(exc).__name__}:{exc}"
+                print("TRIAID_RUNTIME_JOB_RECOVERY",market_id,job_name,self.errors[key])
+        self._sync_legacy_job_state()
+
     async def _run_market_cycle(self,market_id:str,now:float)->None:
         phase=session_phase(market_id)
         if self.last_phase.get(market_id)!=phase:
@@ -78,24 +134,8 @@ class MarketDataAutomation:
                 self.last_refresh[key]=0.0
             self.last_phase[market_id]=phase
             print("TRIAID_MARKET_PHASE",market_id,phase)
-        capabilities=self.engine.market_data_capabilities(market_id)[market_id]
-        if market_id=="CN" and phase=="PREOPEN":
-            local_now=datetime.now(ZoneInfo("Asia/Shanghai"))
-            day=local_now.date().isoformat()
-            if local_now.time()>=dt_time(9,25) and self.auction_shadow_day.get("CN")!=day:
-                try:
-                    probe=await asyncio.to_thread(self.engine.market_data_auction_shadow_probe,"CN")
-                    event={
-                        **probe,
-                        "observed_at":datetime.now(timezone.utc).isoformat(),
-                        "trade_date":day,
-                    }
-                    self.engine.store.append_jsonl("auction_shadow_events.jsonl",event)
-                    self.auction_shadow_latest["CN"]=event
-                    self.auction_shadow_day["CN"]=day
-                    print("TRIAID_ZERO_COST_AUCTION_SHADOW",probe.get("available_symbols"),probe.get("total_symbols"),probe.get("all_symbols_available"))
-                except Exception as exc:
-                    self.errors["CN:AUCTION_SHADOW"]=f"{type(exc).__name__}:{exc}"
+        capabilities=self.services.market_data_capabilities(market_id)[market_id]
+        await self._run_registered_jobs(market_id,phase,"PRE_REFRESH")
         for mode,interval_seconds in self.refresh_plan_for_phase(market_id,phase).items():
             if not capabilities.get(mode,{}).get("supported",False):
                 continue
@@ -104,15 +144,15 @@ class MarketDataAutomation:
                 continue
             try:
                 result=await asyncio.wait_for(
-                    asyncio.to_thread(self.engine.refresh_market_data,market_id,mode),
+                    asyncio.to_thread(self.services.refresh_market_data,market_id,mode),
                     timeout=self.refresh_timeout_seconds,
                 )
                 snapshot=await asyncio.wait_for(
-                    asyncio.to_thread(self.engine.market_data_snapshot,market_id,mode,False),
+                    asyncio.to_thread(self.services.market_data_snapshot,market_id,mode,False),
                     timeout=self.refresh_timeout_seconds,
                 )
                 observed=await asyncio.wait_for(
-                    asyncio.to_thread(self.engine.record_market_observation,snapshot),
+                    asyncio.to_thread(self.services.record_market_observation,snapshot),
                     timeout=self.refresh_timeout_seconds,
                 )
                 decision_result=None
@@ -143,7 +183,7 @@ class MarketDataAutomation:
                     try:
                         forecast=await asyncio.wait_for(
                             asyncio.to_thread(
-                                self.engine.refresh_volatility_forecast,
+                                self.services.refresh_volatility_forecast,
                                 market_id,
                             ),
                             timeout=max(60,self.refresh_timeout_seconds),
@@ -181,132 +221,7 @@ class MarketDataAutomation:
                     self.errors[key],
                 )
 
-        if market_id=="US" and phase=="POSTCLOSE":
-            local_now=datetime.now(ZoneInfo("America/New_York"))
-            day=local_now.date().isoformat()
-            if self.long_cycle_day!=day:
-                try:
-                    report=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.long_cycle_hypothesis_run,False),
-                        timeout=max(120,self.refresh_timeout_seconds),
-                    )
-                    self.long_cycle_latest={
-                        "experiment_id":report.get("experiment_id"),
-                        "as_of":report.get("as_of"),
-                        "downturn_state":((report.get("hypotheses") or {}).get("downturn_confirmation") or {}).get("state"),
-                        "stretch_state":((report.get("hypotheses") or {}).get("stretch_vulnerability") or {}).get("state"),
-                    }
-                    self.long_cycle_day=day
-                    self.errors.pop("US:LONG_CYCLE",None)
-                    print(
-                        "TRIAID_LONG_CYCLE_DAILY",
-                        report.get("experiment_id"),
-                        report.get("as_of"),
-                        self.long_cycle_latest.get("downturn_state"),
-                        self.long_cycle_latest.get("stretch_state"),
-                    )
-                except Exception as exc:
-                    self.errors["US:LONG_CYCLE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_LONG_CYCLE_RECOVERY",self.errors["US:LONG_CYCLE"])
-
-            if self.cross_market_crash_day!=day:
-                try:
-                    report=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.cross_market_crash_run,False),
-                        timeout=max(180,self.refresh_timeout_seconds),
-                    )
-                    episodes=report.get("canonical_episode_studies") or {}
-                    self.cross_market_crash_latest={
-                        "experiment_id":report.get("experiment_id"),
-                        "as_of":report.get("as_of"),
-                        "paired_event_rows":((report.get("detected_crashes") or {}).get("paired_event_rows")),
-                        "episodes":{
-                            key:{
-                                "relation":value.get("relation"),
-                                "cn_trough_minus_us_trough_calendar_days":value.get("cn_trough_minus_us_trough_calendar_days"),
-                            }
-                            for key,value in episodes.items()
-                        },
-                    }
-                    self.cross_market_crash_day=day
-                    self.errors.pop("NMARKET:CRASH_LINKAGE",None)
-                    print(
-                        "TRIAID_N_MARKET_CRASH_LINKAGE_DAILY",
-                        report.get("experiment_id"),
-                        report.get("as_of"),
-                        self.cross_market_crash_latest.get("paired_event_rows"),
-                    )
-                except Exception as exc:
-                    self.errors["NMARKET:CRASH_LINKAGE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_N_MARKET_CRASH_LINKAGE_RECOVERY",self.errors["NMARKET:CRASH_LINKAGE"])
-
-            if self.hazard_research_day!=day:
-                try:
-                    latent=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.latent_hazard_run,False),
-                        timeout=max(240,self.refresh_timeout_seconds),
-                    )
-                    policy=None
-                    try:
-                        policy=await asyncio.wait_for(
-                            asyncio.to_thread(self.engine.policy_curve_run,False),
-                            timeout=max(180,self.refresh_timeout_seconds),
-                        )
-                    except Exception as curve_exc:
-                        self.errors["US:POLICY_CURVE"]=f"{type(curve_exc).__name__}:{curve_exc}"
-                        print("TRIAID_POLICY_CURVE_RECOVERY",self.errors["US:POLICY_CURVE"])
-                    frozen=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.hazard_prospective_freeze,latent,policy),
-                        timeout=max(120,self.refresh_timeout_seconds),
-                    )
-                    resolved=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.hazard_prospective_resolve),
-                        timeout=max(240,self.refresh_timeout_seconds),
-                    )
-                    risk_warning=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.risk_warning_run,True),
-                        timeout=max(120,self.refresh_timeout_seconds),
-                    )
-                    risk_control=await asyncio.wait_for(
-                        asyncio.to_thread(self.engine.risk_control_run,True),
-                        timeout=max(120,self.refresh_timeout_seconds),
-                    )
-                    self.hazard_research_latest={
-                        "experiment_id":latent.get("experiment_id"),
-                        "as_of":latent.get("as_of"),
-                        "current_state":(latent.get("current_state") or {}).get("state_label"),
-                        "supported_trigger_count":(latent.get("current_state") or {}).get("supported_trigger_count"),
-                        "policy_curve_snapshot_id":(policy or {}).get("snapshot_id"),
-                        "policy_curve_usable":((policy or {}).get("data_quality") or {}).get("term_curve_usable"),
-                        "prospective_ledger_id":frozen.get("ledger_id"),
-                        "updated_outcomes":resolved.get("updated_outcomes"),
-                        "risk_warning_id":risk_warning.get("warning_id"),
-                        "risk_pressure_index":(risk_warning.get("overall") or {}).get("risk_pressure_index"),
-                        "risk_band":(risk_warning.get("overall") or {}).get("risk_band"),
-                        "risk_20d":((risk_warning.get("horizon_estimates") or {}).get("20") or {}).get("risk_pressure_index"),
-                        "risk_60d":((risk_warning.get("horizon_estimates") or {}).get("60") or {}).get("risk_pressure_index"),
-                        "risk_120d":((risk_warning.get("horizon_estimates") or {}).get("120") or {}).get("risk_pressure_index"),
-                        "risk_250d":((risk_warning.get("horizon_estimates") or {}).get("250") or {}).get("risk_pressure_index"),
-                        "risk_control_experiment_id":risk_control.get("experiment_id"),
-                        "risk_control_stage":(risk_control.get("risk_control_experiment") or {}).get("stage"),
-                    }
-                    self.hazard_research_day=day
-                    self.errors.pop("US:LATENT_HAZARD",None)
-                    self.errors.pop("US:HAZARD_PROSPECTIVE",None)
-                    print(
-                        "TRIAID_HAZARD_RESEARCH_DAILY",
-                        latent.get("experiment_id"),
-                        latent.get("as_of"),
-                        self.hazard_research_latest.get("current_state"),
-                        self.hazard_research_latest.get("policy_curve_usable"),
-                        self.hazard_research_latest.get("updated_outcomes"),
-                        self.hazard_research_latest.get("risk_pressure_index"),
-                        self.hazard_research_latest.get("risk_band"),
-                        self.hazard_research_latest.get("risk_control_stage"),
-                    )
-                except Exception as exc:
-                    self.errors["US:HAZARD_PROSPECTIVE"]=f"{type(exc).__name__}:{exc}"
-                    print("TRIAID_HAZARD_PROSPECTIVE_RECOVERY",self.errors["US:HAZARD_PROSPECTIVE"])
+        await self._run_registered_jobs(market_id,phase,"POST_REFRESH")
 
     async def run(self)->None:
         self.started_at_utc=datetime.now(timezone.utc).isoformat()
@@ -336,34 +251,15 @@ class MarketDataAutomation:
 
     @staticmethod
     def _instrument_name(market_id:str,symbol:str)->str:
-        labels={
-            "US":{
-                "SPY":"S&P 500 · SPY",
-                "QQQ":"Nasdaq 100 · QQQ",
-                "IWM":"Russell 2000 · IWM",
-                "TLT":"US Treasury · TLT",
-                "GLD":"Gold · GLD",
-            },
-            "CN":{
-                "510300.SS":"沪深300ETF · 510300",
-                "510500.SS":"中证500ETF · 510500",
-                "159915.SZ":"创业板ETF · 159915",
-                "512100.SS":"中证1000ETF · 512100",
-                "511010.SS":"国债ETF · 511010",
-            },
-            "HK":{
-                "2800.HK":"盈富基金 · 2800.HK",
-                "2828.HK":"恒生国企ETF · 2828.HK",
-                "3033.HK":"恒生科技ETF · 3033.HK",
-                "2819.HK":"香港债券ETF · 2819.HK",
-            },
-        }
-        return labels.get(market_id.upper(),{}).get(symbol,symbol)
+        try:
+            return market_interface(market_id).instrument_labels.get(symbol,symbol)
+        except KeyError:
+            return symbol
 
     def live_indicators(self,market_id:str)->dict:
         market=market_id.upper()
         current_phase=session_phase(market)
-        rows=self.engine.market_observations(market,"REALTIME",120)
+        rows=self.services.market_observations(market,"REALTIME",120)
         valid=[]
         for row in rows:
             try:
@@ -432,7 +328,7 @@ class MarketDataAutomation:
         phase=session_phase(market)
         plan=self.refresh_plan_for_phase(market,phase)
         events=[]
-        for row in self.engine.market_observations(market,None,max(80,limit)):
+        for row in self.services.market_observations(market,None,max(80,limit)):
             mode=str(row.get("mode") or "").upper()
             interval=self.frequency_policy.interval(market,mode) if mode in {"DAILY","INTRADAY","PREOPEN","REALTIME"} else None
             events.append({
@@ -444,7 +340,7 @@ class MarketDataAutomation:
                 "source_latest_ts":row.get("source_latest_ts"),
                 "message":f"{mode} data <- {row.get('provider')} · points={row.get('points')} · source_ts={row.get('source_latest_ts')}",
             })
-        for row in self.engine.market_transitions(market,None,max(80,limit)):
+        for row in self.services.market_transitions(market,None,max(80,limit)):
             events.append({
                 "at":row.get("derived_at"),
                 "kind":"STATE_TRANSITION",
@@ -528,5 +424,14 @@ class MarketDataAutomation:
                 "refresh_timeout_seconds":self.refresh_timeout_seconds,
                 "policy":"MARKET_FAULT_ISOLATION; FAST_RETRY_ON_REFRESH_FAILURE; SUPERVISOR_RESTART_ON_TASK_EXIT",
             },
-            "hub":self.engine.market_data_status(),
+            "runtime_jobs":{
+                "registry_version":RUNTIME_JOB_REGISTRY.version,
+                "registered":list(RUNTIME_JOB_REGISTRY.names()),
+                "assignments":{
+                    market:list(market_interface(market).runtime_jobs)
+                    for market in market_ids()
+                },
+                "state":dict(self.runtime_job_state),
+            },
+            "hub":self.services.market_data_status(),
         }
