@@ -39,6 +39,7 @@ from .strategy_registry import strategy_ids_for_market
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
+from .hk_return_max import HKReturnMaxLedger, HKReturnMaxRoute
 from .volatility_forecast import cached_all_market_volatility_forecasts, cached_volatility_forecast, refresh_all_market_volatility_forecasts, refresh_market_volatility_forecast
 
 
@@ -67,6 +68,8 @@ class EvolutionLabEngine:
         self.recovery_wave_core=RecoveryWaveCore(self.evolution.active())
         self.us_return_max=USReturnMaxRoute()
         self.us_return_max_ledger=USReturnMaxLedger(self.store)
+        self.hk_return_max=HKReturnMaxRoute()
+        self.hk_return_max_ledger=HKReturnMaxLedger(self.store)
         self.long_cycle_hypothesis=LongCycleHypothesisExperiment(self.store)
         self.cross_market_crash=CrossMarketCrashExperiment(self.store)
         self.latent_hazard=LatentHazardExperiment(self.store)
@@ -183,6 +186,8 @@ class EvolutionLabEngine:
             "capital_capacity":self.recovery_wave_core.capital_capacity.version if hasattr(self,"recovery_wave_core") else "capital-capacity-layer@unknown",
             "us_return_max":self.us_return_max.version if hasattr(self,"us_return_max") else "us-return-max-route@unknown",
             "us_return_max_ledger":self.us_return_max_ledger.version if hasattr(self,"us_return_max_ledger") else "us-return-max-ledger@unknown",
+            "hk_return_max":self.hk_return_max.version if hasattr(self,"hk_return_max") else "hk-return-max-route@unknown",
+            "hk_return_max_ledger":self.hk_return_max_ledger.version if hasattr(self,"hk_return_max_ledger") else "hk-return-max-ledger@unknown",
             "long_cycle_hypothesis":self.long_cycle_hypothesis.version if hasattr(self,"long_cycle_hypothesis") else "us-long-cycle-hypothesis@unknown",
             "cross_market_crash":self.cross_market_crash.version if hasattr(self,"cross_market_crash") else "us-cn-hk-crash-linkage@unknown",
             "latent_hazard":self.latent_hazard.version if hasattr(self,"latent_hazard") else "latent-hazard-discovery@unknown",
@@ -582,6 +587,7 @@ class EvolutionLabEngine:
             recovery_outcome=None
             recovery_decision=None
             us_return_outcome=None
+            hk_return_outcome=None
             if market_id=="CN":
                 if evidence_eligible and daily_bar_complete:
                     recovery_outcome=self.recovery_wave_ledger.record_outcome(
@@ -653,8 +659,17 @@ class EvolutionLabEngine:
                 snapshot.metadata["experiment_design"]="Use the existing return-first reselect strategy population as the primary US route, expand the frozen strategy mix to executable ETF exposures, and validate realized return versus SPY buy-and-hold and the generic TRIAID Core under four USD capital sleeves."
                 snapshot.metadata["market_route"]="US_RETURN_MAXIMIZATION"
             else:
+                if evidence_eligible and daily_bar_complete:
+                    hk_return_outcome=self.hk_return_max_ledger.record_outcome(
+                        prepared["latest_as_of"],
+                        prepared["previous_as_of"],
+                        prepared.get("realized_returns_from_previous_period") or {},
+                        prepared.get("product_realized_returns_from_previous_period") or {},
+                        prepared.get("product_turnover_notional_from_previous_period") or {},
+                        snapshot.snapshot_id,
+                    )
                 snapshot.metadata["experiment_mode"]="HK_RETURN_MAX_CAPACITY"
-                snapshot.metadata["experiment_design"]="Select from the full generic strategy population over a tradable Hong Kong ETF universe, maximizing realizable net return after modeled trading costs while treating risk, liquidity, capacity and concentration as constraints. The route remains research-only and produces no broker orders."
+                snapshot.metadata["experiment_design"]="Use the HK return-first strategy population and TRIAID Core as the frozen decision source, expand it into HK ETF exposures, and validate HK-only realized return, execution capacity and costs under four HKD capital sleeves. The route remains research-only and produces no broker orders."
                 snapshot.metadata["market_route"]="HK_RETURN_MAXIMIZATION"
                 snapshot.metadata["hk_tradable_universe"]=list(MARKETS["HK"].assets)
             snapshot.metadata["primary_route_revision"]=self.architecture_version
