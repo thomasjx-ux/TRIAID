@@ -10,7 +10,7 @@ from .market_interfaces import market_interface
 from .ui_ports import MarketPageReadPort, UiReadServices
 
 
-VERSION="market-page-projection@1.2.0"
+VERSION="market-page-projection@1.3.0"
 READY="READY"
 WAITING="WAITING"
 STALE="STALE"
@@ -658,10 +658,11 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
 class MarketPageProjection:
     version=VERSION
 
-    def __init__(self,services,automation,scheduler)->None:
+    def __init__(self,services,automation,scheduler,evidence_repository=None)->None:
         self.services=_market_read_port(services)
         self.automation=automation
         self.scheduler=scheduler
+        self.evidence_repository=evidence_repository
 
     @staticmethod
     def _contract()->dict:
@@ -804,7 +805,7 @@ class MarketPageProjection:
 
         integrity=_validate_projection(market,sections,strict_live=False)
         spec=MARKET_REGISTRY.get(market)
-        return {
+        payload={
             "contract_version":self.version,
             "projection_scope":"FULL",
             "market_id":market,
@@ -826,3 +827,23 @@ class MarketPageProjection:
             "sections":sections,
             "integrity":integrity,
         }
+        evidence={
+            "state":"NOT_CONFIGURED",
+            "reason":"FORMAL_EVIDENCE_REPOSITORY_NOT_CONFIGURED",
+        }
+        if self.evidence_repository is not None:
+            try:
+                evidence=self.evidence_repository.publish_market_page(payload)
+            except Exception as exc:
+                evidence={
+                    "state":"ERROR",
+                    "reason":f"{type(exc).__name__}:{exc}",
+                }
+                integrity["warnings"]=list(dict.fromkeys(
+                    list(integrity.get("warnings") or [])
+                    +["formal_evidence:FREEZE_FAILED"]
+                ))
+                if integrity.get("passed"):
+                    integrity["status"]="DEGRADED"
+        payload["formal_evidence"]=evidence
+        return payload
