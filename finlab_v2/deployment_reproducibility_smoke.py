@@ -60,7 +60,7 @@ assert "Railway local volumes are not required for the current production servic
 
 railway_json=__import__("json").loads(Path("railway.json").read_text(encoding="utf-8"))
 assert railway_json["build"]["watchPatterns"]==[
-    "/finlab_v2/__manual_runtime_release__/**"
+    "/finlab_v2/**"
 ]
 assert railway_json["build"]["buildCommand"]=="sh build_gate.sh"
 assert railway_json["deploy"]["startCommand"]=="sh start.sh"
