@@ -3805,7 +3805,9 @@ function renderDailyExperimentIntelligence(intel,cross,investmentReport){
   (zh?'触发重算 ':'Recomputed ')+(trans.recomputed_count??0)+(zh?' 次；过滤 ':' times; skipped ')+(trans.skipped_count??0)+(zh?' 次':' times'),
   (zh?'Risk-off ':'Risk-off ')+(trans.risk_off_decisions??0)+' · Risk-on '+(trans.risk_on_decisions??0),
   (zh?'状态方向切换 ':'Regime switches ')+(trans.regime_switch_count??0)+(trans.oscillation_flag?(zh?'，存在时间尺度抖动风险':' with timescale oscillation risk'):''),
-  (zh?'Urgent 事件 ':'Urgent events ')+(trans.urgent_event_count??0)+(zh?'；建议配置变化 ':'; allocation changes recommended ')+(trans.allocation_change_recommended_count??0)
+  (zh?'Urgent 事件 ':'Urgent events ')+(trans.urgent_event_count??0)+(zh?'；建议配置变化 ':'; allocation changes recommended ')+(trans.allocation_change_recommended_count??0),
+  (zh?'Risk-on 动作候选 ':'Risk-on action candidates ')+(trans.risk_increase_candidate_count??0)+
+    (zh?'；被持续性门槛拦下 ':'; suppressed by persistence gate ')+(trans.risk_increase_suppressed_count??0)
  ];
  el('deiTransitionRows').innerHTML=transRows.map(x=>'<li>'+esc(x)+'</li>').join('');
 
