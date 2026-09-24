@@ -507,7 +507,10 @@ def ui_market_page(
     run_id:str|None=None,
 )->dict:
     try:
-        return market_page_projection.full(market_id,lang,run_id)
+        payload=market_page_projection.full(market_id,lang,run_id)
+        if not (payload.get("integrity") or {}).get("passed"):
+            return JSONResponse(status_code=503,content=payload)
+        return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
     except ValueError as exc:
@@ -517,7 +520,10 @@ def ui_market_page(
 @app.get("/api/ui/market-page/{market_id}/live")
 def ui_market_page_live(market_id:str)->dict:
     try:
-        return market_page_projection.live(market_id)
+        payload=market_page_projection.live(market_id)
+        if not (payload.get("integrity") or {}).get("passed"):
+            return JSONResponse(status_code=503,content=payload)
+        return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
 
