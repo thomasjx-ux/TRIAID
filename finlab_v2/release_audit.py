@@ -68,6 +68,7 @@ BUILD_CASES=[
     "empty_posterior_layout_smoke.py",
     "all_table_surface_smoke.py",
     "us_page_live_surface_smoke.py",
+    "ui_projection_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
@@ -94,6 +95,12 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/registry",
     "/api/accounts/status",
     "/api/ui/market-clocks",
+    "/api/ui/market-page/US?lang=zh",
+    "/api/ui/market-page/CN?lang=zh",
+    "/api/ui/market-page/HK?lang=zh",
+    "/api/ui/market-page/US/live",
+    "/api/ui/market-page/CN/live",
+    "/api/ui/market-page/HK/live",
     "/api/volatility-forecast",
     "/api/risk-warning/latest",
     "/api/risk-control/latest",
@@ -158,6 +165,7 @@ def structural_checks()->list[dict]:
     app=(ROOT/"app.py").read_text(encoding="utf-8")
     engine=(ROOT/"triaid_fin"/"engine.py").read_text(encoding="utf-8")
     scheduler=(ROOT/"triaid_fin"/"decision_scheduler.py").read_text(encoding="utf-8")
+    projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
@@ -170,6 +178,27 @@ def structural_checks()->list[dict]:
     check("audit_status_api_present",'@app.get("/api/audit/status")' in app,None)
     check("railway_git_identity_contract","RAILWAY_GIT_COMMIT_SHA" in app and "identity_verified" in app,None)
     check("runtime_smoke_uses_liveness",'/health/live' in post,None)
+    check(
+        "market_page_projection_is_single_ui_contract",
+        "class MarketPageProjection" in projection
+        and "NO_UNEXPLAINED_EMPTY_SURFACES" in projection
+        and '@app.get("/api/ui/market-page/{market_id}")' in app,
+        None,
+    )
+    refresh_start=app.find("async function refreshAll(preferStale=false)")
+    refresh_end=app.find("async function refreshRiskPanels",refresh_start)
+    refresh_block=app[refresh_start:refresh_end] if refresh_start>=0 and refresh_end>refresh_start else ""
+    check(
+        "market_page_frontend_no_legacy_multi_api_fanout",
+        "projectionUrl=" in refresh_block
+        and all(token not in refresh_block for token in (
+            "/api/daily?compact=true&market_id=",
+            "/api/strategies?market_id=",
+            "/api/curves?market_id=",
+            "/api/runs?market_id=",
+        )),
+        None,
+    )
     gateway=ROOT.parent/"gateway"/"gateway.py"
     if gateway.exists():
         gateway_text=gateway.read_text(encoding="utf-8")
@@ -394,6 +423,60 @@ def runtime_checks()->list[dict]:
                 and str(market_state.get("baseline_reference_as_of"))>=str(market_state.get("baseline_expected_as_of")),
                 market_state,
             )
+
+    for market in ("US","CN","HK"):
+        page=payloads.get(f"/api/ui/market-page/{market}?lang=zh") or {}
+        live_page=payloads.get(f"/api/ui/market-page/{market}/live") or {}
+        check(
+            f"{market}_market_page_projection_contract",
+            page.get("contract_version")=="market-page-projection@1.0.0"
+            and page.get("projection_scope")=="FULL"
+            and page.get("market_id")==market,
+            {
+                "contract_version":page.get("contract_version"),
+                "projection_scope":page.get("projection_scope"),
+                "market_id":page.get("market_id"),
+            },
+        )
+        integrity=page.get("integrity") or {}
+        check(
+            f"{market}_market_page_projection_integrity",
+            integrity.get("passed") is True
+            and not (integrity.get("unexplained_non_ready_sections") or []),
+            integrity,
+        )
+        sections=page.get("sections") or {}
+        for required_section in ("daily","strategies","route"):
+            section=sections.get(required_section) or {}
+            check(
+                f"{market}_projection_{required_section}_ready",
+                section.get("state")=="READY",
+                section,
+            )
+        posterior=sections.get("posterior") or {}
+        check(
+            f"{market}_projection_posterior_never_unexplained",
+            posterior.get("state")=="READY" or bool(posterior.get("reason")),
+            posterior,
+        )
+        check(
+            f"{market}_live_projection_contract",
+            live_page.get("contract_version")=="market-page-projection@1.0.0"
+            and live_page.get("projection_scope")=="LIVE"
+            and live_page.get("market_id")==market,
+            {
+                "contract_version":live_page.get("contract_version"),
+                "projection_scope":live_page.get("projection_scope"),
+                "market_id":live_page.get("market_id"),
+            },
+        )
+        live_integrity=live_page.get("integrity") or {}
+        check(
+            f"{market}_live_projection_integrity",
+            live_integrity.get("passed") is True
+            and not (live_integrity.get("unexplained_non_ready_sections") or []),
+            live_integrity,
+        )
 
     table_runtime_summary={}
     for market in ("US","CN","HK"):
