@@ -116,7 +116,7 @@ async def _cn_preopen_auction_shadow(ctx:RuntimeJobContext)->dict|None:
         return None
     try:
         probe=await asyncio.to_thread(
-            ctx.services.market_data_auction_shadow_probe,
+            ctx.services.market_data.auction_shadow_probe,
             ctx.market,
         )
         event={
@@ -150,7 +150,7 @@ async def _long_cycle_postclose(ctx:RuntimeJobContext)->dict|None:
         return None
     try:
         report=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.long_cycle_hypothesis_run,False),
+            asyncio.to_thread(ctx.services.research.long_cycle_hypothesis_run,False),
             timeout=max(120,ctx.timeout_seconds),
         )
         latest={
@@ -193,7 +193,7 @@ async def _cross_market_postclose(ctx:RuntimeJobContext)->dict|None:
         return None
     try:
         report=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.cross_market_crash_run,False),
+            asyncio.to_thread(ctx.services.research.cross_market_crash_run,False),
             timeout=max(180,ctx.timeout_seconds),
         )
         episodes=report.get("canonical_episode_studies") or {}
@@ -238,13 +238,13 @@ async def _hazard_research_postclose(ctx:RuntimeJobContext)->dict|None:
         return None
     try:
         latent=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.latent_hazard_run,False),
+            asyncio.to_thread(ctx.services.research.latent_hazard_run,False),
             timeout=max(240,ctx.timeout_seconds),
         )
         policy=None
         try:
             policy=await asyncio.wait_for(
-                asyncio.to_thread(ctx.services.policy_curve_run,False),
+                asyncio.to_thread(ctx.services.research.policy_curve_run,False),
                 timeout=max(180,ctx.timeout_seconds),
             )
             ctx.clear_error("POLICY_CURVE_POSTCLOSE")
@@ -257,22 +257,22 @@ async def _hazard_research_postclose(ctx:RuntimeJobContext)->dict|None:
             )
         frozen=await asyncio.wait_for(
             asyncio.to_thread(
-                ctx.services.hazard_prospective_freeze,
+                ctx.services.research.hazard_prospective_freeze,
                 latent,
                 policy,
             ),
             timeout=max(120,ctx.timeout_seconds),
         )
         resolved=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.hazard_prospective_resolve),
+            asyncio.to_thread(ctx.services.research.hazard_prospective_resolve),
             timeout=max(240,ctx.timeout_seconds),
         )
         risk_warning=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.risk_warning_run,True),
+            asyncio.to_thread(ctx.services.research.risk_warning_run,True),
             timeout=max(120,ctx.timeout_seconds),
         )
         risk_control=await asyncio.wait_for(
-            asyncio.to_thread(ctx.services.risk_control_run,True),
+            asyncio.to_thread(ctx.services.research.risk_control_run,True),
             timeout=max(120,ctx.timeout_seconds),
         )
         latest={
