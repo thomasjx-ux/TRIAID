@@ -177,6 +177,8 @@ def structural_checks()->list[dict]:
     projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
     runtime=(ROOT/"triaid_fin"/"market_runtime.py").read_text(encoding="utf-8")
     interfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
+    market_contracts=(ROOT/"triaid_fin"/"market_contracts.py").read_text(encoding="utf-8")
+    market_profiles=(ROOT/"triaid_fin"/"market_profiles"/"__init__.py").read_text(encoding="utf-8")
     risk_projection=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encoding="utf-8")
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
@@ -202,9 +204,30 @@ def structural_checks()->list[dict]:
     )
     check(
         "market_interfaces_are_registry_driven",
-        "class MarketInterfaceRegistry" in interfaces
-        and "provider_chains" in interfaces
-        and "runtime_jobs" in interfaces,
+        "MarketInterfaceRegistry" in interfaces
+        and "builtin_profiles" in interfaces
+        and "class MarketInterfaceRegistry" in market_contracts
+        and "provider_chains" in market_contracts
+        and "runtime_jobs" in market_contracts,
+        None,
+    )
+    check(
+        "market_profiles_are_plugin_loaded",
+        all(
+            token in market_profiles
+            for token in ("build_us_profile","build_cn_profile","build_hk_profile")
+        )
+        and all(
+            token not in interfaces
+            for token in (
+                "US_ROUTE=",
+                "CN_ROUTE=",
+                "HK_ROUTE=",
+                'market_id="US"',
+                'market_id="CN"',
+                'market_id="HK"',
+            )
+        ),
         None,
     )
     check(
