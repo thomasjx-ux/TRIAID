@@ -2,7 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "sh build_gate.sh"
+    "buildCommand": "sh build_gate.sh",
+    "watchPatterns": [
+      "/finlab_v2/__manual_runtime_release__/**"
+    ]
   },
   "deploy": {
     "startCommand": "sh start.sh",
