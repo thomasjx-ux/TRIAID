@@ -2322,7 +2322,25 @@ const UI_TIPS={
   recoveryOpinionTitle:'当前Shadow Core的冻结研究配置，不生成真实券商订单。',
   capitalSleeveTitle:'用四档人民币资金规模对同一冻结研究配置进行容量和模型化执行成本评估。',
   capitalRealizedTitle:'基于后续真实价格与成交量、冻结参与率上限和冲击模型得到的模拟成交结果，不是券商成交回单。',
-  recoveryReviewTitle:'上一轮冻结目标权重直接作用于后续真实产品收益得到的理论持仓后验路径，并与同产品等权对照比较。它不是券商真实成交记录。'
+  recoveryReviewTitle:'上一轮冻结目标权重直接作用于后续真实产品收益得到的理论持仓后验路径，并与同产品等权对照比较。它不是券商真实成交记录。',
+  validationValueTitle:'看 TRIAID 已经结算的真实样本，是否比当时的基线做得更好。',
+  validationValueState:'还没有结算样本时，这里只表示还在等结果，不代表 TRIAID 没有效果。',
+  validationSamplesLabel:'已经走完整个“先冻结、后看结果”流程的次数。样本越多，判断越靠谱。',
+  validationPositiveLabel:'有多少次 TRIAID 最后的结果比当时的基线更好。',
+  validationMeanLabel:'每次结算后，TRIAID 平均比基线多赚或少赚多少。',
+  validationSumLabel:'把每次相对基线的增减直接相加，用来看总体方向。它不是账户总收益。',
+  validationValueNote:'这里只认事先冻结的决定，不会用后来的结果倒过来改写当时的判断。',
+  marketValidationProofTitle:'看当前市场最近一次完整验证：当时怎么选，后来结果怎样。',
+  marketValidationProofState:'“已结算”表示结果已经出来；“等待结果”表示还在观察。',
+  vpT0Label:'做决定并把方案锁定下来的日期。',
+  vpT1Label:'这次决定拿来验收的结果日期。',
+  vpBaselineLabel:'如果不让 TRIAID 调整，原来的方案后来表现怎样。',
+  vpTriaidLabel:'按当时锁定的 TRIAID 方案，后来表现怎样。',
+  vpExcessLabel:'TRIAID 收益减去基线收益。正数说明这次调整有帮助，负数说明拖累。',
+  vpDaysLabel:'从方案锁定后，到现在已经纳入比较的完整交易日数。',
+  vpLineage:'这次验证的唯一记录号。需要追查数字从哪里来时，看这里。',
+  vpCurveTitle:'把每次已经结算的相对增量按时间累加，看长期方向是在变好还是变差。',
+  vpCurveNote:'这条线只看 TRIAID 相对基线的累计变化，不是账户净值。'
  },
  en:{
   resultTitle:'Shows only completed same-period posterior evaluations. Baseline and TRIAID results must come from the same frozen decision and outcome period.',
@@ -2373,7 +2391,25 @@ const UI_TIPS={
   recoveryOpinionTitle:'Current frozen Shadow Core research allocation. No live broker order is generated.',
   capitalSleeveTitle:'Four CNY capital tiers evaluating capacity and modeled execution cost for the same frozen research allocation.',
   capitalRealizedTitle:'Simulated fills based on subsequent real prices and volumes, frozen participation caps and the impact model. Not broker fills.',
-  recoveryReviewTitle:'Theoretical-holdings posterior path obtained by applying the prior frozen target weights directly to subsequent real product returns, compared with an equal-weight control. It is not a broker execution record.'
+  recoveryReviewTitle:'Theoretical-holdings posterior path obtained by applying the prior frozen target weights directly to subsequent real product returns, compared with an equal-weight control. It is not a broker execution record.',
+  validationValueTitle:'See whether TRIAID has actually done better than the baseline in samples that have finished.',
+  validationValueState:'If no sample has settled yet, this only means the result is still pending; it does not mean TRIAID had no effect.',
+  validationSamplesLabel:'How many decisions have completed the full “freeze first, check later” cycle. More samples make the reading more reliable.',
+  validationPositiveLabel:'How many settled samples ended with TRIAID ahead of the frozen baseline.',
+  validationMeanLabel:'On average, how much TRIAID gained or lost versus the baseline per settled sample.',
+  validationSumLabel:'Adds each sample’s gain or loss versus baseline to show the overall direction. It is not account return.',
+  validationValueNote:'Only decisions frozen in advance count here; later results cannot rewrite the original decision.',
+  marketValidationProofTitle:'See the latest completed check for this market: what was frozen, and what happened afterwards.',
+  marketValidationProofState:'EVALUATED means the result is available; WAITING means the outcome is still being observed.',
+  vpT0Label:'The date the decision was made and locked.',
+  vpT1Label:'The date used to judge how that decision turned out.',
+  vpBaselineLabel:'How the original plan performed without the TRIAID adjustment.',
+  vpTriaidLabel:'How the frozen TRIAID plan performed afterwards.',
+  vpExcessLabel:'TRIAID return minus baseline return. Positive means the adjustment helped; negative means it hurt.',
+  vpDaysLabel:'How many complete trading days have been included since the plan was frozen.',
+  vpLineage:'The unique record for this validation. Use it when tracing where a number came from.',
+  vpCurveTitle:'Adds settled TRIAID-vs-baseline differences over time to show whether the long-run direction is improving or worsening.',
+  vpCurveNote:'This line tracks cumulative relative value versus baseline, not account equity.'
  }
 };
 
@@ -2389,6 +2425,15 @@ function uiTipUseGuide(id){
  const exposure=new Set(['usrmAssetTitle']);
  const control=new Set(['usrmControlTitle']);
  const dailyPath=new Set(['dailyTitle','prospectiveDailyTitle','recoveryReviewTitle']);
+ const validation=new Set([
+  'validationValueTitle','validationValueState','validationSamplesLabel','validationPositiveLabel',
+  'validationMeanLabel','validationSumLabel','validationValueNote','marketValidationProofTitle',
+  'marketValidationProofState','vpT0Label','vpT1Label','vpBaselineLabel','vpTriaidLabel',
+  'vpExcessLabel','vpDaysLabel','vpLineage','vpCurveTitle','vpCurveNote'
+ ]);
+ if(validation.has(id))return zh
+  ? '怎么看：先看有没有已结算样本；有结果后重点看“TRIAID 净增量”是正还是负，再看多次样本是不是同一个方向。'
+  : 'How to read it: first check whether any sample has settled. Once results exist, focus on whether TRIAID excess is positive or negative and whether repeated samples point in the same direction.';
  if(posterior.has(id))return zh
   ? '怎么用：先看同一冻结时点的基线与TRIAID，再看相对收益差和累计路径。若优势只来自单个结果期、随后迅速反转，不能算稳定增值；只有多个已完成后验方向一致，才值得进入规则复核。'
   : 'How to use: compare TRIAID with the control frozen at the same decision time, then inspect the return gap and cumulative path. If the edge comes from one outcome period and quickly reverses, it is not stable value-add; only repeated completed posteriors justify rule review.';
@@ -3173,6 +3218,9 @@ function renderValidationSummary(payload){
  el('validationValueState').textContent=n
   ? (zh?('已形成 '+n+' 个可核验样本'):n+' verified samples')
   : (zh?'等待已结算样本':'Awaiting evaluated samples');
+ ['validationValueTitle','validationValueState','validationSamplesLabel','validationPositiveLabel','validationMeanLabel','validationSumLabel','validationValueNote'].forEach(id=>{
+  const node=el(id); if(node) node.classList.add('has-tip','tip-mark');
+ });
  el('validationValueNote').textContent=zh
   ? '样本增量合计是研究统计，不是账户累计收益；不使用事后最优策略倒推 T0 决策。'
   : 'The sample-excess sum is a research statistic, not account cumulative return; no hindsight-optimal strategy is used to rewrite T0 decisions.';
@@ -3184,6 +3232,9 @@ function renderValidationSummary(payload){
   ? ((zh?'口径：':'Method: ')+String(latest.method||'-').replaceAll('_',' '))
   : (zh?'当前冻结 evidence 已记录，等待真实结果成熟。':'Frozen evidence is recorded; awaiting a mature realized outcome.');
  el('marketValidationProofState').textContent=latest?(zh?'已结算':'EVALUATED'):(zh?'等待结果':'WAITING');
+ ['marketValidationProofTitle','marketValidationProofState','vpT0Label','vpT1Label','vpBaselineLabel','vpTriaidLabel','vpExcessLabel','vpDaysLabel','vpLineage','vpCurveTitle','vpCurveNote'].forEach(id=>{
+  const node=el(id); if(node) node.classList.add('has-tip','tip-mark');
+ });
  el('vpT0Label').textContent=zh?'T0 冻结日':'T0 freeze date';
  el('vpT1Label').textContent=zh?'T1 结果日':'T1 outcome date';
  el('vpBaselineLabel').textContent=zh?'冻结基线':'Frozen baseline';
