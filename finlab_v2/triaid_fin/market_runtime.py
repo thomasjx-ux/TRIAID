@@ -134,7 +134,7 @@ class MarketDataAutomation:
                 self.last_refresh[key]=0.0
             self.last_phase[market_id]=phase
             print("TRIAID_MARKET_PHASE",market_id,phase)
-        capabilities=self.services.market_data_capabilities(market_id)[market_id]
+        capabilities=self.services.market_data.capabilities(market_id)[market_id]
         await self._run_registered_jobs(market_id,phase,"PRE_REFRESH")
         for mode,interval_seconds in self.refresh_plan_for_phase(market_id,phase).items():
             if not capabilities.get(mode,{}).get("supported",False):
@@ -144,15 +144,15 @@ class MarketDataAutomation:
                 continue
             try:
                 result=await asyncio.wait_for(
-                    asyncio.to_thread(self.services.refresh_market_data,market_id,mode),
+                    asyncio.to_thread(self.services.market_data.refresh,market_id,mode),
                     timeout=self.refresh_timeout_seconds,
                 )
                 snapshot=await asyncio.wait_for(
-                    asyncio.to_thread(self.services.market_data_snapshot,market_id,mode,False),
+                    asyncio.to_thread(self.services.market_data.snapshot,market_id,mode,False),
                     timeout=self.refresh_timeout_seconds,
                 )
                 observed=await asyncio.wait_for(
-                    asyncio.to_thread(self.services.record_market_observation,snapshot),
+                    asyncio.to_thread(self.services.market_data.record_observation,snapshot),
                     timeout=self.refresh_timeout_seconds,
                 )
                 decision_result=None
@@ -183,7 +183,7 @@ class MarketDataAutomation:
                     try:
                         forecast=await asyncio.wait_for(
                             asyncio.to_thread(
-                                self.services.refresh_volatility_forecast,
+                                self.services.market_data.refresh_volatility_forecast,
                                 market_id,
                             ),
                             timeout=max(60,self.refresh_timeout_seconds),
@@ -259,7 +259,7 @@ class MarketDataAutomation:
     def live_indicators(self,market_id:str)->dict:
         market=market_id.upper()
         current_phase=session_phase(market)
-        rows=self.services.market_observations(market,"REALTIME",120)
+        rows=self.services.market_data.observations(market,"REALTIME",120)
         valid=[]
         for row in rows:
             try:
@@ -328,7 +328,7 @@ class MarketDataAutomation:
         phase=session_phase(market)
         plan=self.refresh_plan_for_phase(market,phase)
         events=[]
-        for row in self.services.market_observations(market,None,max(80,limit)):
+        for row in self.services.market_data.observations(market,None,max(80,limit)):
             mode=str(row.get("mode") or "").upper()
             interval=self.frequency_policy.interval(market,mode) if mode in {"DAILY","INTRADAY","PREOPEN","REALTIME"} else None
             events.append({
@@ -340,7 +340,7 @@ class MarketDataAutomation:
                 "source_latest_ts":row.get("source_latest_ts"),
                 "message":f"{mode} data <- {row.get('provider')} · points={row.get('points')} · source_ts={row.get('source_latest_ts')}",
             })
-        for row in self.services.market_transitions(market,None,max(80,limit)):
+        for row in self.services.market_data.transitions(market,None,max(80,limit)):
             events.append({
                 "at":row.get("derived_at"),
                 "kind":"STATE_TRANSITION",
@@ -433,5 +433,5 @@ class MarketDataAutomation:
                 },
                 "state":dict(self.runtime_job_state),
             },
-            "hub":self.services.market_data_status(),
+            "hub":self.services.market_data.status(),
         }
