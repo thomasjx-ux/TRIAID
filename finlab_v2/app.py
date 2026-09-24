@@ -475,6 +475,21 @@ def daily(
     return engine.daily_summary(market_id,compact=compact)
 
 
+@app.get("/api/volatility-forecast")
+def volatility_forecasts() -> dict:
+    return engine.volatility_forecasts()
+
+
+@app.get("/api/volatility-forecast/{market_id}")
+def volatility_forecast_market(market_id: str) -> dict:
+    try:
+        return engine.volatility_forecast(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail="market not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from exc
+
+
 @app.get("/api/ui/core")
 def ui_core_status()->dict:
     return {
