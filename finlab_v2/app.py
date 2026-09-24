@@ -2579,20 +2579,80 @@ function volatilityPrice(value){
  if(!Number.isFinite(n))return '-';
  return Math.abs(n)<20?n.toFixed(3):n.toFixed(2);
 }
+function volatilityInterpretation(band,coverage,ratio,n,zh){
+ const bandKey=String(band||'UNKNOWN').toUpperCase();
+ const bandText=zh
+  ? ({LOW:'当前预测波动处于历史低位',NORMAL:'当前预测波动处于历史常态',ELEVATED:'当前预测波动高于常态',HIGH:'当前预测波动处于历史高位',UNKNOWN:'当前波动档位尚不可判定'}[bandKey]||'当前波动档位尚不可判定')
+  : ({LOW:'Forecast volatility is historically low',NORMAL:'Forecast volatility is near its historical norm',ELEVATED:'Forecast volatility is above normal',HIGH:'Forecast volatility is historically high',UNKNOWN:'Volatility band is not yet available'}[bandKey]||'Volatility band is not yet available');
+ let calibration='';
+ if(n<60||!Number.isFinite(coverage)||!Number.isFinite(ratio)){
+  calibration=zh
+   ? '历史样本不足，先把这个数字当作观察值，不用于提高自动化风险动作。'
+   : 'Historical sample is insufficient; treat this as an observation only and do not promote it into automated risk actions.';
+ }else if(ratio>1.15||coverage<0.60){
+  calibration=zh
+   ? '历史真实波动高于模型估计，当前模型有低估风险，使用时应提高异常波动警戒并等待进一步校准。'
+   : 'Realized volatility has exceeded model estimates; the model is underestimating risk, so abnormal-move monitoring should be tightened pending recalibration.';
+ }else if(ratio<0.85||coverage>0.78){
+  calibration=zh
+   ? '历史预测区间偏宽，模型较保守；不要把较大的预测幅度误读成方向性风险已经发生。'
+   : 'Historical intervals are relatively wide and conservative; do not read the larger forecast magnitude as evidence that directional risk has already materialized.';
+ }else{
+  calibration=zh
+   ? '历史覆盖率和波动量级基本匹配，可作为监控频率、异常阈值和风险实验的辅助输入。'
+   : 'Historical coverage and volatility scale are broadly aligned; the forecast is usable as an auxiliary input for monitoring cadence, anomaly thresholds and risk experiments.';
+ }
+ return (zh?'怎么用：':'How to use: ')+bandText+'。'+calibration;
+}
 function renderVolatilityForecast(){
  const payload=volatilityForecastState||{},markets=payload.markets||{};
  const zh=lang==='zh';
- el('homeVolatilityTitle').textContent=zh?'下一交易日波动预测':'Next-session volatility forecast';
+ el('homeVolatilityTitle').childNodes[0].nodeValue=zh?'下一交易日波动预测 ':'Next-session volatility forecast ';
  el('homeVolatilitySub').textContent=zh
-  ? '预测的是收盘到收盘的波动幅度，不预测涨跌方向。'
-  : 'Forecasts close-to-close move magnitude, not direction.';
+  ? '预测的是收盘到收盘的波动幅度，不预测涨跌方向。用途是判断明天“可能动多大”，从而决定监控频率、风险阈值和是否需要提高异常波动警戒。'
+  : 'Forecasts close-to-close move magnitude, not direction. Its purpose is to estimate how much the market may move so monitoring cadence, risk thresholds and abnormal-move alerts can be adjusted.';
  el('homeVolatilityModel').textContent=(payload.model||'EWMA94_MULTI_WINDOW_REALIZED_VOL')+' · '+(payload.version||'-');
  el('homeVolatilityNote').textContent=zh
-  ? '68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用每个预测时点之前的数据。'
-  : 'The 68% range is a model interval, not a guarantee. Historical calibration is daily walk-forward using only information available before each forecast.';
+  ? '68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用每个预测时点之前的数据。任何“样本不足/需校准”状态都不应被解释为高置信度预测。'
+  : 'The 68% range is a model interval, not a guarantee. Historical calibration is daily walk-forward using only information available before each forecast. Any insufficient-sample or needs-calibration state must not be treated as a high-confidence forecast.';
+
+ el('volExplainMoveTitle').textContent=zh?'预计 ±X%':'Forecast ±X%';
+ el('volExplainMoveText').textContent=zh?'下一交易日1σ波动幅度。不是“涨X%或跌X%”的方向预测。':'Next-session 1σ move magnitude. It is not a directional call of up X% or down X%.';
+ el('volExplainRangeTitle').textContent=zh?'68%预测区间':'68% forecast range';
+ el('volExplainRangeText').textContent=zh?'若模型校准正常，长期约68%的实际收盘应落在区间内；越界代表实际波动超出模型常态。':'If calibrated, roughly 68% of realized closes should fall inside over time; a breach means realized movement exceeded the model norm.';
+ el('volExplainCoverageTitle').textContent=zh?'历史1σ命中率':'Historical 1σ coverage';
+ el('volExplainCoverageText').textContent=zh?'参考目标约68%。明显高于68%常表示区间偏宽，明显低于68%表示模型低估波动。':'Reference target is about 68%. Much higher often means intervals are too wide; much lower means volatility is being underestimated.';
+ el('volExplainRatioTitle').textContent=zh?'校准比':'Calibration ratio';
+ el('volExplainRatioText').textContent=zh?'真实RMS波动 ÷ 预测RMS波动。接近1最好；大于1表示低估波动，小于1表示预测偏保守。':'Realized RMS volatility ÷ forecast RMS volatility. Near 1 is best; above 1 means underestimation, below 1 means a conservative forecast.';
+
+ const tipMap={
+  volatilityTitleTip:zh?'这是“幅度预测”而不是涨跌方向预测。用途是回答下一交易日市场可能波动多大，并决定监控和风险实验需要多敏感。':'This forecasts move magnitude, not direction. It answers how much the market may move next session and helps set monitoring and risk-experiment sensitivity.',
+  volExplainMoveTip:zh?'±X%表示1个标准差量级的下一交易日收盘到收盘波动。它不是收益目标，也不是买卖信号。':'±X% is a one-standard-deviation estimate of next-session close-to-close movement. It is not a return target or trade signal.',
+  volExplainRangeTip:zh?'68%区间由当前参考收盘和预测波动生成。校准良好时，长期约68%的下一日收盘应落在区间内。':'The 68% range is derived from the reference close and forecast volatility. When calibrated, roughly 68% of next closes should fall inside over time.',
+  volExplainCoverageTip:zh?'历史1σ命中率=过去walk-forward预测中，真实下一日波动落在±1σ内的比例。参考值约68%，不是越高越好。':'Historical 1σ coverage is the share of walk-forward forecasts where the next realized move stayed within ±1σ. The reference is about 68%; higher is not automatically better.',
+  volExplainRatioTip:zh?'校准比=真实RMS波动/预测RMS波动。1附近最好；>1说明模型普遍低估波动；<1说明模型普遍高估波动。':'Calibration ratio = realized RMS volatility / forecast RMS volatility. Near 1 is best; >1 means systematic underestimation, <1 means systematic overestimation.'
+ };
+ for(const [id,tip] of Object.entries(tipMap)) el(id).dataset.tip=tip;
+
  const marketNames=zh?{US:'美股 / US',CN:'A股 / CN',HK:'港股 / HK'}:{US:'US',CN:'China A-shares / CN',HK:'Hong Kong / HK'};
  for(const m of ['US','CN','HK']){
   el('volMarket'+m).textContent=marketNames[m];
+  el('volMoveLabel'+m).textContent=zh?'预计波动':'Forecast move';
+  el('volRangeLabel'+m).textContent=zh?'68%区间 / 典型绝对波动':'68% range / typical absolute move';
+  el('volAccuracyLabel'+m).textContent=zh?'历史校准':'Historical calibration';
+  el('volBandTip'+m).dataset.tip=zh
+   ? '波动档位来自当前预测波动在近期历史预测分布中的位置：低、正常、偏高、高。它描述幅度状态，不代表涨跌方向。'
+   : 'The volatility band is the percentile of the current forecast within recent historical forecasts: low, normal, elevated or high. It describes magnitude, not direction.';
+  el('volMoveTip'+m).dataset.tip=zh
+   ? '预计波动回答“下一交易日可能动多大”。数值越大，表示模型认为正常波动范围越宽；不能据此判断上涨还是下跌。'
+   : 'Forecast move answers how much the market may move next session. A larger number means a wider normal movement range; it does not predict up versus down.';
+  el('volRangeTip'+m).dataset.tip=zh
+   ? '68%区间用于识别异常：若下一日收盘落在区间外，说明实际波动超出模型的1σ常态。典型绝对波动是更直观的日常幅度参考。'
+   : 'The 68% range is an anomaly reference: a close outside it means realized movement exceeded the model 1σ norm. Typical absolute move is the more intuitive day-to-day magnitude reference.';
+  el('volAccuracyTip'+m).dataset.tip=zh
+   ? '历史校准不是“预测涨跌正确率”。命中率看区间覆盖是否接近68%；校准比看预测波动与真实波动量级是否接近1；N是walk-forward样本数。'
+   : 'Historical calibration is not directional hit rate. Coverage checks whether the interval is near 68%; the calibration ratio checks whether forecast and realized volatility scale are near 1; N is the walk-forward sample size.';
+
   const row=markets[m];
   if(!row){
    el('volMove'+m).textContent=zh?'暂不可用':'Unavailable';
@@ -2600,6 +2660,7 @@ function renderVolatilityForecast(){
    el('volBand'+m).className='home-volatility-band normal';
    el('volRange'+m).textContent=(payload.errors||{})[m]|| (zh?'等待完整日线数据':'Awaiting complete daily data');
    el('volAccuracy'+m).textContent=zh?'暂无可验证校准结果':'No verifiable calibration result';
+   el('volMeaning'+m).textContent=zh?'怎么用：当前数据不足，不应据此调整监控或风险阈值。':'How to use: data is insufficient; do not adjust monitoring or risk thresholds from this card.';
    continue;
   }
   const move=Number(row.forecast_move_pct);
@@ -2617,10 +2678,7 @@ function renderVolatilityForecast(){
   el('volAccuracy'+m).textContent=(zh?'历史1σ命中 ':'Historical 1σ coverage ')+coverageText
    +' · '+(zh?'校准比 ':'calibration ratio ')+ratioText
    +' · N='+n+' · '+volatilityCalibrationLabel(wf.calibration_quality);
-  el('volCard'+m).dataset.tip=zh
-   ? '预测口径：下一交易日收盘到收盘的1σ波动幅度。1σ历史覆盖率理论参考约68%；RMS校准比接近1表示预测波动与真实波动量级更一致。'
-   : 'Forecast scope: next-session close-to-close 1σ move. Historical 1σ coverage has a ~68% reference target; an RMS calibration ratio near 1 means forecast and realized volatility are similar in scale.';
-  el('volCard'+m).classList.add('has-tip');
+  el('volMeaning'+m).textContent=volatilityInterpretation(band,coverage,ratio,n,zh);
  }
 }
 async function refreshVolatilityForecast(){
