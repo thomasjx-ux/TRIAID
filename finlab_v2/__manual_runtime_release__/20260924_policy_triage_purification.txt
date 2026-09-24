@@ -1,0 +1,21 @@
+TRIAID FIN policy triage purification release
+Date: 2026-09-24
+Purpose: improve policy-network and policy-chain triage without hindsight contamination.
+
+Changes:
+- add shadow-only policy triage module
+- classify policy network into selected, challenger, redundant and blocked lanes
+- keep one challenger per omitted family for future prospective evaluation
+- record family coverage and high-correlation redundancy
+- persist triage snapshot with each new frozen decision
+- evaluate challenger misses only after outcome; no same-day promotion
+- require confirmed state change before an intraday risk-on transition can become an allocation-action candidate
+- keep risk-reduction asymmetry intact
+- report risk-on candidates suppressed by the persistence gate
+- surface triage learning in the daily experiment review
+
+Audit status:
+- canonical GitHub release audit PASS on a816317f62edf5cb1ec63a462abedf92f2815ac6
+- policy triage smoke PASS
+- transition persistence gate smoke PASS
+- no audit gate weakened
