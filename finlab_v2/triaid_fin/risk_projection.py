@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from .ui_ports import UiReadServices
+from .ui_ports import RiskReadPort, UiReadServices
 
 
 VERSION="risk-center-projection@1.0.0"
@@ -37,11 +37,12 @@ class RiskCenterProjection:
     version=VERSION
 
     def __init__(self,services)->None:
-        self.services=(
-            services
-            if isinstance(services,UiReadServices)
-            else UiReadServices(services)
-        )
+        if isinstance(services,RiskReadPort):
+            self.services=services
+        elif isinstance(services,UiReadServices):
+            self.services=services.risk
+        else:
+            self.services=UiReadServices(services).risk
 
     @staticmethod
     def _read(read_fn,source:str,missing_reason:str)->dict:
@@ -65,12 +66,12 @@ class RiskCenterProjection:
 
     def full(self)->dict:
         warning=self._read(
-            self.services.risk_warning_latest,
+            self.services.warning_latest,
             "risk_warning.latest",
             "WAITING_FOR_FIRST_RISK_WARNING_SNAPSHOT",
         )
         control=self._read(
-            self.services.risk_control_latest,
+            self.services.control_latest,
             "risk_control.latest",
             "WAITING_FOR_FIRST_RISK_CONTROL_SNAPSHOT",
         )
