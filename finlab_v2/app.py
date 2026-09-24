@@ -1451,6 +1451,22 @@ tbody tr:hover td{background:#f8fbff}
       <div class="item"><span class="label" id="usrmRiskLabel">目标风险仓位</span><b id="usrmRisk">-</b></div>
     </div>
     <div class="prospective-note" id="usReturnMaxNote">-</div>
+    <div class="route-overview" id="usrmIntradayPanel" style="margin-top:12px">
+      <div class="prospective-head">
+        <div>
+          <b id="usrmIntradayTitle">盘中实时状态</b>
+          <div class="prospective-meta" id="usrmIntradayMeta">盘中层只读，不进入正式后验</div>
+        </div>
+        <span class="tag" id="usrmIntradayTag">等待盘中数据</span>
+      </div>
+      <div class="summary prospective-kpis">
+        <div class="item"><span class="label" id="usrmIntradayRegimeLabel">当前状态</span><b id="usrmIntradayRegime">-</b></div>
+        <div class="item"><span class="label" id="usrmIntradayDecisionCountLabel">正式重算</span><b id="usrmIntradayDecisionCount">0</b></div>
+        <div class="item"><span class="label" id="usrmIntradayWeightChangeLabel">最近权重变化</span><b id="usrmIntradayWeightChange">-</b></div>
+        <div class="item"><span class="label" id="usrmIntradayUpdatedLabel">最新行情</span><b id="usrmIntradayUpdated">-</b></div>
+      </div>
+      <div class="prospective-note" id="usrmIntradayNote">盘中行情正在独立监控；正式收益后验只在完整交易日结果可验证后写入。</div>
+    </div>
     <h3 id="usrmStrategyTitle">当前冻结策略权重</h3>
     <div class="tablewrap" style="max-height:330px">
       <table>
@@ -1474,19 +1490,21 @@ tbody tr:hover td{background:#f8fbff}
       </table>
     </div>
     <h3 id="usrmRealizedTitle">上一轮真实市场后验与模拟执行容量回顾</h3>
-    <div class="tablewrap" style="max-height:360px">
+    <div class="tablewrap" id="usrmRealizedWrap" style="max-height:360px">
       <table>
         <thead><tr><th>起始资金</th><th>模拟成交比例</th><th>模拟当前净值</th><th>模拟净损益</th><th>模拟净收益率</th><th>模型执行成本</th></tr></thead>
         <tbody id="usrmRealizedRows"></tbody>
       </table>
     </div>
+    <div class="prospective-note" id="usrmRealizedEmpty" style="display:none">完整交易日后验尚未形成。盘中价格不会被冒充为已实现收益。</div>
     <h3 id="usrmControlTitle">上一轮冻结配置理论持仓后验路径</h3>
-    <div class="tablewrap" style="max-height:330px">
+    <div class="tablewrap" id="usrmDailyWrap" style="max-height:330px">
       <table>
         <thead><tr><th>结果日</th><th>Return-Max 累计</th><th>通用 Core 累计</th><th>SPY 累计</th></tr></thead>
         <tbody id="usrmDailyRows"></tbody>
       </table>
     </div>
+    <div class="prospective-note" id="usrmDailyEmpty" style="display:none">等待下一完整美股交易日结果。盘中状态单独显示在上方，不写入理论持仓后验路径。</div>
   </div>
 
   <div class="prospective-panel" id="prospectivePanel">
@@ -2985,9 +3003,13 @@ async function refreshLiveWindows(){
  const seq=++liveSeq;
  const idxPromise=jsonCached('/api/market-data/live-indicators/'+m,2000);
  const actPromise=jsonCached('/api/market-data/activity/'+m+'?limit=80',2500);
+ const decisionPromise=m==='US'?jsonOrNullCached('/api/decision-scheduler/events?market_id=US&limit=120',2500):Promise.resolve(null);
+ const schedulerPromise=m==='US'?jsonOrNullCached('/api/decision-scheduler/status',2500):Promise.resolve(null);
+ let livePayload=null;
 
  try{
   const idx=await idxPromise;
+  livePayload=idx;
   if(seq!==liveSeq||el('market').value!==m)return;
   const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
   setPulse('marketPulse',fresh,idx.available&&!fresh);
@@ -3033,9 +3055,73 @@ async function refreshLiveWindows(){
   }
  }
 
+ if(m==='US'){
+  Promise.all([decisionPromise,schedulerPromise]).then(([events,scheduler])=>{
+   if(seq!==liveSeq||el('market').value!==m)return;
+   renderUSIntradayState(livePayload,events||[],((scheduler||{}).markets||{}).US||{});
+  }).catch(()=>{});
+ }
  jsonCached('/api/market-data/strategy-context/'+m,60000)
    .then(ctx=>{strategyMarketContext[m]=ctx;})
    .catch(()=>{});
+}
+function renderUSIntradayState(live,events,schedulerState){
+ const panel=el('usrmIntradayPanel');
+ if(!panel)return;
+ const zh=lang==='zh';
+ const rows=Array.isArray(events)?events:[];
+ const ordered=rows.slice().sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+ const latest=ordered.length?ordered[ordered.length-1]:null;
+ const sessionDate=String((schedulerState||{}).session_date||(latest||{}).session_date||'');
+ const sessionRows=sessionDate?ordered.filter(x=>String(x.session_date||'')===sessionDate):ordered;
+ const decisions=sessionRows.filter(x=>x.event_type==='TRANSITION_RESEARCH_DECISION');
+ const latestDecision=decisions.length?decisions[decisions.length-1]:null;
+ const decision=(latestDecision||{}).decision||{};
+ const diagnostics=decision.diagnostics||{};
+ const phase=String((live||{}).session_phase||(latest||{}).phase||'').toUpperCase();
+ const regimeRaw=decision.transition_regime||'';
+ const regimeMapZh={intraday_risk_on:'盘中风险开启',intraday_risk_off:'盘中风险收缩',intraday_severe_risk:'盘中严重风险'};
+ const regimeMapEn={intraday_risk_on:'Intraday risk-on',intraday_risk_off:'Intraday risk-off',intraday_severe_risk:'Intraday severe risk'};
+ let regime=regimeRaw?((zh?regimeMapZh:regimeMapEn)[regimeRaw]||regimeRaw):'';
+ if(!regime&&latest?.assessment?.transition_state){
+  const state=latest.assessment.transition_state;
+  const label=Array.isArray(state)?state[1]:state;
+  regime=(zh?'状态 ':'State ')+String(label||'-');
+ }
+ if(!regime)regime=zh?'监控中':'Monitoring';
+ const weightChange=Number(decision.weight_change_l1_vs_reference);
+ const changed=Number.isFinite(weightChange)&&weightChange>1e-12;
+ const liveAvailable=!!(live&&live.available);
+ panel.style.display='block';
+ el('usrmIntradayTitle').textContent=zh?'盘中实时状态':'Live intraday state';
+ el('usrmIntradayMeta').textContent=zh
+  ? '盘中层只读，不进入正式后验'
+  : 'Read-only intraday layer; excluded from formal posterior evidence';
+ el('usrmIntradayTag').textContent=liveAvailable?phaseText(phase):(zh?'等待盘中行情':'Awaiting intraday data');
+ el('usrmIntradayRegimeLabel').textContent=zh?'当前状态':'Current state';
+ el('usrmIntradayDecisionCountLabel').textContent=zh?'正式重算':'Formal recomputes';
+ el('usrmIntradayWeightChangeLabel').textContent=zh?'最近权重变化':'Latest weight change';
+ el('usrmIntradayUpdatedLabel').textContent=zh?'最新行情':'Latest market data';
+ el('usrmIntradayRegime').textContent=regime;
+ el('usrmIntradayDecisionCount').textContent=String((schedulerState||{}).decision_count??decisions.length);
+ el('usrmIntradayWeightChange').textContent=Number.isFinite(weightChange)?fmtPct(weightChange):'-';
+ el('usrmIntradayWeightChange').className=changed?'warn':'';
+ el('usrmIntradayUpdated').textContent=liveAvailable?localClockFromEpoch(live.source_latest_ts):'-';
+ const riskOff=diagnostics.risk_off_detected===true;
+ const severe=diagnostics.severe_risk_detected===true;
+ let actionText;
+ if(latestDecision){
+  actionText=changed
+   ? (zh?'最近一次盘中重算已经改变权重。':'The latest intraday recompute changed weights.')
+   : (zh?'最近一次盘中重算完成，但没有达到改权条件。':'The latest intraday recompute completed without meeting the threshold for a weight change.');
+ }else{
+  actionText=zh?'行情正在监控，当前会话尚未产生正式盘中重算。':'Market data are being monitored; no formal intraday recompute has occurred in this session yet.';
+ }
+ if(riskOff)actionText+=' '+(zh?'已检测到 risk-off。':'Risk-off is detected.');
+ if(severe)actionText+=' '+(zh?'已检测到严重风险状态。':'A severe-risk state is detected.');
+ el('usrmIntradayNote').textContent=actionText+' '+(zh
+  ? '这里显示实时状态和是否触发调权；收益后验仍必须等完整交易日后再写入。'
+  : 'This surface shows live state and whether reweighting was triggered; realized return evidence still requires a complete trading day.');
 }
 function applyMarketScope(){
  const m=el('market').value;
@@ -3597,11 +3683,21 @@ function renderUSReturnMax(report){
  el('usrmCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtUsd(x.target_invested_notional_usd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtUsd(x.estimated_round_trip_cost_proxy_usd)+'</td></tr>').join('') ||
   '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
  const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
- el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('') ||
-  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior decision yet')+'</td></tr>';
+ const hasRealized=rs.length>0;
+ el('usrmRealizedWrap').style.display=hasRealized?'block':'none';
+ el('usrmRealizedEmpty').style.display=hasRealized?'none':'block';
+ el('usrmRealizedEmpty').textContent=lang==='zh'
+  ? '完整交易日后验尚未形成。盘中价格不会被冒充为已实现收益。'
+  : 'A complete trading-day posterior is not available yet. Intraday prices are never presented as realized returns.';
+ el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('');
  const path=(review&&review.daily_path)||[];
- el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
-  '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
+ const hasDaily=path.length>0;
+ el('usrmDailyWrap').style.display=hasDaily?'block':'none';
+ el('usrmDailyEmpty').style.display=hasDaily?'none':'block';
+ el('usrmDailyEmpty').textContent=lang==='zh'
+  ? '等待下一完整美股交易日结果。盘中状态单独显示在上方，不写入理论持仓后验路径。'
+  : 'Awaiting the next complete US trading-day outcome. Intraday state is shown above and is not written into the theoretical posterior path.';
+ el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('');
 }
 function renderProspective(report,status){
  const panel=el('prospectivePanel');
