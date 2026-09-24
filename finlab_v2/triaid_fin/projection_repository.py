@@ -199,6 +199,25 @@ class VerifiedProjectionRepository:
             "future_information_excluded":formal_evidence["future_information_excluded"],
         }
 
+    def get(self,market_id:str,evidence_id:str)->dict:
+        market=str(market_id).upper()
+        return self.journal.load_json(
+            f"verified_projections/{market}/{evidence_id}.json",
+            default={},
+        )
+
+    def recent(self,market_id:str,limit:int=50)->list[dict]:
+        market=str(market_id).upper()
+        rows=self.journal.read_jsonl(
+            "verified_projections/ledger.jsonl",
+            limit=max(50,int(limit)*4),
+        )
+        filtered=[
+            row for row in rows
+            if str(row.get("market_id") or "").upper()==market
+        ]
+        return filtered[-int(limit):]
+
     def latest(self,market_id:str)->dict:
         market=str(market_id).upper()
         return self.journal.load_json(
