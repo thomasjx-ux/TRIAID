@@ -7,6 +7,7 @@ import json
 from statistics import mean, pstdev
 
 from .store import RunStore
+from .market_registry import MARKET_REGISTRY, normalize_market_id
 
 
 class MarketObservationStore:
@@ -30,8 +31,8 @@ class MarketObservationStore:
         except Exception:
             return None
         if str(mode).upper()=="DAILY":
-            key=str(market).upper()
-            tz=ZoneInfo("America/New_York" if key=="US" else "Asia/Hong_Kong" if key=="HK" else "Asia/Shanghai")
+            key=normalize_market_id(market)
+            tz=ZoneInfo(MARKET_REGISTRY.get(key).timezone)
             return datetime.fromtimestamp(stamp,tz).date().toordinal()
         return stamp
 
