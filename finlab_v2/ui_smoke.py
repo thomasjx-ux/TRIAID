@@ -77,6 +77,15 @@ assert "renderRiskWarning" in html
 assert "/api/ui/risk-center" in html
 assert "先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日" in html
 assert "TRIAID 三市场联动风险中心" in html
+assert 'id="validationValueProof"' in html
+assert 'id="validationSamples"' in html
+assert 'id="marketValidationProof"' in html
+assert 'id="validationCurve"' in html
+assert "/api/ui/validation-summary?market_id=" in html
+assert "/api/experiments/outcomes/" not in html
+assert "样本增量合计" in html
+assert "研究统计，不等于账户累计收益" in html
+assert "前瞻样本增量累计" in html
 assert "它不是第四个市场" in html
 assert 'id="riskThreeMarketRows"' in html
 assert 'id="riskDynamicsRows"' in html
