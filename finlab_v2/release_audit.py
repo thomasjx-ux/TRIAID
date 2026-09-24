@@ -71,6 +71,7 @@ BUILD_CASES=[
     "us_page_live_surface_smoke.py",
     "ui_projection_smoke.py",
     "modular_interface_architecture_smoke.py",
+    "runtime_plugin_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
