@@ -48,6 +48,7 @@ BUILD_CASES=[
     "risk_control_smoke.py",
     "volatility_forecast_smoke.py",
     "volatility_explainability_smoke.py",
+    "volatility_persistent_cache_smoke.py",
     "hk_market_smoke.py",
     "hk_high_frequency_degradation_smoke.py",
     "ui_smoke.py",
@@ -72,6 +73,7 @@ BUILD_CASES=[
 ]
 
 RUNTIME_BOOTSTRAPS=[
+    "volatility_forecast_live_bootstrap.py",
     "hk_market_live_bootstrap.py",
     "policy_hazard_live_bootstrap.py",
 ]
