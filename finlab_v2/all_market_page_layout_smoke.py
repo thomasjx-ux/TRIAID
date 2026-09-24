@@ -33,7 +33,7 @@ checks={
     "hk_route_panel_present":'id="hkRoutePanel"' in html and "renderHKRoutePanel" in source,
     "hk_route_panel_only_for_hk":"if(m!=='HK')" in source,
     "hk_assets_are_explicit":all(x in source for x in ("2800.HK","2828.HK","3033.HK","2819.HK")),
-    "hk_capacity_gap_is_explicit":"Dedicated HK capacity posterior ledger not yet formed" in source and "不借用US/CN结果" in source,
+    "hk_capacity_stack_is_explicit":"四档港币资金规模容量实验" in source and "4 HKD capacity sleeves" in source and 'id="hkRealizedRows"' in html and 'id="hkDailyRows"' in html,
     "market_switch_relabels_flow":"applyMarketScope();" in source and "renderMarketIdentity();" in source and "applyFlowLabels();" in source,
     "all_market_pages_keep_six_stage_chain":all(f'id="{x}"' in html for x in (
         "stageMarket","stageDecision","stageValidation","stageRoute","stageRisk","stageEvolution"
