@@ -8,7 +8,7 @@ from .market_data import session_phase
 from .market_registry import MARKET_REGISTRY, normalize_market_id
 
 
-VERSION="market-page-projection@1.1.0"
+VERSION="market-page-projection@1.2.0"
 READY="READY"
 WAITING="WAITING"
 STALE="STALE"
@@ -489,7 +489,11 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
         if state!=READY and not section.get("reason"):
             unexplained.append(name)
         if section.get("required") and state!=READY:
-            errors.append(f"{name}:{state}:{section.get('reason')}")
+            message=f"{name}:{state}:{section.get('reason')}"
+            if name in {"live","activity","scheduler"} and not strict_live:
+                warnings.append(message)
+            else:
+                errors.append(message)
         elif state in {WAITING,STALE,ERROR}:
             warnings.append(f"{name}:{state}:{section.get('reason')}")
 
@@ -512,21 +516,123 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
         latest=route.get("latest_decision") or {}
         if not latest.get("decision_id"):
             errors.append("route:US_DECISION_ID_MISSING")
-        if not latest.get("target_strategy_weights"):
+        if not latest.get("frozen_at"):
+            errors.append("route:US_FROZEN_AT_MISSING")
+
+        strategy_weights=latest.get("target_strategy_weights")
+        generic_weights=latest.get("generic_core_control_weights")
+        if not isinstance(strategy_weights,dict) or not strategy_weights:
             errors.append("route:US_STRATEGY_WEIGHTS_MISSING")
+        elif any(not _finite(v) for v in strategy_weights.values()):
+            errors.append("route:US_STRATEGY_WEIGHTS_NON_NUMERIC")
+        if not isinstance(generic_weights,dict) or not generic_weights:
+            errors.append("route:US_GENERIC_CORE_WEIGHTS_MISSING")
+        elif any(not _finite(v) for v in generic_weights.values()):
+            errors.append("route:US_GENERIC_CORE_WEIGHTS_NON_NUMERIC")
+
         asset_weights=latest.get("target_asset_weights")
         if not isinstance(asset_weights,dict) or len(asset_weights)<5:
             errors.append("route:US_ASSET_WEIGHTS_INCOMPLETE")
+        elif any(not _finite(v) for v in asset_weights.values()):
+            errors.append("route:US_ASSET_WEIGHTS_NON_NUMERIC")
+
         for field in (
             "projected_annualized_expected_net_return",
             "generic_core_projected_annualized_expected_net_return",
             "buy_hold_projected_annualized_expected_net_return",
+            "cash_residual_weight",
         ):
             if not _finite(latest.get(field)):
                 errors.append(f"route:US_{field.upper()}_MISSING")
-        sleeves=((latest.get("capital_capacity") or {}).get("sleeves") or [])
+
+        cap=latest.get("capital_capacity") or {}
+        for field in ("max_participation_adv","base_cost_bps","impact_coefficient_bps"):
+            if not _finite(cap.get(field)):
+                errors.append(f"route:US_CAPITAL_{field.upper()}_MISSING")
+        sleeves=cap.get("sleeves") or []
         if len(sleeves)!=4:
             errors.append("route:US_FOUR_CAPITAL_SLEEVES_REQUIRED")
+        sleeve_fields=(
+            "starting_capital_usd",
+            "target_invested_notional_usd",
+            "max_one_day_participation_adv",
+            "minimum_execution_days",
+            "estimated_round_trip_cost_proxy_usd",
+        )
+        for index,sleeve in enumerate(sleeves):
+            for field in sleeve_fields:
+                if not _finite(sleeve.get(field)):
+                    errors.append(f"route:US_SLEEVE_{index}_{field.upper()}_MISSING")
+
+    if market=="HK" and (sections.get("route") or {}).get("state")==READY:
+        latest=route.get("latest_decision") or {}
+        if not latest.get("decision_id"):
+            errors.append("route:HK_DECISION_ID_MISSING")
+        if not latest.get("target_strategy_weights"):
+            errors.append("route:HK_STRATEGY_WEIGHTS_MISSING")
+        asset_weights=latest.get("target_asset_weights")
+        if not isinstance(asset_weights,dict) or len(asset_weights)<4:
+            errors.append("route:HK_ASSET_WEIGHTS_INCOMPLETE")
+        sleeves=((latest.get("capital_capacity") or {}).get("sleeves") or [])
+        if len(sleeves)!=4:
+            errors.append("route:HK_FOUR_CAPITAL_SLEEVES_REQUIRED")
+
+    live_section=sections.get("live") or {}
+    if live_section.get("state")==READY:
+        live_data=live_section.get("data") or {}
+        instruments=live_data.get("instruments") or []
+        expected_assets=set(MARKET_REGISTRY.get(market).assets)
+        actual_assets={
+            str(row.get("symbol") or "")
+            for row in instruments
+            if isinstance(row,dict)
+        }
+        if expected_assets and not expected_assets.issubset(actual_assets):
+            message="live:INSTRUMENT_COVERAGE_INCOMPLETE"
+            if strict_live:
+                errors.append(message)
+            else:
+                warnings.append(message)
+        malformed_live=[
+            str(row.get("symbol") or "")
+            for row in instruments
+            if not isinstance(row,dict)
+            or not _finite(row.get("close"))
+            or not _finite(row.get("change_pct"))
+        ]
+        if malformed_live:
+            message="live:NUMERIC_FIELDS_INCOMPLETE:"+",".join(malformed_live)
+            if strict_live:
+                errors.append(message)
+            else:
+                warnings.append(message)
+
+    posterior=sections.get("posterior") or {}
+    if posterior.get("state")==READY and market=="US":
+        review=posterior.get("data") or {}
+        realized=((review.get("capital_sleeves") or {}).get("sleeves") or [])
+        realized_fields=(
+            "starting_capital_usd",
+            "fill_ratio",
+            "current_equity_usd",
+            "current_net_pnl_usd",
+            "current_net_return",
+            "total_execution_cost_usd",
+        )
+        for index,row in enumerate(realized):
+            for field in realized_fields:
+                if not _finite(row.get(field)):
+                    errors.append(f"posterior:US_SLEEVE_{index}_{field.upper()}_MISSING")
+        for index,row in enumerate(review.get("daily_path") or []):
+            if not row.get("as_of"):
+                errors.append(f"posterior:US_PATH_{index}_AS_OF_MISSING")
+            for field in (
+                "return_max_cumulative_return",
+                "generic_core_cumulative_return",
+                "spy_buy_hold_cumulative_return",
+            ):
+                if not _finite(row.get(field)):
+                    errors.append(f"posterior:US_PATH_{index}_{field.upper()}_MISSING")
 
     if unexplained:
         errors.append(
