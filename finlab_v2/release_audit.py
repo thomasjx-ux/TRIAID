@@ -217,7 +217,7 @@ def structural_checks()->list[dict]:
         "risk_center_projection_is_single_ui_contract",
         "class RiskCenterProjection" in risk_projection
         and '@app.get("/api/ui/risk-center")' in app
-        and "jsonCached('/api/ui/risk-center',10000)" in app,
+        and "jsonCachedStale('/api/ui/risk-center',10000)" in app,
         None,
     )
     refresh_start=app.find("async function refreshAll(preferStale=false)")
