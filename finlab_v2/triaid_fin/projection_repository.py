@@ -99,7 +99,6 @@ class VerifiedProjectionRepository:
             "market_id":market,
             "contract_version":payload.get("contract_version"),
             "projection_scope":payload.get("projection_scope"),
-            "generated_at_utc":payload.get("generated_at_utc"),
             "decision_lineage":lineage,
             "market":deepcopy(payload.get("market") or {}),
             "route":deepcopy(sections.get("route") or {}),
@@ -118,6 +117,7 @@ class VerifiedProjectionRepository:
         created_at=datetime.now(timezone.utc).isoformat()
         artifact={
             **formal_evidence,
+            "projection_generated_at_utc":payload.get("generated_at_utc"),
             "repository_version":self.version,
             "evidence_id":evidence_id,
             "evidence_hash_sha256":evidence_hash,
