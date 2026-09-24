@@ -139,6 +139,29 @@ class MarketDataAutomation:
                     observed.get("recorded"),
                     observed.get("reason"),
                 )
+                if mode=="DAILY":
+                    try:
+                        forecast=await asyncio.wait_for(
+                            asyncio.to_thread(
+                                self.engine.refresh_volatility_forecast,
+                                market_id,
+                            ),
+                            timeout=max(60,self.refresh_timeout_seconds),
+                        )
+                        print(
+                            "TRIAID_VOLATILITY_FORECAST_REFRESH",
+                            market_id,
+                            forecast.get("as_of_source_ts"),
+                            forecast.get("forecast_move_pct"),
+                            ((forecast.get("walk_forward") or {}).get("calibration_quality")),
+                        )
+                    except Exception as forecast_exc:
+                        self.errors[f"{market_id}:VOLATILITY_FORECAST"]=f"{type(forecast_exc).__name__}:{forecast_exc}"
+                        print(
+                            "TRIAID_VOLATILITY_FORECAST_RECOVERY",
+                            market_id,
+                            self.errors[f"{market_id}:VOLATILITY_FORECAST"],
+                        )
                 if decision_result is not None:
                     print(
                         "TRIAID_DECISION_AUTOMATION",

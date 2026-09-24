@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from statistics import mean, pstdev
 
 from .market_lab import fetch_panel
 from .market_registry import MARKETS, normalize_market_id
 
 
-VERSION="volatility-forecast@0.1.0"
+VERSION="volatility-forecast@0.2.0"
+CACHE_FILE="volatility_forecast_latest.json"
 MODEL="EWMA94_MULTI_WINDOW_REALIZED_VOL"
 SQRT_2_OVER_PI=math.sqrt(2.0/math.pi)
 
@@ -208,3 +210,95 @@ def all_market_volatility_forecasts()->dict:
         "errors":errors,
         "research_only":True,
     }
+
+
+def _empty_cache()->dict:
+    return {
+        "version":VERSION,
+        "model":MODEL,
+        "markets":{},
+        "errors":{},
+        "research_only":True,
+        "cache_state":"EMPTY",
+        "updated_at":None,
+    }
+
+
+def cached_all_market_volatility_forecasts(store)->dict:
+    payload=store.load_json(CACHE_FILE,_empty_cache())
+    if not isinstance(payload,dict):
+        payload=_empty_cache()
+    payload.setdefault("version",VERSION)
+    payload.setdefault("model",MODEL)
+    payload.setdefault("markets",{})
+    payload.setdefault("errors",{})
+    payload.setdefault("research_only",True)
+    payload["cache_state"]="READY" if payload.get("markets") else "EMPTY"
+    return payload
+
+
+def cached_volatility_forecast(store,market_id:str)->dict:
+    market=normalize_market_id(market_id)
+    payload=cached_all_market_volatility_forecasts(store)
+    row=(payload.get("markets") or {}).get(market)
+    if not isinstance(row,dict):
+        raise ValueError(f"volatility_forecast_cache_not_ready:{market}")
+    return row
+
+
+def refresh_all_market_volatility_forecasts(store,require_all:bool=True)->dict:
+    rows={}
+    errors={}
+    for market in ("US","CN","HK"):
+        try:
+            rows[market]=volatility_forecast(market)
+        except Exception as exc:
+            errors[market]=f"{type(exc).__name__}:{exc}"
+    payload={
+        "version":VERSION,
+        "model":MODEL,
+        "markets":rows,
+        "errors":errors,
+        "research_only":True,
+        "cache_state":"READY" if rows else "EMPTY",
+        "updated_at":datetime.now(timezone.utc).isoformat(),
+    }
+    store.save_json(CACHE_FILE,payload)
+    if require_all and set(rows)!={"US","CN","HK"}:
+        raise RuntimeError(f"volatility_forecast_refresh_incomplete:{errors}")
+    return payload
+
+
+def refresh_market_volatility_forecast(store,market_id:str)->dict:
+    market=normalize_market_id(market_id)
+    payload=cached_all_market_volatility_forecasts(store)
+    markets=dict(payload.get("markets") or {})
+    errors=dict(payload.get("errors") or {})
+    try:
+        row=volatility_forecast(market)
+        markets[market]=row
+        errors.pop(market,None)
+    except Exception as exc:
+        errors[market]=f"{type(exc).__name__}:{exc}"
+        payload.update({
+            "version":VERSION,
+            "model":MODEL,
+            "markets":markets,
+            "errors":errors,
+            "research_only":True,
+            "cache_state":"READY" if markets else "EMPTY",
+            "updated_at":datetime.now(timezone.utc).isoformat(),
+        })
+        store.save_json(CACHE_FILE,payload)
+        raise
+    payload.update({
+        "version":VERSION,
+        "model":MODEL,
+        "markets":markets,
+        "errors":errors,
+        "research_only":True,
+        "cache_state":"READY",
+        "updated_at":datetime.now(timezone.utc).isoformat(),
+    })
+    store.save_json(CACHE_FILE,payload)
+    return row
