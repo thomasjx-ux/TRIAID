@@ -58,4 +58,12 @@ infra=Path("INFRASTRUCTURE.md").read_text(encoding="utf-8")
 assert "supabase: current production backend" in infra
 assert "Railway local volumes are not required for the current production service" in infra
 
+railway_json=__import__("json").loads(Path("railway.json").read_text(encoding="utf-8"))
+assert railway_json["build"]["watchPatterns"]==[
+    "/finlab_v2/__manual_runtime_release__/**"
+]
+assert railway_json["build"]["buildCommand"]=="sh build_gate.sh"
+assert railway_json["deploy"]["startCommand"]=="sh start.sh"
+assert railway_json["deploy"]["healthcheckPath"]=="/health"
+
 print("TRIAID_DEPLOYMENT_REPRODUCIBILITY_SMOKE_PASS")
