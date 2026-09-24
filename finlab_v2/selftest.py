@@ -480,6 +480,9 @@ try:
     assert verified.diagnostic_summary.get("contribution_deltas") is not None
 
     scheduler=DecisionScheduler(engine)
+    # Synthetic selftest decisions are frozen at 2026-09-18; pin the scheduler's
+    # expected prior trading date so the baseline-freshness guard remains offline.
+    scheduler._previous_trading_day=lambda market:"2026-09-18"
     assessment=scheduler.assess_transition("US","INTRADAY",third_obs["transition"])
     assert assessment["trigger"] is True
     assert assessment["reason"]=="WARMUP_CALIBRATION"
