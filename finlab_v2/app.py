@@ -780,7 +780,28 @@ def strategies(
     run_id:str|None=None,
 )->list[dict]:
     if not market_id:
-        raise HTTPException(status_code=400,detail="market_id is required")
+        cards=engine.strategy_population.strategy_cards(lang,None)
+        return [
+            {
+                **dict(card),
+                "market_id":None,
+                "as_of":None,
+                "run_id":None,
+                "run_scope":None,
+                "evidence_eligible":None,
+                "lifecycle":None,
+                "expected_net_return":None,
+                "risk":None,
+                "uncertainty":None,
+                "metrics":{},
+                "selected":False,
+                "baseline_weight":0.0,
+                "triaid_weight":0.0,
+                "selection_reason":None,
+                "triaid_reason":None,
+            }
+            for card in cards
+        ]
     try:
         return strategy_rows(engine,market_id,lang,run_id)
     except KeyError as exc:
