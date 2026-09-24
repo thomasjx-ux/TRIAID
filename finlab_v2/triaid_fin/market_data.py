@@ -302,7 +302,23 @@ class MarketDataHub:
         markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         out={}
         for market in markets:
-            profile=market_interface(market)
+            try:
+                profile=market_interface(market)
+            except KeyError:
+                out[market]={
+                    product:{
+                        "available":False,
+                        "provider":None,
+                        "grade":"interface_profile_not_registered",
+                        "note":"Market is registered for research identity but no MarketInterfaceProfile is registered.",
+                    }
+                    for product in (
+                        "BAR_DAILY","BAR_INTRADAY","QUOTE_L1","ORDERBOOK_L2",
+                        "PREOPEN_EXTENDED","PREOPEN_AUCTION","SECTOR_BARS",
+                        "STOCK_BARS","DERIVATIVES_CHAIN","BROKER_FILLS",
+                    )
+                }
+                continue
             products={}
             for product,spec in profile.product_capabilities.items():
                 providers=[]
@@ -564,7 +580,20 @@ class MarketDataHub:
         markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         result={}
         for market in markets:
-            profile=market_interface(market)
+            try:
+                profile=market_interface(market)
+            except KeyError:
+                result[market]={
+                    name:{
+                        **asdict(cfg),
+                        "quality":"interface_profile_not_registered",
+                        "supported":False,
+                        "provider":None,
+                        "note":"MarketInterfaceProfile is not registered for this research market.",
+                    }
+                    for name,cfg in MODE_CONFIGS.items()
+                }
+                continue
             modes={}
             preopen_specs=[
                 spec for spec in profile.product_capabilities.values()
