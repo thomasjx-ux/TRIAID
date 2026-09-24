@@ -84,6 +84,7 @@ checks={
     "app_composes_one_shared_runtime_services":"runtime_services=RuntimeServices(engine)" in app_source and "DecisionScheduler(runtime_services)" in app_source and "MarketDataAutomation(runtime_services,decision_scheduler)" in app_source,
     "app_composes_one_shared_ui_read_services":"ui_read_services=UiReadServices(engine)" in app_source and "MarketPageProjection(ui_read_services,market_automation,decision_scheduler)" in app_source and "RiskCenterProjection(ui_read_services)" in app_source,
     "risk_center_has_one_ui_projection_endpoint":'@app.get("/api/ui/risk-center")' in app_source,
+    "system_interface_status_endpoint":'@app.get("/api/system/interfaces")' in app_source,
     "risk_center_frontend_uses_projection":"jsonCachedStale('/api/ui/risk-center',10000)" in app_source,
     "risk_center_frontend_no_domain_fanout":"jsonOrNullCached('/api/risk-warning/latest',10000)" not in app_source and "jsonOrNullCached('/api/risk-control/latest',10000)" not in app_source,
     "risk_projection_is_read_only":"risk_warning_run" not in risk_projection_source and "risk_control_run" not in risk_projection_source,
