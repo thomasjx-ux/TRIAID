@@ -1,0 +1,11 @@
+TRIAID FIN US page live-surface release
+date: 2026-09-24
+scope:
+- expose US intraday state, recompute count, latest weight-change magnitude and market-data timestamp
+- keep intraday state separate from formal realized posterior evidence
+- collapse truly unavailable realized-posterior tables into explicit explanatory states
+- enforce US strategy, Return-Max, capital-sleeve and open-session live-data completeness in release audit
+source commits:
+- 551520a15cdc1996362a2d6ead3dfa328805ca79
+- 03b5e1d13f75cc8c27ca987abf5287ef69a154eb
+- 8c011465a5a60d6926246e87031af25187b72f1e
