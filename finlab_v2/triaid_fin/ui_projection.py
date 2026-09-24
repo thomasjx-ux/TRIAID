@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from .market_data import session_phase
 from .market_registry import MARKET_REGISTRY, normalize_market_id
 from .market_interfaces import market_interface
-from .ui_ports import UiReadServices
+from .ui_ports import MarketPageReadPort, UiReadServices
 
 
 VERSION="market-page-projection@1.2.0"
@@ -53,12 +53,20 @@ def _error_section(source:str,exc:Exception,*,required:bool=False,data=None)->di
     )
 
 
+def _market_read_port(services)->MarketPageReadPort:
+    if isinstance(services,MarketPageReadPort):
+        return services
+    if isinstance(services,UiReadServices):
+        return services.market_page
+    return UiReadServices(services).market_page
+
+
 def _finite(value)->bool:
     return isinstance(value,(int,float)) and math.isfinite(float(value))
 
 
 def _run_rows(services,market_id:str,limit:int=100)->list[dict]:
-    services=services if isinstance(services,UiReadServices) else UiReadServices(services)
+    services=_market_read_port(services)
     rows=[r for r in services.all_runs() if r.market.market_id.upper()==market_id]
     return [
         {
@@ -80,7 +88,7 @@ def _run_rows(services,market_id:str,limit:int=100)->list[dict]:
 
 
 def strategy_rows(services,market_id:str,lang:str="zh",run_id:str|None=None)->list[dict]:
-    services=services if isinstance(services,UiReadServices) else UiReadServices(services)
+    services=_market_read_port(services)
     market=normalize_market_id(market_id)
     if lang not in {"zh","en"}:
         raise ValueError("lang must be zh or en")
@@ -651,11 +659,7 @@ class MarketPageProjection:
     version=VERSION
 
     def __init__(self,services,automation,scheduler)->None:
-        self.services=(
-            services
-            if isinstance(services,UiReadServices)
-            else UiReadServices(services)
-        )
+        self.services=_market_read_port(services)
         self.automation=automation
         self.scheduler=scheduler
 
