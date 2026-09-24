@@ -38,6 +38,34 @@ class VerifiedProjectionRepository:
         self.journal=journal
 
     @staticmethod
+    def _strategy_evidence(rows:list)->list[dict]:
+        allowed=(
+            "strategy_id",
+            "market_id",
+            "as_of",
+            "run_id",
+            "run_scope",
+            "evidence_eligible",
+            "lifecycle",
+            "expected_net_return",
+            "risk",
+            "uncertainty",
+            "metrics",
+            "selected",
+            "baseline_weight",
+            "triaid_weight",
+        )
+        return [
+            {
+                key:deepcopy(row.get(key))
+                for key in allowed
+                if key in row
+            }
+            for row in rows
+            if isinstance(row,dict) and row.get("strategy_id")
+        ]
+
+    @staticmethod
     def _decision_lineage(market:str,sections:dict)->dict:
         route_section=sections.get("route") or {}
         route_data=route_section.get("data") or {}
@@ -94,21 +122,37 @@ class VerifiedProjectionRepository:
         if not lineage.get("decision_id"):
             return {"state":"NOT_FROZEN","reason":"DECISION_IDENTITY_MISSING"}
 
+        route_section=sections.get("route") or {}
+        route_data=route_section.get("data") or {}
+        route_spec=market_interface(market).route
+        primary=route_spec.primary_payload(route_data)
+        latest_decision=deepcopy(primary.get("latest_decision") or {})
+        strategies=self._strategy_evidence(
+            (sections.get("strategies") or {}).get("data") or []
+        )
         formal_evidence={
-            "evidence_schema":"formal-market-projection-evidence@1.0.0",
+            "evidence_schema":"formal-market-projection-evidence@1.1.0",
             "market_id":market,
             "contract_version":payload.get("contract_version"),
             "projection_scope":payload.get("projection_scope"),
             "decision_lineage":lineage,
             "market":deepcopy(payload.get("market") or {}),
-            "route":deepcopy(sections.get("route") or {}),
-            "strategies":deepcopy(sections.get("strategies") or {}),
+            "formal_route":{
+                "state":route_section.get("state"),
+                "source":route_section.get("source"),
+                "as_of":route_section.get("as_of"),
+                "latest_decision":latest_decision,
+                "primary_payload_keys":sorted(primary),
+            },
+            "formal_strategies":strategies,
             "future_information_excluded":[
                 "posterior",
                 "curves",
                 "live",
                 "activity",
                 "intraday",
+                "route_embedded_reviews",
+                "localized_presentation_copy",
             ],
             "prospective_rule":"FORMAL_EVIDENCE_EXCLUDES_REALIZED_AND_INTRADAY_FUTURE_INFORMATION",
         }
