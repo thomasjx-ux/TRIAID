@@ -2397,6 +2397,10 @@ function fmtPrice(x,currency){
  else if(currency==='HKD')prefix='HK'+String.fromCharCode(36);
  return prefix+v.toFixed(digits);
 }
+function strategyName(strategyId){
+ const m=el('market')?.value||'US';
+ return (strategyNameIndex[m]||{})[strategyId]||strategyId||'-';
+}
 function strategyLabelHtml(name,strategyId){
  const n=name||strategyId||'-',sid=strategyId||'';
  return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
@@ -3796,7 +3800,7 @@ function renderDailyExperimentIntelligence(intel,cross,investmentReport){
  const nextRows=[(zh?'优先修复层：':'Primary layer to test: ')+(next.diagnose_first||gapLayer),...(next.tests||[]).slice(0,4)];
  el('deiNextRows').innerHTML=nextRows.map(x=>'<li>'+esc(x)+'</li>').join('');
 
- const cap=((investmentReport||{}).performance_review||{}).capitalized||{};
+ const cap=(intel.capitalized_scorecard||((investmentReport||{}).performance_review||{}).capitalized||{});
  const capRows=cap.rows||[];
  el('deiCapitalLabel').textContent=zh?'资金量':'Capital';
  el('deiBasePnlLabel').textContent=zh?'基线损益':'Baseline P&L';
