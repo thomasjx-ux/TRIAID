@@ -207,6 +207,43 @@ class FakeScheduler:
             }
         ]
 
+class ClosedAutomation(FakeAutomation):
+    def __init__(self)->None:
+        super().__init__(stale=False)
+
+    def live_indicators(self,market):
+        row=super().live_indicators(market)
+        row.update({
+            "session_phase":"CLOSED",
+            "available":False,
+            "freshness_seconds":None,
+            "instruments":[],
+        })
+        return row
+
+    def activity(self,market,limit):
+        return {
+            "market_id":market,
+            "session_phase":"CLOSED",
+            "refresh_plan":{},
+            "schedule_text":"",
+            "events":[],
+        }
+
+
+class ClosedScheduler(FakeScheduler):
+    def status(self):
+        payload=super().status()
+        payload["markets"]["US"].update({
+            "baseline_done":False,
+            "baseline_fresh":False,
+            "decision_count":0,
+        })
+        return payload
+
+    def events(self,market,limit=120):
+        return []
+
 
 projection=MarketPageProjection(FakeEngine(),FakeAutomation(),FakeScheduler())
 page=projection.full("US","zh")
@@ -247,6 +284,14 @@ checks["stale_live_does_not_blank_frozen_full_page"]=stale_full["integrity"]["pa
 checks["stale_live_marks_full_page_degraded"]=stale_full["integrity"]["status"]=="DEGRADED"
 checks["stale_live_blocks_live_contract"]=stale_live["integrity"]["passed"] is False
 checks["stale_live_failure_is_explicit"]=any("OPEN_SESSION_LIVE_DATA_STALE_GT_180S" in x for x in stale_live["integrity"]["errors"])
+
+closed_projection=MarketPageProjection(FakeEngine(),ClosedAutomation(),ClosedScheduler())
+closed_live=closed_projection.live("US")
+checks["closed_market_live_contract_passes"]=closed_live["integrity"]["passed"] is True
+checks["closed_market_live_is_not_applicable"]=closed_live["sections"]["live"]["state"]=="NOT_APPLICABLE"
+checks["closed_market_activity_is_not_applicable"]=closed_live["sections"]["activity"]["state"]=="NOT_APPLICABLE"
+checks["closed_market_intraday_is_not_applicable"]=closed_live["sections"]["intraday"]["state"]=="NOT_APPLICABLE"
+checks["closed_market_has_no_unexplained_empty_sections"]=closed_live["integrity"]["unexplained_non_ready_sections"]==[]
 
 failed=[name for name,ok in checks.items() if not ok]
 if failed:
