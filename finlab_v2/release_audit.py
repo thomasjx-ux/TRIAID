@@ -67,6 +67,7 @@ BUILD_CASES=[
     "compact_status_overview_smoke.py",
     "empty_posterior_layout_smoke.py",
     "all_table_surface_smoke.py",
+    "us_page_live_surface_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
@@ -100,6 +101,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/strategy-population/rules/CN",
     "/api/strategy-population/rules/HK",
     "/api/decision-scheduler/events?market_id=US&limit=1",
+    "/api/decision-scheduler/events?market_id=US&limit=120",
     "/api/decision-scheduler/events?market_id=CN&limit=1",
     "/api/decision-scheduler/events?market_id=HK&limit=1",
     "/api/decision-scheduler/status",
@@ -437,9 +439,98 @@ def runtime_checks()->list[dict]:
             ]
             check(f"{market}_strategy_table_required_fields",not malformed,malformed[:10])
             selected_count=sum(1 for row in strategy_payload if isinstance(row,dict) and row.get("selected"))
+            if market=="US":
+                missing_numeric=[
+                    row.get("strategy_id") if isinstance(row,dict) else None
+                    for row in strategy_payload
+                    if not isinstance(row,dict)
+                    or not all(
+                        isinstance(row.get(field),(int,float)) and math.isfinite(float(row.get(field)))
+                        for field in ("expected_net_return","risk","baseline_weight","triaid_weight")
+                    )
+                ]
+                check("US_strategy_surface_numeric_complete",not missing_numeric,missing_numeric[:10])
         else:
             selected_count=None
         daily_payload=daily_payload if isinstance(daily_payload,dict) else {}
+        if market=="US":
+            usrm=daily_payload.get("us_return_max") or {}
+            latest_usrm=usrm.get("latest_decision") or {}
+            usrm_cap=latest_usrm.get("capital_capacity") or {}
+            check(
+                "US_return_max_latest_decision_present",
+                bool(latest_usrm.get("decision_id")),
+                latest_usrm.get("decision_id"),
+            )
+            check(
+                "US_return_max_strategy_weights_present",
+                bool(latest_usrm.get("target_strategy_weights")),
+                latest_usrm.get("target_strategy_weights"),
+            )
+            check(
+                "US_return_max_asset_weights_present",
+                isinstance(latest_usrm.get("target_asset_weights"),dict)
+                and len(latest_usrm.get("target_asset_weights") or {})>=5,
+                latest_usrm.get("target_asset_weights"),
+            )
+            check(
+                "US_return_max_state_estimates_finite",
+                all(
+                    isinstance(latest_usrm.get(field),(int,float))
+                    and math.isfinite(float(latest_usrm.get(field)))
+                    for field in (
+                        "projected_annualized_expected_net_return",
+                        "generic_core_projected_annualized_expected_net_return",
+                        "buy_hold_projected_annualized_expected_net_return",
+                    )
+                ),
+                {
+                    key:latest_usrm.get(key)
+                    for key in (
+                        "projected_annualized_expected_net_return",
+                        "generic_core_projected_annualized_expected_net_return",
+                        "buy_hold_projected_annualized_expected_net_return",
+                    )
+                },
+            )
+            check(
+                "US_return_max_four_capital_sleeves_present",
+                len(usrm_cap.get("sleeves") or [])==4,
+                {
+                    "currency":usrm_cap.get("currency"),
+                    "sleeve_count":len(usrm_cap.get("sleeves") or []),
+                },
+            )
+            us_clock=clock_map.get("US") or {}
+            if str(us_clock.get("session_phase") or "").upper()=="OPEN":
+                instruments=live_payload.get("instruments") if isinstance(live_payload,dict) else None
+                check(
+                    "US_open_live_surface_available",
+                    isinstance(live_payload,dict)
+                    and live_payload.get("available") is True
+                    and isinstance(instruments,list)
+                    and len(instruments)>=5,
+                    {
+                        "available":live_payload.get("available") if isinstance(live_payload,dict) else None,
+                        "instrument_count":len(instruments) if isinstance(instruments,list) else None,
+                    },
+                )
+                malformed_live=[
+                    row.get("symbol") if isinstance(row,dict) else None
+                    for row in (instruments or [])
+                    if not isinstance(row,dict)
+                    or not isinstance(row.get("close"),(int,float))
+                    or not math.isfinite(float(row.get("close")))
+                    or not isinstance(row.get("change_pct"),(int,float))
+                    or not math.isfinite(float(row.get("change_pct")))
+                ]
+                check("US_open_live_instruments_numeric_complete",not malformed_live,malformed_live[:10])
+                decision_rows=payloads.get("/api/decision-scheduler/events?market_id=US&limit=120")
+                check(
+                    "US_open_intraday_decision_surface_available",
+                    isinstance(decision_rows,list) and len(decision_rows)>0,
+                    {"event_count":len(decision_rows) if isinstance(decision_rows,list) else None},
+                )
         table_runtime_summary[market]={
             "date":daily_payload.get("date"),
             "strategy_rows":len(strategy_payload) if isinstance(strategy_payload,list) else None,
