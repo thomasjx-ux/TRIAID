@@ -20,15 +20,17 @@ from triaid_fin.account_api import build_account_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
+from triaid_fin.runtime_ports import RuntimeServices
 from triaid_fin.market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION, official_session_phase, trading_day_info
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
 from triaid_fin.ui_projection import MarketPageProjection, strategy_rows
 
 engine=EvolutionLabEngine()
-decision_scheduler=DecisionScheduler(engine)
+runtime_services=RuntimeServices(engine)
+decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
-market_automation=MarketDataAutomation(engine,decision_scheduler)
+market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
 market_page_projection=MarketPageProjection(engine,market_automation,decision_scheduler)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
