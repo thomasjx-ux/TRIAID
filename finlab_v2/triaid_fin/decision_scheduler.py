@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from threading import RLock
 from zoneinfo import ZoneInfo
@@ -26,7 +26,7 @@ def _env_float(name:str,default:float)->float:
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.2.4"
+    version="decision-scheduler@0.2.5"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -68,6 +68,11 @@ class DecisionScheduler:
                 "session_date":day,
                 "baseline_done":False,
                 "baseline_event_id":None,
+                "baseline_fresh":False,
+                "baseline_expected_as_of":None,
+                "baseline_reference_as_of":None,
+                "baseline_refresh_attempt_epoch":0,
+                "baseline_refresh_attempt_count":0,
                 "last_decision_source_ts":None,
                 "last_close_source_ts":None,
                 "last_close_signature":None,
@@ -82,6 +87,11 @@ class DecisionScheduler:
             defaults={
                 "baseline_done":False,
                 "baseline_event_id":None,
+                "baseline_fresh":False,
+                "baseline_expected_as_of":None,
+                "baseline_reference_as_of":None,
+                "baseline_refresh_attempt_epoch":0,
+                "baseline_refresh_attempt_count":0,
                 "last_decision_source_ts":None,
                 "last_close_source_ts":None,
                 "last_close_signature":None,
@@ -226,25 +236,77 @@ class DecisionScheduler:
             "transition_state":list(current_state),
         }
 
+    def _previous_trading_day(self,market_id:str)->str|None:
+        market=market_id.upper()
+        today=datetime.now(self._tz(market)).date()
+        for offset in range(1,15):
+            candidate=today-timedelta(days=offset)
+            info=trading_day_info(market,candidate)
+            if not info.get("calendar_known"):
+                return None
+            if info.get("is_trading_day"):
+                return candidate.isoformat()
+        return None
+
     def _ensure_baseline(self,market_id:str,phase:str)->dict|None:
         market=market_id.upper()
         state=self._market_state(market)
-        if state["baseline_done"]:
-            return None
-
+        expected_as_of=self._previous_trading_day(market)
         reference=self.engine.latest_decision_run(market)
+        reference_as_of=str(reference.market.as_of) if reference is not None else None
+        fresh=bool(
+            expected_as_of
+            and reference_as_of
+            and reference_as_of>=expected_as_of
+            and reference is not None
+            and reference.triaid_decision is not None
+        )
+        previous_done=bool(state.get("baseline_done"))
+        previous_reference_as_of=state.get("baseline_reference_as_of")
         attempted=None
-        if reference is None:
-            attempted=self.engine.run_live_research(market)
-            reference=self.engine.latest_decision_run(market)
+
+        if not fresh:
+            now_epoch=int(datetime.now(timezone.utc).timestamp())
+            last_attempt=int(state.get("baseline_refresh_attempt_epoch") or 0)
+            if now_epoch-last_attempt>=300:
+                state["baseline_refresh_attempt_epoch"]=now_epoch
+                state["baseline_refresh_attempt_count"]=int(
+                    state.get("baseline_refresh_attempt_count") or 0
+                )+1
+                attempted=self.engine.run_live_research(market)
+                reference=self.engine.latest_decision_run(market)
+                reference_as_of=str(reference.market.as_of) if reference is not None else None
+                fresh=bool(
+                    expected_as_of
+                    and reference_as_of
+                    and reference_as_of>=expected_as_of
+                    and reference is not None
+                    and reference.triaid_decision is not None
+                )
+            else:
+                state["baseline_done"]=False
+                state["baseline_fresh"]=False
+                state["baseline_expected_as_of"]=expected_as_of
+                state["baseline_reference_as_of"]=reference_as_of
+                self._save()
+                return None
+
+        if previous_done and fresh and previous_reference_as_of==reference_as_of:
+            state["baseline_fresh"]=True
+            state["baseline_expected_as_of"]=expected_as_of
+            state["baseline_reference_as_of"]=reference_as_of
+            return None
 
         payload={
             "phase":phase,
             "basis":(
                 "PRIOR_CLOSE_NO_AUCTION_FEED"
                 if market=="CN" and phase=="PREOPEN"
-                else "LATEST_AVAILABLE_DECISION"
+                else "LATEST_COMPLETE_DAILY_DECISION"
             ),
+            "expected_reference_as_of":expected_as_of,
+            "reference_as_of":reference_as_of,
+            "reference_fresh":fresh,
             "reference_run_id":reference.run_id if reference else None,
             "attempt_run_id":attempted.run_id if attempted else None,
             "attempt_status":attempted.status if attempted else None,
@@ -255,9 +317,25 @@ class DecisionScheduler:
             ),
             "decision_available":bool(reference and reference.triaid_decision),
         }
-        event_type="PREOPEN_BASELINE" if phase=="PREOPEN" else "OPEN_LATE_BASELINE"
+        if phase=="PREOPEN":
+            if not fresh:
+                event_type="PREOPEN_BASELINE_STALE"
+            elif previous_done:
+                event_type="PREOPEN_BASELINE_REFRESHED"
+            else:
+                event_type="PREOPEN_BASELINE"
+        else:
+            if not fresh:
+                event_type="OPEN_LATE_BASELINE_STALE"
+            elif previous_done:
+                event_type="OPEN_LATE_BASELINE_REFRESHED"
+            else:
+                event_type="OPEN_LATE_BASELINE"
         row=self._event(market,event_type,payload)
-        state["baseline_done"]=True
+        state["baseline_done"]=bool(fresh)
+        state["baseline_fresh"]=bool(fresh)
+        state["baseline_expected_as_of"]=expected_as_of
+        state["baseline_reference_as_of"]=reference_as_of
         state["baseline_event_id"]=row["event_id"]
         self._save()
         return row
@@ -460,7 +538,17 @@ class DecisionScheduler:
             if phase in {"PREOPEN","OPEN"}:
                 baseline=self._ensure_baseline(market,phase)
                 if baseline is not None and phase=="PREOPEN":
-                    return {"enabled":True,"action":"BASELINE_RECORDED","event":baseline}
+                    event_type=str(baseline.get("event_type") or "")
+                    action=(
+                        "BASELINE_STALE"
+                        if event_type.endswith("_STALE")
+                        else (
+                            "BASELINE_REFRESHED"
+                            if event_type.endswith("_REFRESHED")
+                            else "BASELINE_RECORDED"
+                        )
+                    )
+                    return {"enabled":True,"action":action,"event":baseline}
 
             transition=observed.get("transition") if isinstance(observed,dict) else None
             if phase=="OPEN" and transition:
