@@ -215,6 +215,15 @@ def structural_checks()->list[dict]:
         None,
     )
     check(
+        "ui_projections_use_read_service_port",
+        "self.services." in projection
+        and "self.engine." not in projection
+        and "self.services." in risk_projection
+        and "self.engine." not in risk_projection
+        and "ui_read_services=UiReadServices(engine)" in app,
+        None,
+    )
+    check(
         "risk_center_projection_is_single_ui_contract",
         "class RiskCenterProjection" in risk_projection
         and '@app.get("/api/ui/risk-center")' in app
