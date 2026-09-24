@@ -26,6 +26,8 @@ BUILD_CASES=[
     "startup_readonly_contract_smoke.py",
     "primary_revision_migration_smoke.py",
     "strategy_contract_smoke.py",
+    "policy_triage_smoke.py",
+    "transition_triage_gate_smoke.py",
     "n_market_multi_account_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -150,8 +152,12 @@ def structural_checks()->list[dict]:
     start=(ROOT/"start.sh").read_text(encoding="utf-8")
     gate=(ROOT/"build_gate.sh").read_text(encoding="utf-8")
     app=(ROOT/"app.py").read_text(encoding="utf-8")
+    engine=(ROOT/"triaid_fin"/"engine.py").read_text(encoding="utf-8")
+    scheduler=(ROOT/"triaid_fin"/"decision_scheduler.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
+    check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
+    check("risk_increase_requires_persistence","INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE" in scheduler)
     check("runtime_audit_is_blocking","release_audit.py runtime" in start and "wait \"$SERVER_PID\"" in start,start)
     check("critical_audit_not_echo_only","TRIAID_POSTDEPLOY_RUNTIME_SMOKE_FAILED" not in start and "TRIAID_RISK_CENTER_FULL_AUDIT_FAILED" not in start,start)
     check("liveness_endpoint_present",'@app.get("/health/live")' in app,None)
