@@ -71,6 +71,7 @@ BUILD_CASES=[
     "us_page_live_surface_smoke.py",
     "ui_projection_smoke.py",
     "modular_interface_architecture_smoke.py",
+    "capability_ports_evidence_smoke.py",
     "runtime_plugin_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
@@ -102,6 +103,9 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
+    "/api/experiments/evidence/US/latest",
+    "/api/experiments/evidence/CN/latest",
+    "/api/experiments/evidence/HK/latest",
     "/api/ui/market-page/US/live",
     "/api/ui/market-page/CN/live",
     "/api/ui/market-page/HK/live",
@@ -174,6 +178,9 @@ def structural_checks()->list[dict]:
     runtime=(ROOT/"triaid_fin"/"market_runtime.py").read_text(encoding="utf-8")
     interfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
     risk_projection=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encoding="utf-8")
+    runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
+    ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
+    projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
@@ -213,6 +220,37 @@ def structural_checks()->list[dict]:
     check(
         "scheduler_uses_runtime_services_port",
         "self.services." in scheduler and "self.engine." not in scheduler,
+        None,
+    )
+    check(
+        "runtime_capability_ports_present",
+        all(
+            token in runtime_ports
+            for token in (
+                "class MarketDataRuntimePort",
+                "class DecisionRuntimePort",
+                "class ResearchRuntimePort",
+            )
+        )
+        and "self.services.market_data." in runtime
+        and "self.services.decision." in scheduler
+        and "self.services.market_data." in scheduler,
+        None,
+    )
+    check(
+        "ui_capability_ports_present",
+        "class MarketPageReadPort" in ui_ports
+        and "class RiskReadPort" in ui_ports
+        and "MarketPageReadPort" in projection
+        and "RiskReadPort" in risk_projection,
+        None,
+    )
+    check(
+        "formal_evidence_repository_is_future_blind",
+        "class VerifiedProjectionRepository" in projection_repository
+        and "future_information_excluded" in projection_repository
+        and "FORMAL_EVIDENCE_EXCLUDES_REALIZED_AND_INTRADAY_FUTURE_INFORMATION" in projection_repository
+        and "verified_projection_repository" in app,
         None,
     )
     check(
@@ -506,7 +544,7 @@ def runtime_checks()->list[dict]:
         live_page=payloads.get(f"/api/ui/market-page/{market}/live") or {}
         check(
             f"{market}_market_page_projection_contract",
-            page.get("contract_version")=="market-page-projection@1.2.0"
+            page.get("contract_version")=="market-page-projection@1.3.0"
             and page.get("projection_scope")=="FULL"
             and page.get("market_id")==market,
             {
@@ -567,7 +605,7 @@ def runtime_checks()->list[dict]:
         )
         check(
             f"{market}_live_projection_contract",
-            live_page.get("contract_version")=="market-page-projection@1.2.0"
+            live_page.get("contract_version")=="market-page-projection@1.3.0"
             and live_page.get("projection_scope")=="LIVE"
             and live_page.get("market_id")==market,
             {
