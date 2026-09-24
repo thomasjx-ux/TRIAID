@@ -535,7 +535,17 @@ class ReviewModule:
             "latest_market_regime":latest.market.regime if latest else None,
             "report_contract":{
                 "report_type":"INVESTMENT_STRATEGY_DAILY",
-                "body_priority":["strategy_analysis","session_review","change_reason","return_difference","forward_view"],
+                "body_priority":["experiment_evolution_review","realized_scorecard","intervention_attribution","transition_evidence","goal_gap","counterfactual_replay","next_validation","strategy_analysis","session_review","forward_view"],
+                "highest_discipline":{
+                    "internal_goal":"Validate and evolve TRIAID prospectively.",
+                    "external_goal":"Maximize long-run realizable net return.",
+                    "joint_goal":"Continuously reduce the distance between TRIAID capability gains and economic gains without hindsight contamination.",
+                },
+                "experiment_evolution_review_required":True,
+                "goal_gap_required":True,
+                "transition_evidence_required":True,
+                "counterfactual_replay_discipline_required":True,
+                "cross_market_learning_required":True,
                 "technical_runtime_report_default":False,
                 "amount_percent_and_difference_required":True,
                 "capital_sleeves_required":True,
