@@ -94,19 +94,49 @@ class FakeEngine:
                 "latest_decision":{
                     "decision_id":"USRM-test",
                     "market_as_of":"2026-09-23",
+                    "frozen_at":"2026-09-23T20:10:00+00:00",
                     "target_strategy_weights":{"P00_BUY_HOLD":1.0},
+                    "generic_core_control_weights":{"P00_BUY_HOLD":1.0},
                     "target_asset_weights":{
                         "SPY":1.0,"QQQ":0.0,"IWM":0.0,"TLT":0.0,"GLD":0.0,
                     },
                     "projected_annualized_expected_net_return":0.12,
                     "generic_core_projected_annualized_expected_net_return":0.10,
                     "buy_hold_projected_annualized_expected_net_return":0.08,
+                    "cash_residual_weight":0.0,
                     "capital_capacity":{
+                        "max_participation_adv":0.03,
+                        "base_cost_bps":1.5,
+                        "impact_coefficient_bps":45.0,
                         "sleeves":[
-                            {"starting_capital_usd":100000},
-                            {"starting_capital_usd":1000000},
-                            {"starting_capital_usd":10000000},
-                            {"starting_capital_usd":100000000},
+                            {
+                                "starting_capital_usd":100000,
+                                "target_invested_notional_usd":100000,
+                                "max_one_day_participation_adv":0.00001,
+                                "minimum_execution_days":1,
+                                "estimated_round_trip_cost_proxy_usd":30.0,
+                            },
+                            {
+                                "starting_capital_usd":1000000,
+                                "target_invested_notional_usd":1000000,
+                                "max_one_day_participation_adv":0.0001,
+                                "minimum_execution_days":1,
+                                "estimated_round_trip_cost_proxy_usd":300.0,
+                            },
+                            {
+                                "starting_capital_usd":10000000,
+                                "target_invested_notional_usd":10000000,
+                                "max_one_day_participation_adv":0.001,
+                                "minimum_execution_days":1,
+                                "estimated_round_trip_cost_proxy_usd":3000.0,
+                            },
+                            {
+                                "starting_capital_usd":100000000,
+                                "target_invested_notional_usd":100000000,
+                                "max_one_day_participation_adv":0.01,
+                                "minimum_execution_days":1,
+                                "estimated_round_trip_cost_proxy_usd":30000.0,
+                            },
                         ]
                     },
                 },
@@ -183,7 +213,7 @@ page=projection.full("US","zh")
 sections=page["sections"]
 
 checks={
-    "contract_version":page["contract_version"]=="market-page-projection@1.1.0",
+    "contract_version":page["contract_version"]=="market-page-projection@1.2.0",
     "full_scope":page["projection_scope"]=="FULL",
     "daily_ready":sections["daily"]["state"]==READY,
     "strategies_ready":sections["strategies"]["state"]==READY,
@@ -209,6 +239,14 @@ live=projection.live("US")
 checks["live_projection_uses_same_contract"]=live["contract_version"]==page["contract_version"]
 checks["live_projection_integrity_passes"]=live["integrity"]["passed"] is True
 checks["live_projection_contains_intraday_section"]="intraday" in live["sections"]
+
+stale_projection=MarketPageProjection(FakeEngine(),FakeAutomation(stale=True),FakeScheduler())
+stale_full=stale_projection.full("US","zh")
+stale_live=stale_projection.live("US")
+checks["stale_live_does_not_blank_frozen_full_page"]=stale_full["integrity"]["passed"] is True
+checks["stale_live_marks_full_page_degraded"]=stale_full["integrity"]["status"]=="DEGRADED"
+checks["stale_live_blocks_live_contract"]=stale_live["integrity"]["passed"] is False
+checks["stale_live_failure_is_explicit"]=any("OPEN_SESSION_LIVE_DATA_STALE_GT_180S" in x for x in stale_live["integrity"]["errors"])
 
 failed=[name for name,ok in checks.items() if not ok]
 if failed:
