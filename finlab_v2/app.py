@@ -1096,6 +1096,33 @@ tbody tr:hover td{background:#f8fbff}
 .home-summary-risk{font-size:17px}
 .home-summary-story{margin-top:11px;padding-top:10px;border-top:1px solid #e4eaf1;font-size:12px;line-height:1.6;color:#43546a}
 .home-summary-guide{margin-top:4px;font-size:11px;color:#748091}
+.value-proof{background:#101722;color:#edf4ff;border:1px solid #27354a;border-radius:15px;padding:15px 16px;margin:12px 0 14px;box-shadow:0 6px 22px rgba(16,23,34,.10)}
+.value-proof-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.value-proof-kicker{font-size:10px;font-weight:850;letter-spacing:.09em;color:#7fc7ff;text-transform:uppercase}
+.value-proof h2{margin:3px 0 4px;font-size:19px;color:#fff}
+.value-proof-desc{font-size:11px;color:#aebfd2;line-height:1.5;max-width:860px}
+.value-proof-state{font-size:11px;padding:4px 8px;border-radius:999px;background:#1d2a3c;color:#c9d8ea;white-space:nowrap}
+.value-proof-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:8px;margin-top:12px}
+.value-proof-card{border:1px solid #293a50;border-radius:10px;background:#151f2d;padding:10px 11px}
+.value-proof-label{display:block;font-size:10.5px;color:#8fa3ba;margin-bottom:4px}
+.value-proof-value{font-size:20px;font-weight:850;font-variant-numeric:tabular-nums}
+.value-proof-value.good{color:#74d9a1}.value-proof-value.bad{color:#ff9a90}
+.value-proof-detail{font-size:10.5px;color:#8fa3ba;line-height:1.4;margin-top:3px}
+.value-proof-note{font-size:10.5px;color:#8fa3ba;margin-top:9px;line-height:1.45}
+.validation-proof-panel{border:1px solid #d9e3f0;border-radius:13px;background:#f8fbff;padding:13px;margin:10px 0 14px}
+.validation-proof-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.validation-proof-head h3{margin:0;font-size:15px}.validation-proof-meta{font-size:11px;color:#748091;margin-top:3px}
+.validation-proof-tag{font-size:10.5px;padding:3px 7px;border-radius:999px;background:#eef3f9;color:#526174}
+.validation-proof-grid{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:7px;margin-top:10px}
+.validation-proof-item{border:1px solid #e3e9f0;border-radius:9px;background:#fff;padding:9px 10px}
+.validation-proof-item span{display:block;font-size:10.5px;color:#748091;margin-bottom:3px}.validation-proof-item b{font-size:14px;font-variant-numeric:tabular-nums}
+.validation-proof-lineage{font-size:10.5px;color:#66717f;margin-top:8px;line-height:1.45;word-break:break-all}
+.validation-curve-wrap{margin-top:10px;border-top:1px solid #e3e9f0;padding-top:10px}
+.validation-curve-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.validation-curve-head b{font-size:12px}.validation-curve-head span{font-size:10.5px;color:#748091}
+#validationCurve{width:100%;height:190px;border:1px solid #e6ebf1;border-radius:9px;background:#fff}
+@media(max-width:950px){.value-proof-grid{grid-template-columns:repeat(2,1fr)}.validation-proof-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.value-proof-grid{grid-template-columns:1fr}.validation-proof-grid{grid-template-columns:repeat(2,1fr)}}
 .home-volatility{margin-top:12px;padding-top:11px;border-top:1px solid #e4eaf1}
 .home-volatility-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
 .home-volatility-title{font-size:13px;font-weight:800;color:#26384f}
@@ -1301,6 +1328,24 @@ tbody tr:hover td{background:#f8fbff}
     </div>
   </section>
 
+  <section class="value-proof" id="validationValueProof" aria-labelledby="validationValueTitle">
+    <div class="value-proof-head">
+      <div>
+        <div class="value-proof-kicker" id="validationValueKicker">VERIFIED VALUE</div>
+        <h2 id="validationValueTitle">TRIAID 实证结果</h2>
+        <div class="value-proof-desc" id="validationValueDesc">只统计已经完成 T0 冻结与 T1 真实结果配对的样本，直接看 TRIAID 相对当时冻结基线是否产生增量。</div>
+      </div>
+      <div class="value-proof-state" id="validationValueState">等待已结算样本</div>
+    </div>
+    <div class="value-proof-grid">
+      <div class="value-proof-card"><span class="value-proof-label" id="validationSamplesLabel">已结算前瞻样本</span><div class="value-proof-value" id="validationSamples">0</div><div class="value-proof-detail" id="validationSamplesDetail">US / A股 / 港股合计</div></div>
+      <div class="value-proof-card"><span class="value-proof-label" id="validationPositiveLabel">正增量样本</span><div class="value-proof-value" id="validationPositive">-</div><div class="value-proof-detail" id="validationPositiveDetail">TRIAID > 冻结基线</div></div>
+      <div class="value-proof-card"><span class="value-proof-label" id="validationMeanLabel">平均相对增量</span><div class="value-proof-value" id="validationMean">-</div><div class="value-proof-detail" id="validationMeanDetail">每个已结算 T0/T1 样本平均</div></div>
+      <div class="value-proof-card"><span class="value-proof-label" id="validationSumLabel">样本增量合计</span><div class="value-proof-value" id="validationSum">-</div><div class="value-proof-detail" id="validationSumDetail">研究统计，不等于账户累计收益</div></div>
+    </div>
+    <div class="value-proof-note" id="validationValueNote">这里不使用事后最优策略倒推 T0 决策；只读取已冻结 evidence 与已有审计后验。</div>
+  </section>
+
   <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
     <button type="button" class="market-clock-card selected" data-clock-market="US" onclick="selectMarket('US')" data-tip="美股纽约时间。用途：确认当前页面是不是处于官方交易时段。绿色时重点看实时价格、调度和盘中变化；灰色时主要看最近完整交易日和冻结结果，不要把非交易状态误判成数据故障。">
       <div class="market-clock-top"><span class="market-clock-name"><span class="market-dot"></span>美股 / US</span><span class="market-clock-phase" id="clockPhaseUS">-</span></div>
@@ -1435,6 +1480,28 @@ tbody tr:hover td{background:#f8fbff}
     <div class="flow-stage-head">
       <span class="flow-step-no">03</span>
       <div><div class="flow-stage-title" id="stageValidationTitle">真实结果验证</div><div class="flow-stage-desc" id="stageValidationDesc">把冻结基线与冻结 TRIAID 放在同一结果期比较，再看累计路径是否持续。</div></div>
+    </div>
+    <div class="validation-proof-panel" id="marketValidationProof">
+      <div class="validation-proof-head">
+        <div>
+          <h3 id="marketValidationProofTitle">当前市场 T0 → T1 实证</h3>
+          <div class="validation-proof-meta" id="marketValidationProofMeta">读取冻结证据与真实结果配对</div>
+        </div>
+        <span class="validation-proof-tag" id="marketValidationProofState">等待结果</span>
+      </div>
+      <div class="validation-proof-grid">
+        <div class="validation-proof-item"><span id="vpT0Label">T0 冻结日</span><b id="vpT0">-</b></div>
+        <div class="validation-proof-item"><span id="vpT1Label">T1 结果日</span><b id="vpT1">-</b></div>
+        <div class="validation-proof-item"><span id="vpBaselineLabel">冻结基线</span><b id="vpBaseline">-</b></div>
+        <div class="validation-proof-item"><span id="vpTriaidLabel">TRIAID</span><b id="vpTriaid">-</b></div>
+        <div class="validation-proof-item"><span id="vpExcessLabel">TRIAID 净增量</span><b id="vpExcess">-</b></div>
+        <div class="validation-proof-item"><span id="vpDaysLabel">观察天数</span><b id="vpDays">-</b></div>
+      </div>
+      <div class="validation-proof-lineage" id="vpLineage">等待 evidence_id 与 outcome hash</div>
+      <div class="validation-curve-wrap">
+        <div class="validation-curve-head"><b id="vpCurveTitle">前瞻样本增量累计</b><span id="vpCurveNote">按已结算 evidence 样本顺序累加；不是账户净值曲线</span></div>
+        <canvas id="validationCurve" width="1180" height="190"></canvas>
+      </div>
     </div>
     <h2 id="resultTitle">TRIAID 结果比较</h2>
   <div class="compare">
