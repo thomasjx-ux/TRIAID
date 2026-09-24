@@ -2827,11 +2827,13 @@ function renderMarketIdentity(){
  renderHomeSummary();
 }
 async function refreshMarketClocks(){
+ const hadClock=Object.keys(marketClockState).length>0;
  try{
   const payload=await jsonCached('/api/ui/market-clocks',15000);
   marketClockState=Object.fromEntries((payload.markets||[]).map(x=>[x.market_id,x]));
   renderMarketIdentity();
   tickMarketClocks();
+  if(!hadClock)refreshAll(true).catch(()=>null);
  }catch(e){
   renderMarketIdentity();
  }
@@ -3575,7 +3577,7 @@ function humanRunState(status){
   RUNNING:zh?'运行中':'Running',
   FAILED:zh?'运行失败':'Run failed'
  };
- return map[s]||s.replaceAll('_',' ')||(zh?'等待状态':'Awaiting status');
+ return map[s]||s.replaceAll('_',' ')||(zh?'尚无正式运行状态':'No formal run state yet');
 }
 function humanRegime(regime){
  const s=String(regime||'').trim();
@@ -3587,7 +3589,7 @@ function humanRegime(regime){
   recovery:zh?'恢复':'Recovery',
   transition:zh?'过渡':'Transition'
  };
- return map[s]||s.replaceAll('_',' ')||(zh?'等待状态':'Awaiting regime');
+ return map[s]||s.replaceAll('_',' ')||(zh?'策略环境未冻结':'Regime not frozen');
 }
 function humanCoreVersion(version){
  const s=String(version||'').trim();
@@ -3677,24 +3679,74 @@ async function refreshAll(preferStale=false){
    setStatusNote('cumExcessNote','已完成后验的累计相对收益差','Cumulative relative-return gap across completed posterior results');
   }
 
+  const clockState=marketClockState[m]||{};
+  const sessionPhase=String(clockState.session_phase||'').toUpperCase();
+  const sessionLabel=phaseText(sessionPhase);
   const rawRegime=previewRun?.market?.regime||latest?.regime||'';
-  el('regime').textContent=humanRegime(rawRegime);
-  el('regime').title=rawRegime;
-  setStatusNote('regimeNote','当前市场状态，用于解释策略为何被选中或降权','Current market state used to interpret selection and reweighting');
-
-  const rawRunState=previewRun?(previewRun.status||'PREVIEW_READY'):(latest?.status||'');
-  el('runState').textContent=humanRunState(rawRunState)+(previewRun?(lang==='zh'?' · 预览':' · preview'):'');
-  el('runState').title=rawRunState;
+  const regimeLabel=humanRegime(rawRegime);
+  el('regime').textContent=sessionPhase
+   ? (sessionLabel+' · '+regimeLabel)
+   : regimeLabel;
+  el('regime').title=[sessionPhase,rawRegime].filter(Boolean).join(' · ');
   setStatusNote(
-   'runStateNote',
-   previewRun?'即时预览不进入正式证据链':(rawRunState==='NO_NEW_DATA'?'当前周期没有新增可用行情或后验结果':'当前运行与证据状态'),
-   previewRun?'Preview does not enter the formal evidence chain':(rawRunState==='NO_NEW_DATA'?'No new usable market or posterior data in the current cycle':'Current runtime and evidence state')
+   'regimeNote',
+   rawRegime
+    ? '前半段是官方交易时段，后半段是最近一次正式决策使用的策略环境；两者不是同一个概念。'
+    : '当前有实时交易时段，但尚无可用于正式后验的冻结策略环境；盘中数据仍在监控。',
+   rawRegime
+    ? 'The first part is the official trading session; the second is the strategy regime used by the latest formal decision. They are different concepts.'
+    : 'The live trading session is available, but no strategy regime has yet been frozen for formal posterior evidence; intraday monitoring continues.'
   );
 
+  const rawRunState=previewRun?(previewRun.status||'PREVIEW_READY'):(latest?.status||'');
+  const activeSession=['PREOPEN','OPEN','BREAK'].includes(sessionPhase);
+  const runStateText=previewRun
+   ? humanRunState(rawRunState)+(lang==='zh'?' · 预览':' · preview')
+   : rawRunState
+     ? humanRunState(rawRunState)
+     : activeSession
+       ? (lang==='zh'?'当日监控 · 等待收盘冻结':'Intraday monitoring · awaiting close freeze')
+       : (lang==='zh'?'尚无正式冻结决策':'No formal frozen decision yet');
+  el('runState').textContent=runStateText;
+  el('runState').title=rawRunState||sessionPhase;
+  setStatusNote(
+   'runStateNote',
+   previewRun
+    ? '即时预览不进入正式证据链'
+    : rawRunState==='NO_NEW_DATA'
+      ? '当前周期没有新增可用行情或后验结果'
+      : rawRunState
+        ? '这是正式决策/后验链的运行状态'
+        : activeSession
+          ? '行情仍在更新，但正式日线决策要等完整收盘数据后冻结；不是系统停止。'
+          : '当前没有可验证的正式冻结决策。',
+   previewRun
+    ? 'Preview does not enter the formal evidence chain'
+    : rawRunState==='NO_NEW_DATA'
+      ? 'No new usable market or posterior data in the current cycle'
+      : rawRunState
+        ? 'This is the state of the formal decision/posterior evidence chain.'
+        : activeSession
+          ? 'Market data are still updating, but the formal daily decision freezes only after a complete close; the system is not stopped.'
+          : 'There is no verifiable formal frozen decision yet.'
+  );
+
+  const frozenSelection=!!officialLatest;
+  if(el('selectedNamesLabel'))el('selectedNamesLabel').textContent=lang==='zh'
+   ? (frozenSelection?'当前入选':'当前候选')
+   : (frozenSelection?'Selected now':'Current candidates');
   el('selectedNames').innerHTML=selected.length
    ? selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':'')
    : (lang==='zh'?'暂无入选':'No selection');
-  setStatusNote('selectedNamesNote',selected.length?'显示当前冻结策略群，最多列出前6项':'当前没有满足冻结入选条件的策略',selected.length?'Current frozen strategy group; first six shown':'No strategy currently meets the frozen selection criteria');
+  setStatusNote(
+   'selectedNamesNote',
+   selected.length
+    ? (frozenSelection?'显示当前正式冻结策略群，最多列出前6项':'显示当前盘中候选策略群，最多列出前6项；尚未形成正式收盘冻结决策')
+    : (frozenSelection?'当前正式冻结策略群为空':'当前没有满足盘中候选条件的策略'),
+   selected.length
+    ? (frozenSelection?'Current formally frozen strategy group; first six shown':'Current intraday candidate group; first six shown. It has not yet become the formal close-frozen decision.')
+    : (frozenSelection?'The formal frozen strategy group is empty':'No strategy currently meets the intraday candidate criteria')
+  );
   if(previewRun){
    el('dailyAnalysis').textContent=T[lang].preview;
    el('dailyAnalysis').className='';
@@ -3708,13 +3760,29 @@ async function refreshAll(preferStale=false){
     ? (lang==='zh'?'当前主路线以可实现净收益为唯一优化目标；TRIAID 相对冻结基线的状态收益差为 '+signedPct(p)+'。该值用于决策排序，不是保证的未来收益。':'The primary route uses realizable net return as the sole optimization objective; the state-return gap versus the frozen baseline is '+signedPct(p)+'. This is a decision-ranking signal, not a guaranteed future return.')
     : T[lang].pending;
    el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
-  }else{el('dailyAnalysis').textContent=T[lang].pending;el('dailyAnalysis').className='';}
+  }else if(latest){
+   el('dailyAnalysis').textContent=lang==='zh'
+    ? '当前决策已冻结，等待下一完整交易日结果。'
+    : 'The current decision is frozen and awaits the next complete trading-day outcome.';
+   el('dailyAnalysis').className='';
+  }else{
+   el('dailyAnalysis').textContent=activeSession
+    ? (lang==='zh'?'当前仅盘中监控，正式决策尚未冻结。':'Intraday monitoring only; the formal decision has not yet been frozen.')
+    : (lang==='zh'?'尚无可验证的正式决策或后验结果。':'No verifiable formal decision or posterior result yet.');
+   el('dailyAnalysis').className='';
+  }
   if(previewRun){
    setStatusNote('dailyAnalysisNote','当前是即时预览，不进入正式后验','Current result is a preview and does not enter formal posterior evidence');
   }else if(evaluated){
    setStatusNote('dailyAnalysisNote','来自已经完成的真实后验，可与同一冻结时点基线比较','Completed realized posterior; compare with the control frozen at the same time');
+  }else if(latest){
+   setStatusNote('dailyAnalysisNote','正式决策已经冻结，等待下一完整结果期进入后验','The formal decision is frozen and awaits the next complete outcome period');
   }else{
-   setStatusNote('dailyAnalysisNote','当前决策已生成，等待下一完整结果期进入后验','Decision is frozen; awaiting the next complete outcome period for posterior evaluation');
+   setStatusNote(
+    'dailyAnalysisNote',
+    activeSession?'实时行情与候选策略仍在更新；正式后验必须等收盘冻结后才开始':'当前没有可进入正式后验的冻结决策',
+    activeSession?'Live market data and candidate strategies are still updating; formal posterior evidence starts only after the close freeze':'There is no frozen decision eligible for formal posterior evaluation'
+   );
   }
   renderUSReturnMax(m==='US'?d.us_return_max:null);
   renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null);

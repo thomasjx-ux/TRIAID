@@ -42,6 +42,12 @@ checks={
     "empty_statuses_are_humanized":"暂无入选" in app and "暂无新数据" in app and "待后验" in app,
     "market_switch_updates_identity":"function onMarketChange()" in app and "applyMarketScope();" in app and "renderMarketIdentity();" in app,
     "market_switch_preserves_fast_render":"refreshAll(true)" in app and "requestAnimationFrame" in app,
+    "ambiguous_waiting_status_removed":"||(zh?'等待状态':'Awaiting status')" not in app and "||(zh?'等待状态':'Awaiting regime')" not in app,
+    "session_and_strategy_regime_separated":"前半段是官方交易时段，后半段是最近一次正式决策使用的策略环境" in app,
+    "intraday_without_frozen_run_is_explicit":"当日监控 · 等待收盘冻结" in app and "正式日线决策要等完整收盘数据后冻结；不是系统停止" in app,
+    "intraday_candidates_not_mislabeled_frozen":"显示当前盘中候选策略群" in app and "当前候选" in app,
+    "posterior_copy_requires_real_frozen_run":"当前仅盘中监控，正式决策尚未冻结。" in app and "尚无可验证的正式决策或后验结果。" in app,
+    "initial_clock_load_resynchronizes_overview":"if(!hadClock)refreshAll(true).catch(()=>null);" in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
