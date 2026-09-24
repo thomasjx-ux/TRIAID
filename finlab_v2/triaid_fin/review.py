@@ -435,7 +435,7 @@ class ReviewModule:
             },
         }
 
-    def daily_summary(self,runs:Iterable[RunRecord])->dict:
+    def daily_summary(self,runs:Iterable[RunRecord],compact:bool=False)->dict:
         rows=sorted(
             [
                 r for r in runs
@@ -549,7 +549,29 @@ class ReviewModule:
             "strategy_changes":strategy_changes,
             "return_comparisons":return_comparisons,
             "investment_strategy_reports":investment_strategy_reports,
-            "runs_detail":[self._detail(r) for r in day],
+            "runs_detail":[self._compact_detail(r) if compact else self._detail(r) for r in day],
+        }
+
+    def _compact_detail(self,r:RunRecord)->dict:
+        metadata=r.market.metadata or {}
+        diagnostic=dict(r.diagnostic_summary or {})
+        return {
+            "run_id":r.run_id,
+            "market_id":r.market.market_id,
+            "as_of":r.market.as_of,
+            "snapshot_id":r.market.snapshot_id,
+            "regime":r.market.regime,
+            "status":r.status,
+            "experiment_mode":metadata.get("experiment_mode"),
+            "market_route":metadata.get("market_route"),
+            "primary_reference_bootstrap":metadata.get("primary_reference_bootstrap"),
+            "diagnostic_summary":{
+                "experiment_mode":(
+                    diagnostic.get("experiment_mode")
+                    or metadata.get("experiment_mode")
+                ),
+                "projected_excess_expected_return":diagnostic.get("projected_excess_expected_return"),
+            },
         }
 
     def _detail(self,r:RunRecord)->dict:
