@@ -3712,8 +3712,8 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();renderVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels()}
+applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();renderVolatilityForecast();refreshVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);setInterval(refreshVolatilityForecast,60000);
 </script>
 </body>
 </html>
