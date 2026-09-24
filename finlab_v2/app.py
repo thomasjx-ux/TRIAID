@@ -2874,6 +2874,7 @@ let homeSummaryState={
  riskBand:null
 };
 let volatilityForecastState={markets:{},errors:{},model:null,version:null};
+let validationSummaryState=null;
 
 function volatilityBandLabel(value){
  const v=String(value||'UNKNOWN').toUpperCase();
@@ -3091,6 +3092,131 @@ function renderHomeSummary(){
  el('homeSummaryGuide').textContent=zh
   ? '阅读顺序：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属可实现性 → 三市场风险 → Core进化。深层证据和系统日志默认放在后面或折叠区。'
   : 'Read in this order: market/state → TRIAID decision → realized validation → market-specific realizability → three-market risk → Core evolution. Deep evidence and system logs are moved later or collapsed.';
+}
+function drawValidationCurve(points){
+ const canvas=el('validationCurve');
+ if(!canvas)return;
+ const ctx=canvas.getContext('2d');
+ const rect=canvas.getBoundingClientRect();
+ const scale=Math.max(1,window.devicePixelRatio||1);
+ const width=Math.max(320,Math.floor(rect.width||1180));
+ const height=190;
+ canvas.width=Math.floor(width*scale);
+ canvas.height=Math.floor(height*scale);
+ ctx.setTransform(scale,0,0,scale,0,0);
+ ctx.clearRect(0,0,width,height);
+ ctx.fillStyle='#ffffff';
+ ctx.fillRect(0,0,width,height);
+ const rows=Array.isArray(points)?points:[];
+ if(!rows.length){
+  ctx.fillStyle='#748091';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(lang==='zh'?'等待首个已结算 T0/T1 样本':'Awaiting first evaluated T0/T1 sample',width/2,height/2);
+  return;
+ }
+ const vals=rows.map(x=>Number(x.cumulative_sample_excess)).filter(Number.isFinite);
+ const min=Math.min(0,...vals),max=Math.max(0,...vals);
+ const span=Math.max(0.001,max-min);
+ const left=42,right=14,top=16,bottom=28;
+ const pw=width-left-right,ph=height-top-bottom;
+ const y=v=>top+((max-v)/span)*ph;
+ const x=i=>left+(rows.length===1?pw/2:(i/(rows.length-1))*pw);
+ ctx.strokeStyle='#dce3ec';ctx.lineWidth=1;
+ ctx.beginPath();ctx.moveTo(left,y(0));ctx.lineTo(width-right,y(0));ctx.stroke();
+ ctx.fillStyle='#748091';ctx.font='10px sans-serif';ctx.textAlign='right';
+ ctx.fillText('0%',left-6,y(0)+3);
+ ctx.strokeStyle='#1769e0';ctx.lineWidth=2;
+ ctx.beginPath();
+ rows.forEach((row,i)=>{const yy=y(Number(row.cumulative_sample_excess)||0),xx=x(i);if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);});
+ ctx.stroke();
+ rows.forEach((row,i)=>{
+  const v=Number(row.cumulative_sample_excess)||0,xx=x(i),yy=y(v);
+  ctx.fillStyle=v>=0?'#138a4b':'#b42318';
+  ctx.beginPath();ctx.arc(xx,yy,3,0,Math.PI*2);ctx.fill();
+ });
+ ctx.fillStyle='#748091';ctx.font='10px sans-serif';ctx.textAlign='left';
+ ctx.fillText('1',left,height-9);
+ ctx.textAlign='right';ctx.fillText(String(rows.length),width-right,height-9);
+ ctx.textAlign='right';
+ ctx.fillText((max*100).toFixed(2)+'%',left-6,top+4);
+ ctx.fillText((min*100).toFixed(2)+'%',left-6,height-bottom);
+}
+function renderValidationSummary(payload){
+ validationSummaryState=payload||null;
+ const zh=lang==='zh';
+ const overall=payload?.overall||{};
+ const selected=payload?.selected_market||{};
+ const n=Number(overall.evaluated_samples||0);
+ const pos=Number(overall.positive_samples||0);
+ const rate=Number(overall.positive_rate);
+ const mean=Number(overall.mean_excess);
+ const sum=Number(overall.sample_excess_sum);
+ el('validationValueKicker').textContent='VERIFIED VALUE';
+ el('validationValueTitle').textContent=zh?'TRIAID 实证结果':'TRIAID Verified Value';
+ el('validationValueDesc').textContent=zh
+  ? '只统计已经完成 T0 冻结与 T1 真实结果配对的前瞻样本，直接检验 TRIAID 相对当时冻结基线是否产生增量。'
+  : 'Counts only prospective samples with frozen T0 evidence paired to realized T1 outcomes, directly testing TRIAID value versus the contemporaneous frozen baseline.';
+ el('validationSamplesLabel').textContent=zh?'已结算前瞻样本':'Evaluated prospective samples';
+ el('validationPositiveLabel').textContent=zh?'正增量样本':'Positive-value samples';
+ el('validationMeanLabel').textContent=zh?'平均相对增量':'Mean excess vs baseline';
+ el('validationSumLabel').textContent=zh?'样本增量合计':'Sum of sample excess';
+ el('validationSamples').textContent=String(n);
+ el('validationSamplesDetail').textContent=zh
+  ? ('覆盖 '+Number(overall.markets_with_evaluated_samples||0)+'/3 个市场 · 待结算 '+Number(overall.waiting_evidence||0))
+  : (Number(overall.markets_with_evaluated_samples||0)+'/3 markets · '+Number(overall.waiting_evidence||0)+' waiting');
+ el('validationPositive').textContent=n?(pos+' / '+n+' · '+(rate*100).toFixed(1)+'%'):'-';
+ el('validationMean').textContent=Number.isFinite(mean)?signedPct(mean):'-';
+ el('validationSum').textContent=Number.isFinite(sum)?signedPct(sum):'-';
+ ['validationMean','validationSum'].forEach(id=>{
+  const node=el(id),v=id==='validationMean'?mean:sum;
+  node.className='value-proof-value '+(Number.isFinite(v)?(v>0?'good':v<0?'bad':''):'');
+ });
+ el('validationValueState').textContent=n
+  ? (zh?('已形成 '+n+' 个可核验样本'):n+' verified samples')
+  : (zh?'等待已结算样本':'Awaiting evaluated samples');
+ el('validationValueNote').textContent=zh
+  ? '样本增量合计是研究统计，不是账户累计收益；不使用事后最优策略倒推 T0 决策。'
+  : 'The sample-excess sum is a research statistic, not account cumulative return; no hindsight-optimal strategy is used to rewrite T0 decisions.';
+
+ const latest=selected.latest_evaluated||null;
+ const state=selected.state||'WAITING';
+ el('marketValidationProofTitle').textContent=zh?'当前市场 T0 → T1 实证':'Current-market T0 → T1 evidence';
+ el('marketValidationProofMeta').textContent=latest
+  ? ((zh?'口径：':'Method: ')+String(latest.method||'-').replaceAll('_',' '))
+  : (zh?'当前冻结 evidence 已记录，等待真实结果成熟。':'Frozen evidence is recorded; awaiting a mature realized outcome.');
+ el('marketValidationProofState').textContent=latest?(zh?'已结算':'EVALUATED'):(zh?'等待结果':'WAITING');
+ el('vpT0Label').textContent=zh?'T0 冻结日':'T0 freeze date';
+ el('vpT1Label').textContent=zh?'T1 结果日':'T1 outcome date';
+ el('vpBaselineLabel').textContent=zh?'冻结基线':'Frozen baseline';
+ el('vpTriaidLabel').textContent='TRIAID';
+ el('vpExcessLabel').textContent=zh?'TRIAID 净增量':'TRIAID excess';
+ el('vpDaysLabel').textContent=zh?'观察天数':'Observation days';
+ el('vpT0').textContent=latest?.t0_market_as_of||'-';
+ el('vpT1').textContent=latest?.outcome_as_of||'-';
+ el('vpBaseline').textContent=latest&&latest.baseline_realized_return!=null?fmtPct(latest.baseline_realized_return):'-';
+ el('vpTriaid').textContent=latest&&latest.triaid_realized_return!=null?fmtPct(latest.triaid_realized_return):'-';
+ const excess=latest?.triaid_excess_vs_baseline;
+ el('vpExcess').textContent=excess!=null?signedPct(excess):'-';
+ el('vpExcess').className=excess==null?'':cls(Number(excess));
+ el('vpDays').textContent=latest?.observation_days!=null?String(latest.observation_days):'-';
+ el('vpLineage').textContent=latest
+  ? ('evidence '+String(latest.evidence_id||'-')+' · outcome '+String(latest.outcome_hash_sha256||'-').slice(0,16)+'…')
+  : (zh?'等待 evidence_id 对应的 T1 outcome':'Awaiting T1 outcome for the frozen evidence_id');
+ el('vpCurveTitle').textContent=zh?'前瞻样本增量累计':'Cumulative prospective-sample excess';
+ el('vpCurveNote').textContent=zh
+  ? '按已结算 evidence 样本顺序累加；研究统计，不是账户净值曲线'
+  : 'Arithmetic accumulation across evaluated evidence samples; research statistic, not an account equity curve';
+ drawValidationCurve((selected.stats||{}).curve||[]);
+}
+async function refreshValidationSummary(m,seq){
+ try{
+  const payload=await jsonCachedStale('/api/ui/validation-summary?market_id='+encodeURIComponent(m),10000);
+  if(seq!==refreshSeq||el('market').value!==m)return;
+  renderValidationSummary(payload);
+ }catch(e){
+  if(seq!==refreshSeq||el('market').value!==m)return;
+  el('validationValueState').textContent=lang==='zh'?'实证投影暂不可用':'Validation projection unavailable';
+  el('marketValidationProofState').textContent=lang==='zh'?'读取失败':'Unavailable';
+ }
 }
 function phaseText(phase){
  const p=String(phase||'');
@@ -4199,6 +4325,7 @@ async function refreshAll(preferStale=false){
   const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
   const page=await marketGet(projectionUrl,30000);
   if(seq!==refreshSeq||el('market').value!==m)return;
+  refreshValidationSummary(m,seq).catch(()=>null);
   const sections=page.sections||{};
   const s=page.core||{};
   const dailySection=sections.daily||{};
