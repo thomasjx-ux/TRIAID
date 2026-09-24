@@ -59,6 +59,7 @@ BUILD_CASES=[
     "hk_high_frequency_degradation_smoke.py",
     "ui_smoke.py",
     "market_switch_fastpath_smoke.py",
+    "live_phase_semantics_smoke.py",
     "market_ui_readability_smoke.py",
     "ui_table_contract_smoke.py",
     "ui_copy_quality_smoke.py",
