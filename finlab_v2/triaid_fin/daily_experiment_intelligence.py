@@ -176,10 +176,11 @@ def _capitalized_scorecard(market_id: str, scorecard: dict) -> dict:
     }
 
 
-def _transition_summary(store, market_id: str, session_date: str) -> dict:
+def _transition_summary(store, market_id: str, session_date: str, events: list[dict] | None = None) -> dict:
     market = str(market_id).upper()
+    source_events = events if events is not None else store.read_jsonl("decision_events.jsonl", limit=10000)
     events = [
-        row for row in store.read_jsonl("decision_events.jsonl", limit=20000)
+        row for row in source_events
         if str(row.get("market_id") or "").upper() == market
         and str(row.get("session_date") or "") == str(session_date)
     ]
@@ -364,13 +365,14 @@ def build_market_intelligence(
     store,
     market_id: str,
     session_date: str,
+    events: list[dict] | None = None,
 ) -> dict:
     rows = _official_primary_runs(runs, market_id)
     evaluated = _latest_evaluated(rows)
     decision = _latest_decision(rows)
     scorecard = _scorecard(evaluated)
     attribution = _attribution(evaluated)
-    transition = _transition_summary(store, market_id, session_date)
+    transition = _transition_summary(store, market_id, session_date, events=events)
     next_decision = _next_decision(decision)
     gap = _gap_diagnosis(scorecard, transition, attribution)
 
@@ -415,13 +417,14 @@ def build_cross_market_learning(
     runs: Iterable[RunRecord],
     store,
     session_dates: dict[str, str],
+    events: list[dict] | None = None,
 ) -> dict:
     rows = []
     for market in ("US", "CN", "HK"):
         day = session_dates.get(market)
         if not day:
             continue
-        intelligence = build_market_intelligence(runs, store, market, day)
+        intelligence = build_market_intelligence(runs, store, market, day, events=events)
         score = intelligence["realized_scorecard"]
         gap = intelligence["goal_gap"]
         trans = intelligence["transition_evidence"]
