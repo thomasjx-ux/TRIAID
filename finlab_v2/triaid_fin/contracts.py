@@ -124,6 +124,7 @@ class RunRequest(BaseModel):
 class OutcomeRequest(BaseModel):
     realized_returns: Dict[str, float]
     trading_cost: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
+    as_of: Optional[str] = None
 
     @field_validator("realized_returns")
     @classmethod
