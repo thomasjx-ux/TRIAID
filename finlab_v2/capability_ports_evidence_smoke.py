@@ -97,6 +97,7 @@ payload={
             "state":"READY",
             "source":"us_return_max_ledger",
             "data":{
+                "latest_decision_review":{"observation_days":2,"daily_path":[{"future_return":99}]},
                 "latest_decision":{
                     "decision_id":"USRM-1",
                     "frozen_at":"2026-09-24T14:00:00+00:00",
@@ -114,6 +115,10 @@ payload={
                 "selected":True,
                 "baseline_weight":1.0,
                 "triaid_weight":1.0,
+                "name":"localized name",
+                "summary":"localized summary",
+                "selection_reason":"localized reason",
+                "triaid_reason":"localized triaid reason",
             }],
         },
         "preview":{
@@ -140,11 +145,14 @@ checks.update({
     "render_time_does_not_change_evidence_identity":first.get("evidence_id")==second.get("evidence_id"),
     "duplicate_formal_state_deduped":second.get("changed") is False,
     "formal_evidence_has_decision_lineage":((latest.get("decision_lineage") or {}).get("decision_id")=="USRM-1"),
+    "formal_evidence_schema_v11":latest.get("evidence_schema")=="formal-market-projection-evidence@1.1.0",
     "formal_evidence_excludes_posterior":"posterior" not in latest,
     "formal_evidence_excludes_curves":"curves" not in latest,
     "formal_evidence_excludes_live":"live" not in latest,
     "formal_evidence_excludes_intraday":"intraday" not in latest,
-    "formal_evidence_declares_future_exclusions":set(latest.get("future_information_excluded") or [])=={"posterior","curves","live","activity","intraday"},
+    "formal_route_strips_embedded_reviews":"latest_decision_review" not in (latest.get("formal_route") or {}),
+    "formal_strategy_strips_localized_copy":all("name" not in row and "summary" not in row and "selection_reason" not in row and "triaid_reason" not in row for row in (latest.get("formal_strategies") or [])),
+    "formal_evidence_declares_future_exclusions":set(latest.get("future_information_excluded") or [])=={"posterior","curves","live","activity","intraday","route_embedded_reviews","localized_presentation_copy"},
     "formal_evidence_ledger_written":len(engine.store.streams.get("verified_projections/ledger.jsonl",[]))==1,
 })
 
