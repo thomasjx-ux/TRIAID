@@ -372,6 +372,10 @@ def build_market_intelligence(
     decision = _latest_decision(rows)
     scorecard = _scorecard(evaluated)
     attribution = _attribution(evaluated)
+    evaluated_diagnostics=(evaluated.diagnostic_summary or {}) if evaluated else {}
+    decision_diagnostics=(decision.diagnostic_summary or {}) if decision else {}
+    policy_triage=evaluated_diagnostics.get("policy_triage") or decision_diagnostics.get("policy_triage")
+    policy_triage_outcome=evaluated_diagnostics.get("policy_triage_outcome")
     transition = _transition_summary(store, market_id, session_date, events=events)
     next_decision = _next_decision(decision)
     gap = _gap_diagnosis(scorecard, transition, attribution)
@@ -392,6 +396,8 @@ def build_market_intelligence(
         "realized_scorecard": scorecard,
         "capitalized_scorecard": _capitalized_scorecard(market_id, scorecard),
         "intervention_attribution": attribution,
+        "policy_triage": policy_triage,
+        "policy_triage_outcome": policy_triage_outcome,
         "transition_evidence": transition,
         "goal_gap": gap,
         "next_frozen_decision": next_decision,
