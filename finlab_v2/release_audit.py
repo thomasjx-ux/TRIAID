@@ -72,6 +72,7 @@ BUILD_CASES=[
     "ui_projection_smoke.py",
     "modular_interface_architecture_smoke.py",
     "capability_ports_evidence_smoke.py",
+    "outcome_resolver_smoke.py",
     "runtime_plugin_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
@@ -106,6 +107,12 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/experiments/evidence/US/latest",
     "/api/experiments/evidence/CN/latest",
     "/api/experiments/evidence/HK/latest",
+    "/api/experiments/outcomes/US/status",
+    "/api/experiments/outcomes/CN/status",
+    "/api/experiments/outcomes/HK/status",
+    "/api/experiments/outcomes/US/latest",
+    "/api/experiments/outcomes/CN/latest",
+    "/api/experiments/outcomes/HK/latest",
     "/api/ui/market-page/US/live",
     "/api/ui/market-page/CN/live",
     "/api/ui/market-page/HK/live",
@@ -183,6 +190,7 @@ def structural_checks()->list[dict]:
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
+    outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
@@ -274,6 +282,14 @@ def structural_checks()->list[dict]:
         and "future_information_excluded" in projection_repository
         and "FORMAL_EVIDENCE_EXCLUDES_REALIZED_AND_INTRADAY_FUTURE_INFORMATION" in projection_repository
         and "verified_projection_repository" in app,
+        None,
+    )
+    check(
+        "t0_t1_outcome_resolver_is_thin",
+        "class OutcomeResolver" in outcome_resolver
+        and "does not recalculate market returns" in outcome_resolver
+        and "outcome_resolver=OutcomeResolver" in app
+        and '@app.get("/api/experiments/outcomes/{market_id}/status")' in app,
         None,
     )
     check(
@@ -442,6 +458,38 @@ def runtime_checks()->list[dict]:
         and evidence_repo_status.get("version")=="verified-projection-repository@1.0.0",
         interface_status,
     )
+
+    for market in ("US","CN","HK"):
+        outcome_status=payloads.get(f"/api/experiments/outcomes/{market}/status") or {}
+        check(
+            f"{market}_t0_t1_outcome_status_contract",
+            outcome_status.get("resolver_version")=="triaid-outcome-resolver@1.0.0"
+            and outcome_status.get("market_id")==market
+            and int(outcome_status.get("formal_evidence_count") or 0)>=1
+            and int(outcome_status.get("evaluated_count") or 0)>=0
+            and int(outcome_status.get("waiting_count") or 0)>=0,
+            outcome_status,
+        )
+        latest_outcome=payloads.get(f"/api/experiments/outcomes/{market}/latest") or {}
+        if latest_outcome.get("state")=="EVALUATED":
+            check(
+                f"{market}_t0_t1_latest_evaluated_contract",
+                bool(latest_outcome.get("evidence_id"))
+                and len(str(latest_outcome.get("outcome_hash_sha256") or ""))==64
+                and latest_outcome.get("triaid_excess_vs_baseline") is not None
+                and latest_outcome.get("method") in {
+                    "SYMMETRIC_THEORETICAL_HOLDINGS_COMPARISON",
+                    "GENERIC_EVALUATION_MODULE",
+                },
+                latest_outcome,
+            )
+        else:
+            check(
+                f"{market}_t0_t1_latest_waiting_is_explicit",
+                latest_outcome.get("state")=="WAITING"
+                and bool(latest_outcome.get("reason")),
+                latest_outcome,
+            )
 
     registered_markets=[str(x).upper() for x in (status.get("markets") or [])]
     base_markets={"US","CN","HK"}
