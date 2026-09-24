@@ -255,41 +255,48 @@ class MarketDataHub:
                 (x["version"] for x in chain if x["configured"]),
                 None,
             )
-        routing["CN:PREOPEN_AUCTION"]=self.tushare_auction.version if self.tushare_auction.configured else None
-        routing.setdefault("CN:QUOTE_L1",None)
-        routing.setdefault("HK:QUOTE_L1",None)
+        market_routes={
+            market:{
+                mode:routing.get(f"{market}:{mode}")
+                for mode in ("DAILY","INTRADAY","PREOPEN","REALTIME","QUOTE_L1")
+            }
+            for market in market_ids()
+        }
+        fallback_routes={
+            market:{
+                mode:[
+                    row["version"]
+                    for row in chains.get(f"{market}:{mode}",[])[1:]
+                    if row.get("configured")
+                ]
+                for mode in ("DAILY","INTRADAY","PREOPEN","REALTIME","QUOTE_L1")
+            }
+            for market in market_ids()
+        }
+        compatibility_primary={
+            "US_REGULAR":routing.get("US:DAILY"),
+            "US_PREOPEN_REALTIME":routing.get("US:PREOPEN"),
+            "CN":routing.get("CN:DAILY"),
+            "HK":routing.get("HK:DAILY"),
+        }
         return {
             "registry":registry,
             "registered_markets":list(market_ids()),
             "bar_provider":{
-                "provider":"market_specific",
+                "provider":"market_interface_registry",
                 "configured":True,
-                "role":"US regular=Sina; CN/HK=Tencent; US preopen/realtime=Yahoo",
+                "role":"Market/mode provider chains are resolved from MarketInterfaceProfile.",
             },
-            "primary_bar_providers":{
-                "US_REGULAR":self.sina_us.version,
-                "US_PREOPEN_REALTIME":self.provider.version,
-                "CN":self.tencent_cn.version,
-                "HK":self.tencent_cn.version,
-            },
-            "backup_bar_providers":{
-                "US":{
-                    "provider":self.provider.version,
-                    "configured":True,
-                    "role":"Yahoo fallback for US daily/intraday",
-                },
-                "CN_HK":{
-                    "provider":self.provider.version,
-                    "configured":True,
-                    "role":"Yahoo last-resort fallback after Tencent",
-                },
-                "experimental":{
+            "primary_bar_providers":compatibility_primary,
+            "market_routes":market_routes,
+            "backup_bar_providers":fallback_routes,
+            "experimental_providers":{
+                "eastmoney_experimental":{
                     "provider":self.eastmoney.version,
-                    "configured":True,
-                    "role":"not routed automatically after Railway connectivity smoke failure",
-                },
+                    "configured":bool(getattr(self.eastmoney,"configured",True)),
+                    "role":"registered but not routed automatically",
+                }
             },
-            "us_l1_quote_provider":self.alpaca.configuration_status(),
             "routing":routing,
             "chains":chains,
             "recent_failovers":list(self._failovers[-50:]),
@@ -299,109 +306,33 @@ class MarketDataHub:
         markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         out={}
         for market in markets:
-            if market=="US":
-                out[market]={
-                    "BAR_DAILY":{"available":True,"provider":self.provider.version,"grade":"research"},
-                    "BAR_INTRADAY":{"available":True,"provider":self.provider.version,"grade":"research"},
-                    "QUOTE_L1":{
-                        "available":self.alpaca.configured,
-                        "provider":self.alpaca.version if self.alpaca.configured else None,
-                        "grade":"provider_entitlement_dependent",
-                        "note":"Best bid/ask requires Alpaca credentials. No production trading decision is enabled by this capability alone.",
-                    },
-                    "ORDERBOOK_L2":{
-                        "available":False,"provider":None,"grade":"unavailable",
-                        "note":"No L2 order-book provider connected.",
-                    },
-                    "PREOPEN_EXTENDED":{
-                        "available":True,"provider":self.provider.version,"grade":"indicative",
-                    },
-                    "PREOPEN_AUCTION":{
-                        "available":False,"provider":None,"grade":"not_applicable",
-                    },
-                    "SECTOR_BARS":{
-                        "available":False,"provider":None,"grade":"interface_reserved",
-                        "note":"Sector/industry universe provider not connected yet.",
-                    },
-                    "STOCK_BARS":{
-                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"US regular-session research bars use Sina first with Yahoo fallback; not execution-grade.",
-                    },
-                    "DERIVATIVES_CHAIN":{
-                        "available":False,"provider":None,"grade":"interface_reserved",
-                        "note":"Options/futures chain provider not connected yet.",
-                    },
-                    "BROKER_FILLS":{
-                        "available":False,"provider":None,"grade":"unavailable",
-                        "note":"No broker execution/fill connector is attached.",
-                    },
+            profile=market_interface(market)
+            products={}
+            for product,spec in profile.product_capabilities.items():
+                providers=[]
+                if spec.provider_name:
+                    provider=self.registry.provider(spec.provider_name)
+                    providers=[provider] if provider is not None else []
+                elif spec.route_mode:
+                    providers=self.registry.providers_for(f"{market}:{spec.route_mode}")
+                selected=next(
+                    (
+                        provider for provider in providers
+                        if provider is not None
+                        and bool(getattr(provider,"configured",True))
+                    ),
+                    None,
+                )
+                available=bool(spec.applicable and selected is not None)
+                row={
+                    "available":available,
+                    "provider":getattr(selected,"version",None) if selected else None,
+                    "grade":spec.grade if available else spec.unavailable_grade,
                 }
-            elif market=="CN":
-                out[market]={
-                    "BAR_DAILY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
-                    "BAR_INTRADAY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
-                    "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
-                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
-                    "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_applicable"},
-                    "PREOPEN_AUCTION":{
-                        "available":self.tushare_auction.configured,
-                        "provider":self.tushare_auction.version if self.tushare_auction.configured else None,
-                        "grade":"research_auction_final" if self.tushare_auction.configured else "credentials_required",
-                        "note":"Tushare etf_auction final opening-auction snapshot after 09:25; requires TUSHARE_TOKEN and etf_auction entitlement.",
-                    },
-                    "SECTOR_BARS":{
-                        "available":False,"provider":None,"grade":"interface_reserved",
-                        "note":"A-share sector/industry provider not connected yet.",
-                    },
-                    "STOCK_BARS":{
-                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"A-share research bars use Tencent first with Yahoo fallback; not execution-grade.",
-                    },
-                    "DERIVATIVES_CHAIN":{
-                        "available":False,"provider":None,"grade":"interface_reserved",
-                        "note":"China futures/options chain provider not connected yet.",
-                    },
-                    "BROKER_FILLS":{
-                        "available":False,"provider":None,"grade":"unavailable",
-                    },
-                }
-            elif market=="HK":
-                out[market]={
-                    "BAR_DAILY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
-                    "BAR_INTRADAY":{"available":True,"provider":self.tencent_cn.version,"grade":"research"},
-                    "QUOTE_L1":{"available":False,"provider":None,"grade":"unavailable"},
-                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"unavailable"},
-                    "PREOPEN_EXTENDED":{"available":False,"provider":None,"grade":"not_connected"},
-                    "PREOPEN_AUCTION":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "SECTOR_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "STOCK_BARS":{
-                        "available":True,"provider":self.provider.version,"grade":"research_on_demand",
-                        "note":"Hong Kong research bars use Tencent first with Yahoo fallback; not execution-grade.",
-                    },
-                    "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
-                }
-            if market not in out:
-                def _route_product(mode:str)->dict:
-                    providers=self.registry.providers_for(f"{market}:{mode}")
-                    provider=providers[0] if providers else None
-                    return {
-                        "available":bool(provider and getattr(provider,"configured",True)),
-                        "provider":getattr(provider,"version",None) if provider else None,
-                        "grade":"research" if provider else "not_connected",
-                    }
-                out[market]={
-                    "BAR_DAILY":_route_product("DAILY"),
-                    "BAR_INTRADAY":_route_product("INTRADAY"),
-                    "QUOTE_L1":_route_product("QUOTE_L1"),
-                    "ORDERBOOK_L2":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "PREOPEN_EXTENDED":_route_product("PREOPEN"),
-                    "PREOPEN_AUCTION":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "SECTOR_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "STOCK_BARS":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "DERIVATIVES_CHAIN":{"available":False,"provider":None,"grade":"interface_reserved"},
-                    "BROKER_FILLS":{"available":False,"provider":None,"grade":"unavailable"},
-                }
+                if spec.note:
+                    row["note"]=spec.note
+                products[product]=row
+            out[market]=products
         return out
 
     def auction_shadow_probe(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
@@ -442,29 +373,28 @@ class MarketDataHub:
 
     def latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
         market=normalize_market_id(market_id)
-        if market!="US":
+        providers=self.registry.providers_for(f"{market}:QUOTE_L1")
+        provider=next(
+            (
+                row for row in providers
+                if bool(getattr(row,"configured",True))
+                and hasattr(row,"latest_quotes")
+            ),
+            None,
+        )
+        if provider is None:
             return {
                 "available":False,
                 "market_id":market,
                 "product":"QUOTE_L1",
                 "provider":None,
                 "symbols":{},
-                "reason":"NO_AUTHORIZED_L1_PROVIDER",
-            }
-        provider=self.registry.provider_for("US:QUOTE_L1")
-        if provider is None or not bool(getattr(provider,"configured",False)):
-            return {
-                "available":False,
-                "market_id":"US",
-                "product":"QUOTE_L1",
-                "provider":None,
-                "symbols":{},
-                "reason":"ALPACA_CREDENTIALS_NOT_CONFIGURED",
+                "reason":"NO_CONFIGURED_QUOTE_L1_PROVIDER",
             }
         result=provider.latest_quotes(symbols)
         return {
             "available":True,
-            "market_id":"US",
+            "market_id":market,
             "product":"QUOTE_L1",
             **result,
         }
@@ -478,8 +408,6 @@ class MarketDataHub:
         if mode not in MODE_CONFIGS:
             raise MarketDataError(f"unsupported_mode:{mode}")
         cfg=MODE_CONFIGS[mode]
-        if market=="CN" and mode=="PREOPEN" and not self.tushare_auction.configured:
-            raise MarketDataError("unsupported_market_mode:CN:PREOPEN:Tushare ETF auction credentials/entitlement not configured")
         providers=self.registry.providers_for(f"{market}:{mode}")
         if not providers:
             raise MarketDataError(f"provider_route_missing:{market}:{mode}")
@@ -636,33 +564,36 @@ class MarketDataHub:
         markets=[normalize_market_id(market_id)] if market_id else list(market_ids())
         result={}
         for market in markets:
+            profile=market_interface(market)
             modes={}
+            preopen_specs=[
+                spec for spec in profile.product_capabilities.values()
+                if spec.route_mode=="PREOPEN"
+            ]
+            preopen_spec=preopen_specs[0] if preopen_specs else None
             for name,cfg in MODE_CONFIGS.items():
                 providers=self.registry.providers_for(f"{market}:{name}")
-                supported=bool(
-                    providers
-                    and any(bool(getattr(provider,"configured",True)) for provider in providers)
+                selected=next(
+                    (
+                        provider for provider in providers
+                        if bool(getattr(provider,"configured",True))
+                    ),
+                    None,
                 )
+                supported=selected is not None
                 note="" if supported else "No configured provider route is registered for this market/mode."
                 quality=cfg.quality if supported else "not_connected"
-                if market=="HK" and name=="PREOPEN":
-                    supported=False
-                    quality="not_connected"
-                    note="HKEX pre-opening auction is modeled in the official session calendar, but a dedicated auction data feed is not connected."
-                elif market=="CN" and name=="PREOPEN":
-                    supported=self.tushare_auction.configured
-                    quality="research_auction_final" if supported else "auction_credentials_required"
-                    note=(
-                        "Tushare etf_auction supplies the official opening-auction final snapshot after 09:25. "
-                        "Dynamic 09:15-09:25 auction path remains shadow-only/not connected."
-                        if supported else
-                        "Tushare ETF auction provider is wired but TUSHARE_TOKEN/etf_auction entitlement is not configured."
-                    )
+                if name=="PREOPEN" and preopen_spec is not None:
+                    quality=preopen_spec.grade if supported else preopen_spec.unavailable_grade
+                    if preopen_spec.note:
+                        note=preopen_spec.note
                 if name=="REALTIME":
                     note=(note+" " if note else "")+"Indicative chart data only; no bid/ask, order book, exchange entitlement or broker execution guarantee."
                 modes[name]={
                     **asdict(cfg),
+                    "quality":quality,
                     "supported":supported,
+                    "provider":getattr(selected,"version",None) if selected else None,
                     "note":note,
                 }
             result[market]=modes
