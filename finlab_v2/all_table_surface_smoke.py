@@ -13,12 +13,13 @@ expected_tbodies={
     "hkStrategyRows","hkAssetRows","hkCapitalRows","hkRealizedRows","hkDailyRows",
     "riskThreeMarketRows","riskDynamicsRows","riskMacroRows","riskTermRows",
     "riskCurveContractRows","riskHistoryRows","riskControlRows",
+    "deiCapitalRows","deiCrossMarketRows",
 }
 actual_tbodies=set(re.findall(r'<tbody[^>]*id="([^"]+)"',html))
 tables=re.findall(r'<table(?:\s[^>]*)?>([\s\S]*?)</table>',html)
 
 checks={
-    "table_count_is_expected":len(tables)==25,
+    "table_count_is_expected":len(tables)==27,
     "tbody_contract_exact":actual_tbodies==expected_tbodies,
     "dynamic_cn_daily_header_present":'id="prospectiveDailyHead"' in html,
     "all_static_tables_have_headers":all(
