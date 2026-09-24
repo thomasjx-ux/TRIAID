@@ -112,6 +112,11 @@ assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
 assert report["report_contract"]["technical_runtime_report_default"] is False
 assert report["report_contract"]["amount_percent_and_difference_required"] is True
 assert report["report_contract"]["capital_sleeves_required"] is True
+assert report["report_contract"]["experiment_evolution_review_required"] is True
+assert report["report_contract"]["goal_gap_required"] is True
+assert report["report_contract"]["transition_evidence_required"] is True
+assert report["report_contract"]["cross_market_learning_required"] is True
+assert report["report_contract"]["body_priority"][0]=="experiment_evolution_review"
 strategy_report=report["investment_strategy_reports"]["US"]
 assert strategy_report["report_type"]=="INVESTMENT_STRATEGY_DAILY"
 assert strategy_report["strategy_thesis"]["objective"].startswith("Maximize realizable net return")
