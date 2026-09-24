@@ -16,6 +16,9 @@ projection_source=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf
 observation_source=(ROOT/"triaid_fin"/"observation.py").read_text(encoding="utf-8")
 app_source=(ROOT/"app.py").read_text(encoding="utf-8")
 risk_projection_source=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encoding="utf-8")
+runtime_ports_source=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
+ui_ports_source=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
+projection_repository_source=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
 
 markets=market_ids()
 profiles=MARKET_INTERFACE_REGISTRY.ids()
@@ -65,9 +68,14 @@ checks={
     "runtime_uses_stable_services_port":"self.services." in runtime_source and "self.engine." not in runtime_source,
     "scheduler_uses_stable_services_port":"self.services." in scheduler_source and "self.engine." not in scheduler_source,
     "scheduler_storage_is_journal_port":"self.store=self.services.journal" in scheduler_source,
-    "market_projection_uses_ui_read_port":"self.services." in projection_source and "self.engine." not in projection_source,
-    "risk_projection_uses_ui_read_port":"self.services." in risk_projection_source and "self.engine." not in risk_projection_source,
+    "market_projection_uses_ui_read_port":"MarketPageReadPort" in projection_source and "self.engine." not in projection_source,
+    "risk_projection_uses_ui_read_port":"RiskReadPort" in risk_projection_source and "self.engine." not in risk_projection_source,
     "runtime_frequency_policy_uses_journal_port":"FrequencyPolicy(self.services.journal)" in runtime_source,
+    "runtime_capability_ports_present":all(token in runtime_ports_source for token in ("class MarketDataRuntimePort","class DecisionRuntimePort","class ResearchRuntimePort")),
+    "runtime_uses_capability_ports":"self.services.market_data." in runtime_source and "self.services.decision." not in runtime_source,
+    "scheduler_uses_capability_ports":"self.services.decision." in scheduler_source and "self.services.market_data." in scheduler_source,
+    "ui_capability_ports_present":"class MarketPageReadPort" in ui_ports_source and "class RiskReadPort" in ui_ports_source,
+    "formal_projection_evidence_repository_present":"class VerifiedProjectionRepository" in projection_repository_source and "future_information_excluded" in projection_repository_source,
     "instrument_labels_live_in_market_profiles":"market_interface(market_id).instrument_labels" in runtime_source,
     "ui_route_projection_is_profile_driven":"route_spec=market_interface(market).route" in projection_source,
     "ui_projection_has_no_market_route_literal_branch":all(
@@ -82,7 +90,7 @@ checks={
     "observation_timezone_uses_market_registry":"MARKET_REGISTRY.get(key).timezone" in observation_source,
     "observation_has_no_market_timezone_ternary":"America/New_York" not in observation_source and "Asia/Hong_Kong" not in observation_source and "Asia/Shanghai" not in observation_source,
     "app_composes_one_shared_runtime_services":"runtime_services=RuntimeServices(engine)" in app_source and "DecisionScheduler(runtime_services)" in app_source and "MarketDataAutomation(runtime_services,decision_scheduler)" in app_source,
-    "app_composes_one_shared_ui_read_services":"ui_read_services=UiReadServices(engine)" in app_source and "MarketPageProjection(ui_read_services,market_automation,decision_scheduler)" in app_source and "RiskCenterProjection(ui_read_services)" in app_source,
+    "app_composes_narrow_ui_ports":"ui_read_services=UiReadServices(engine)" in app_source and "ui_read_services.market_page" in app_source and "ui_read_services.risk" in app_source,
     "risk_center_has_one_ui_projection_endpoint":'@app.get("/api/ui/risk-center")' in app_source,
     "system_interface_status_endpoint":'@app.get("/api/system/interfaces")' in app_source,
     "risk_center_frontend_uses_projection":"jsonCachedStale('/api/ui/risk-center',10000)" in app_source,
