@@ -74,7 +74,7 @@ assert 'id="risk20"' in html and 'id="risk60"' in html and 'id="risk120"' in htm
 assert 'id="riskDrivers"' in html
 assert 'id="riskBlockers"' in html
 assert "renderRiskWarning" in html
-assert "/api/risk-warning/latest" in html
+assert "/api/ui/risk-center" in html
 assert "先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日" in html
 assert "TRIAID 三市场联动风险中心" in html
 assert "它不是第四个市场" in html
@@ -89,7 +89,7 @@ assert 'id="riskDataQuality"' in html
 assert 'id="riskDataGaps"' in html
 assert "数据完整性与降级状态" in html
 assert "renderRiskControl" in html
-assert "/api/risk-control/latest" in html
+assert "/api/risk-warning/latest" not in html\nassert "/api/risk-control/latest" not in html
 assert "三市场风控 Shadow 实验" in html
 assert "港股独立路线" in html
 assert "不能借用美股/A股权重、容量或结果补齐港股结论" in html
