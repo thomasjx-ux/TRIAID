@@ -30,11 +30,17 @@ from triaid_fin.ui_ports import UiReadServices
 from triaid_fin.market_interfaces import MARKET_INTERFACE_REGISTRY
 from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 from triaid_fin.projection_repository import VerifiedProjectionRepository
+from triaid_fin.outcome_resolver import OutcomeResolver
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
 ui_read_services=UiReadServices(engine)
 verified_projection_repository=VerifiedProjectionRepository(runtime_services.journal)
+outcome_resolver=OutcomeResolver(
+    verified_projection_repository,
+    ui_read_services.outcome,
+    runtime_services.journal,
+)
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
@@ -524,6 +530,10 @@ def system_interfaces()->dict:
             "version":verified_projection_repository.version,
             "rule":"PROSPECTIVE_FORMAL_EVIDENCE_EXCLUDES_POSTERIOR_AND_INTRADAY_FUTURE_INFORMATION",
         },
+        "outcome_resolver":{
+            "version":outcome_resolver.version,
+            "rule":"PAIR_FROZEN_T0_EVIDENCE_WITH_EXISTING_AUDITED_T1_RESULTS_WITHOUT_RECOMPUTING_RETURNS",
+        },
         "runtime_jobs":{
             "version":RUNTIME_JOB_REGISTRY.version,
             "registered":list(RUNTIME_JOB_REGISTRY.names()),
@@ -548,6 +558,29 @@ def experiment_evidence_latest(market_id:str)->dict:
     return payload
 
 
+@app.get("/api/experiments/outcomes/{market_id}/status")
+def experiment_outcome_status(market_id:str)->dict:
+    market=normalize_market_id(market_id)
+    return outcome_resolver.resolve_market(market)
+
+
+@app.get("/api/experiments/outcomes/{market_id}/latest")
+def experiment_outcome_latest(market_id:str)->dict:
+    market=normalize_market_id(market_id)
+    status=outcome_resolver.resolve_market(market)
+    latest=status.get("latest_evaluated")
+    if latest:
+        return latest
+    return {
+        "state":"WAITING",
+        "market_id":market,
+        "resolver_version":outcome_resolver.version,
+        "reason":"NO_EVALUATED_T1_OUTCOME_YET",
+        "formal_evidence_count":status.get("formal_evidence_count",0),
+        "waiting_count":status.get("waiting_count",0),
+    }
+
+
 @app.get("/api/ui/core")
 def ui_core_status()->dict:
     return {
@@ -566,6 +599,10 @@ def ui_market_page(
         payload=market_page_projection.full(market_id,lang,run_id)
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
+        try:
+            outcome_resolver.resolve_market(payload.get("market_id") or market_id)
+        except Exception:
+            pass
         return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
