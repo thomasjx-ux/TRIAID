@@ -1003,6 +1003,13 @@ tbody tr:hover td{background:#f8fbff}
 .home-volatility-range{font-size:11px;color:#5f6b7a;margin-top:3px;line-height:1.4}
 .home-volatility-accuracy{font-size:11px;color:#43546a;margin-top:6px;line-height:1.45}
 .home-volatility-note{font-size:10.5px;color:#87909d;margin-top:7px;line-height:1.45}
+.home-volatility-explain{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0 10px}
+.home-volatility-explain-item{border:1px solid #e9edf3;border-radius:9px;background:#fbfcfe;padding:8px 9px;font-size:10.5px;line-height:1.45;color:#5f6b7a}
+.home-volatility-explain-item b{display:block;color:#35465d;margin-bottom:2px;font-size:11px}
+.home-volatility-metric-label{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:10.5px;color:#748091;font-weight:700}
+.home-volatility-reading{margin-top:7px;padding-top:7px;border-top:1px solid #edf0f3;font-size:10.5px;line-height:1.5;color:#43546a}
+.home-volatility-card .market-tip-icon{margin-left:2px;width:14px;height:14px;font-size:9px}
+@media(max-width:1000px){.home-volatility-explain{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:850px){.home-volatility-grid{grid-template-columns:1fr}}
 @media(max-width:950px){.home-summary-grid{grid-template-columns:repeat(2,1fr)}.home-summary-head{display:block}.home-summary-mode{display:inline-block;margin-top:8px}}
 @media(max-width:600px){.home-summary-grid{grid-template-columns:1fr}}
@@ -1126,29 +1133,47 @@ tbody tr:hover td{background:#f8fbff}
     <div class="home-volatility" id="homeVolatility">
       <div class="home-volatility-head">
         <div>
-          <div class="home-volatility-title" id="homeVolatilityTitle">下一交易日波动预测</div>
-          <div class="home-volatility-sub" id="homeVolatilitySub">预测的是收盘到收盘的波动幅度，不预测涨跌方向。</div>
+          <div class="home-volatility-title" id="homeVolatilityTitle">下一交易日波动预测 <span class="market-tip-icon has-tip" id="volatilityTitleTip">i</span></div>
+          <div class="home-volatility-sub" id="homeVolatilitySub">预测的是收盘到收盘的波动幅度，不预测涨跌方向。用途是判断明天“可能动多大”，从而决定监控频率、风险阈值和是否需要提高异常波动警戒。</div>
         </div>
         <div class="home-volatility-sub" id="homeVolatilityModel">读取模型与校准状态</div>
       </div>
+      <div class="home-volatility-explain" id="homeVolatilityExplain">
+        <div class="home-volatility-explain-item"><b id="volExplainMoveTitle">预计 ±X%</b><span id="volExplainMoveText">下一交易日1σ波动幅度。不是“涨X%或跌X%”的方向预测。</span> <span class="market-tip-icon has-tip" id="volExplainMoveTip">i</span></div>
+        <div class="home-volatility-explain-item"><b id="volExplainRangeTitle">68%预测区间</b><span id="volExplainRangeText">若模型校准正常，长期约68%的实际收盘应落在这个区间内；越界代表异常波动。</span> <span class="market-tip-icon has-tip" id="volExplainRangeTip">i</span></div>
+        <div class="home-volatility-explain-item"><b id="volExplainCoverageTitle">历史1σ命中率</b><span id="volExplainCoverageText">参考目标约68%。明显高于68%常表示区间偏宽，明显低于68%表示模型低估波动。</span> <span class="market-tip-icon has-tip" id="volExplainCoverageTip">i</span></div>
+        <div class="home-volatility-explain-item"><b id="volExplainRatioTitle">校准比</b><span id="volExplainRatioText">真实RMS波动 ÷ 预测RMS波动。接近1最好；大于1表示低估波动，小于1表示预测偏保守。</span> <span class="market-tip-icon has-tip" id="volExplainRatioTip">i</span></div>
+      </div>
       <div class="home-volatility-grid">
         <div class="home-volatility-card" id="volCardUS">
-          <div class="vh"><span class="home-volatility-market" id="volMarketUS">美股 / US</span><span class="home-volatility-band normal" id="volBandUS">-</span></div>
+          <div class="vh"><span class="home-volatility-market" id="volMarketUS">美股 / US</span><span><span class="home-volatility-band normal" id="volBandUS">-</span> <span class="market-tip-icon has-tip" id="volBandTipUS">i</span></span></div>
+          <div class="home-volatility-metric-label"><span id="volMoveLabelUS">预计波动</span><span class="market-tip-icon has-tip" id="volMoveTipUS">i</span></div>
           <div class="home-volatility-move" id="volMoveUS">读取中</div>
+          <div class="home-volatility-metric-label"><span id="volRangeLabelUS">68%区间 / 典型绝对波动</span><span class="market-tip-icon has-tip" id="volRangeTipUS">i</span></div>
           <div class="home-volatility-range" id="volRangeUS">等待预测区间</div>
+          <div class="home-volatility-metric-label"><span id="volAccuracyLabelUS">历史校准</span><span class="market-tip-icon has-tip" id="volAccuracyTipUS">i</span></div>
           <div class="home-volatility-accuracy" id="volAccuracyUS">等待历史校准</div>
+          <div class="home-volatility-reading" id="volMeaningUS">等待解释</div>
         </div>
         <div class="home-volatility-card" id="volCardCN">
-          <div class="vh"><span class="home-volatility-market" id="volMarketCN">A股 / CN</span><span class="home-volatility-band normal" id="volBandCN">-</span></div>
+          <div class="vh"><span class="home-volatility-market" id="volMarketCN">A股 / CN</span><span><span class="home-volatility-band normal" id="volBandCN">-</span> <span class="market-tip-icon has-tip" id="volBandTipCN">i</span></span></div>
+          <div class="home-volatility-metric-label"><span id="volMoveLabelCN">预计波动</span><span class="market-tip-icon has-tip" id="volMoveTipCN">i</span></div>
           <div class="home-volatility-move" id="volMoveCN">读取中</div>
+          <div class="home-volatility-metric-label"><span id="volRangeLabelCN">68%区间 / 典型绝对波动</span><span class="market-tip-icon has-tip" id="volRangeTipCN">i</span></div>
           <div class="home-volatility-range" id="volRangeCN">等待预测区间</div>
+          <div class="home-volatility-metric-label"><span id="volAccuracyLabelCN">历史校准</span><span class="market-tip-icon has-tip" id="volAccuracyTipCN">i</span></div>
           <div class="home-volatility-accuracy" id="volAccuracyCN">等待历史校准</div>
+          <div class="home-volatility-reading" id="volMeaningCN">等待解释</div>
         </div>
         <div class="home-volatility-card" id="volCardHK">
-          <div class="vh"><span class="home-volatility-market" id="volMarketHK">港股 / HK</span><span class="home-volatility-band normal" id="volBandHK">-</span></div>
+          <div class="vh"><span class="home-volatility-market" id="volMarketHK">港股 / HK</span><span><span class="home-volatility-band normal" id="volBandHK">-</span> <span class="market-tip-icon has-tip" id="volBandTipHK">i</span></span></div>
+          <div class="home-volatility-metric-label"><span id="volMoveLabelHK">预计波动</span><span class="market-tip-icon has-tip" id="volMoveTipHK">i</span></div>
           <div class="home-volatility-move" id="volMoveHK">读取中</div>
+          <div class="home-volatility-metric-label"><span id="volRangeLabelHK">68%区间 / 典型绝对波动</span><span class="market-tip-icon has-tip" id="volRangeTipHK">i</span></div>
           <div class="home-volatility-range" id="volRangeHK">等待预测区间</div>
+          <div class="home-volatility-metric-label"><span id="volAccuracyLabelHK">历史校准</span><span class="market-tip-icon has-tip" id="volAccuracyTipHK">i</span></div>
           <div class="home-volatility-accuracy" id="volAccuracyHK">等待历史校准</div>
+          <div class="home-volatility-reading" id="volMeaningHK">等待解释</div>
         </div>
       </div>
       <div class="home-volatility-note" id="homeVolatilityNote">68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用当时可见数据。</div>
