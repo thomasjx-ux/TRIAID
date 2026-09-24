@@ -1386,6 +1386,10 @@ tbody tr:hover td{background:#f8fbff}
         <ul id="deiTransitionRows"><li>等待盘中状态记录</li></ul>
       </div>
       <div class="daily-intelligence-box">
+        <h4 id="deiTriageTitle">政策网络 Triage</h4>
+        <ul id="deiTriageRows"><li>等待新的前瞻 triage 快照</li></ul>
+      </div>
+      <div class="daily-intelligence-box">
         <h4 id="deiCounterfactualTitle">反事实重放</h4>
         <ul id="deiCounterfactualRows"><li>等待可重放冻结决策</li></ul>
       </div>
@@ -3804,6 +3808,31 @@ function renderDailyExperimentIntelligence(intel,cross,investmentReport){
   (zh?'Urgent 事件 ':'Urgent events ')+(trans.urgent_event_count??0)+(zh?'；建议配置变化 ':'; allocation changes recommended ')+(trans.allocation_change_recommended_count??0)
  ];
  el('deiTransitionRows').innerHTML=transRows.map(x=>'<li>'+esc(x)+'</li>').join('');
+
+ el('deiTriageTitle').textContent=zh?'政策网络 Triage':'Policy-network triage';
+ const triage=intel.policy_triage||{};
+ const triageNet=triage.policy_network||{};
+ const triageOut=intel.policy_triage_outcome||{};
+ const triageRows=[];
+ if(triage.version){
+  triageRows.push((zh?'可准入政策 ':'Admissible policies ')+(triageNet.admissible_count??0)+
+    (zh?' · 已选 ':' · selected ')+(triageNet.selected_count??0)+
+    (zh?' · 政策家族 ':' · families ')+(triageNet.selected_family_count??0)+'/'+(triageNet.family_count??0));
+  triageRows.push((zh?'Shadow challenger ':'Shadow challengers ')+(triageNet.challenger_count??0)+
+    (zh?' · 高相关冗余对 ':' · high-correlation pairs ')+(triageNet.high_correlation_pair_count??0));
+  if(triageOut.challengers_evaluated!=null){
+   triageRows.push((zh?'后验已检验 challenger ':'Challengers evaluated ')+triageOut.challengers_evaluated+
+     (zh?' · 跑赢冻结基线 ':' · beat frozen baseline ')+(triageOut.challengers_beating_baseline??0)+
+     (zh?' · 跑赢已选策略均值 ':' · beat selected mean ')+(triageOut.challengers_beating_selected_mean??0));
+  }
+  (triageOut.top_realized_challengers||[]).slice(0,2).forEach(x=>{
+   triageRows.push((zh?'漏选候选 ':'Miss candidate ')+strategyName(x.strategy_id)+' '+signedPct(x.realized_gap_vs_baseline||0)+
+     (zh?' vs 基线；仅作下一轮假设，不允许事后晋升。':' vs baseline; hypothesis only, no hindsight promotion.'));
+  });
+ }else{
+  triageRows.push(zh?'旧冻结决策没有 triage 快照；不做事后补写。从下一次新冻结决策开始形成前瞻证据。':'Legacy frozen decision has no triage snapshot; it will not be backfilled. Prospective evidence starts with the next new freeze.');
+ }
+ el('deiTriageRows').innerHTML=triageRows.map(x=>'<li>'+esc(x)+'</li>').join('');
 
  el('deiCounterfactualTitle').textContent=zh?'反事实重放':'Counterfactual replay';
  const cfRows=[];
