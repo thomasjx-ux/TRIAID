@@ -362,6 +362,7 @@ class MarketDataAutomation:
 
     def live_indicators(self,market_id:str)->dict:
         market=market_id.upper()
+        current_phase=session_phase(market)
         rows=self.engine.market_observations(market,"REALTIME",120)
         valid=[]
         for row in rows:
@@ -373,7 +374,8 @@ class MarketDataAutomation:
         if not valid:
             return {
                 "market_id":market,
-                "session_phase":session_phase(market),
+                "session_phase":current_phase,
+                "observation_session_phase":None,
                 "available":False,
                 "instruments":[],
             }
@@ -413,7 +415,8 @@ class MarketDataAutomation:
             })
         return {
             "market_id":market,
-            "session_phase":latest.get("session_phase") or session_phase(market),
+            "session_phase":current_phase,
+            "observation_session_phase":latest.get("session_phase"),
             "available":True,
             "provider":provider,
             "quality":latest.get("quality"),
