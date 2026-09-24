@@ -77,6 +77,16 @@ class FakeEngine:
     def curves(self,market):
         return []
 
+    def evolution_status(self):
+        return {
+            "history":[],
+            "diagnosis":{
+                "evaluated_runs":0,
+                "mean_excess_return":None,
+                "negative_rate":None,
+            },
+        }
+
     def daily_summary(self,market,compact=False):
         return {
             "date":"2026-09-23",
@@ -170,13 +180,17 @@ page=projection.full("US","zh")
 sections=page["sections"]
 
 checks={
-    "contract_version":page["contract_version"]=="market-page-projection@1.0.0",
+    "contract_version":page["contract_version"]=="market-page-projection@1.1.0",
     "full_scope":page["projection_scope"]=="FULL",
     "daily_ready":sections["daily"]["state"]==READY,
     "strategies_ready":sections["strategies"]["state"]==READY,
     "route_ready":sections["route"]["state"]==READY,
     "live_ready":sections["live"]["state"]==READY,
     "scheduler_ready":sections["scheduler"]["state"]==READY,
+    "intraday_ready":sections["intraday"]["state"]==READY,
+    "evolution_ready":sections["evolution"]["state"]==READY,
+    "preview_not_requested_is_explicit":sections["preview"]["state"]=="NOT_APPLICABLE" and bool(sections["preview"]["reason"]),
+    "single_source_contract_declared":page["contract"]["single_market_page_source_of_truth"] is True,
     "posterior_waiting_is_explicit":sections["posterior"]["state"]==WAITING and bool(sections["posterior"]["reason"]),
     "expected_waiting_posterior_does_not_fail_page":page["integrity"]["passed"] is True,
     "waiting_posterior_makes_page_degraded":page["integrity"]["status"]=="DEGRADED",
@@ -191,6 +205,7 @@ checks["numeric_failure_is_named"]=any("NUMERIC_FIELDS_INCOMPLETE" in x for x in
 live=projection.live("US")
 checks["live_projection_uses_same_contract"]=live["contract_version"]==page["contract_version"]
 checks["live_projection_integrity_passes"]=live["integrity"]["passed"] is True
+checks["live_projection_contains_intraday_section"]="intraday" in live["sections"]
 
 failed=[name for name,ok in checks.items() if not ok]
 if failed:
