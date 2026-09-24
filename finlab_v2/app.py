@@ -4278,15 +4278,15 @@ async function refreshAll(preferStale=false){
 }
 async function refreshRiskPanels(){
  try{
-  const projection=await jsonCached('/api/ui/risk-center',10000);
+  const projection=await jsonCachedStale('/api/ui/risk-center',10000);
   const sections=projection.sections||{};
   const warning=sections.warning||{};
   const control=sections.control||{};
-  renderRiskWarning(warning.state==='READY'?(warning.data||null):null);
-  renderRiskControl(control.state==='READY'?(control.data||null):null);
+  if(warning.state==='READY')renderRiskWarning(warning.data||null);
+  if(control.state==='READY')renderRiskControl(control.data||null);
  }catch(e){
-  renderRiskWarning(null);
-  renderRiskControl(null);
+  // Keep the last valid rendered risk projection. A transient refresh failure
+  // must never replace valid evidence with an empty surface.
  }
 }
 async function propose(){
