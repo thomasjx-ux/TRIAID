@@ -1033,6 +1033,20 @@ tbody tr:hover td{background:#f8fbff}
 .market-section-note{font-size:12px;color:#748091;margin:-6px 0 10px}
 @media(max-width:760px){.market-clock-strip{grid-template-columns:1fr}.market-hero{display:block}.market-hero-side{text-align:left;min-width:0;margin-top:10px}}
 #hoverTip{position:fixed;display:none;z-index:9999;max-width:430px;padding:9px 11px;border-radius:8px;background:#172033;color:#fff;font-size:12px;line-height:1.5;white-space:pre-line;box-shadow:0 8px 24px rgba(0,0,0,.18);pointer-events:none}
+.daily-intelligence{margin-top:16px;border:1px solid #d9e3f0;border-radius:14px;background:linear-gradient(180deg,#fff 0%,#f9fbfe 100%);padding:15px}
+.daily-intelligence-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.daily-intelligence-head h3{margin:0;font-size:18px}.daily-intelligence-meta{font-size:11px;color:#748091;margin-top:4px}
+.daily-intelligence-kpis{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:9px;margin-top:12px}
+.daily-intelligence-kpi{border:1px solid #e4eaf1;border-radius:10px;background:#fff;padding:10px 11px}
+.daily-intelligence-kpi span{display:block;font-size:11px;color:#748091;margin-bottom:4px}.daily-intelligence-kpi b{font-size:18px;font-variant-numeric:tabular-nums}
+.daily-intelligence-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.daily-intelligence-box{border:1px solid #e4eaf1;border-radius:10px;background:#fff;padding:11px 12px}
+.daily-intelligence-box h4{margin:0 0 7px;font-size:13px}.daily-intelligence-box ul{margin:0;padding-left:18px;font-size:12px;line-height:1.55}
+.daily-intelligence-lesson{margin-top:10px;border-left:4px solid #1769e0;background:#f3f7fd;border-radius:7px;padding:10px 12px;font-size:12px;line-height:1.6;color:#35465d}
+.daily-intelligence-warning{border-left-color:#b42318;background:#fff6f5}.daily-intelligence-good{border-left-color:#138a4b;background:#f2faf5}
+.daily-intelligence-table{margin-top:10px}.daily-intelligence-table table{min-width:760px}
+@media(max-width:900px){.daily-intelligence-kpis{grid-template-columns:repeat(2,1fr)}.daily-intelligence-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.daily-intelligence-kpis{grid-template-columns:1fr}}
 .riskpanel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin:16px 0}
 .riskhead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
 .riskhead h2{margin:0}.risk-meta{font-size:12px;color:#748091;margin-top:5px}
@@ -1345,6 +1359,55 @@ tbody tr:hover td{background:#f8fbff}
       <span><span class="dot" style="background:#1769e0"></span><span id="legendTriaid">TRIAID</span></span>
     </div>
     <canvas id="curve" width="1220" height="270"></canvas>
+  </div>
+
+  <div class="daily-intelligence" id="dailyExperimentPanel">
+    <div class="daily-intelligence-head">
+      <div>
+        <h3 id="dailyExperimentTitle">每日实验与进化复盘</h3>
+        <div class="daily-intelligence-meta" id="dailyExperimentMeta">把真实收益、干预归因、盘中状态转移与下一轮验证放在同一条证据链里。</div>
+      </div>
+      <span class="tag" id="dailyExperimentGapTag">等待证据</span>
+    </div>
+    <div class="daily-intelligence-kpis">
+      <div class="daily-intelligence-kpi"><span id="deiBaselineLabel">冻结基线后验</span><b id="deiBaseline">-</b></div>
+      <div class="daily-intelligence-kpi"><span id="deiTriaidLabel">TRIAID 后验</span><b id="deiTriaid">-</b></div>
+      <div class="daily-intelligence-kpi"><span id="deiExcessLabel">TRIAID 相对基线</span><b id="deiExcess">-</b></div>
+      <div class="daily-intelligence-kpi"><span id="deiOpportunityLabel">距事后最优策略</span><b id="deiOpportunity">-</b></div>
+    </div>
+    <div class="daily-intelligence-lesson" id="dailyExperimentLesson">等待完成后验与盘中状态证据。</div>
+    <div class="daily-intelligence-grid">
+      <div class="daily-intelligence-box">
+        <h4 id="deiAttributionTitle">TRIAID 今天哪里做对、哪里做错</h4>
+        <ul id="deiAttributionRows"><li>等待干预归因</li></ul>
+      </div>
+      <div class="daily-intelligence-box">
+        <h4 id="deiTransitionTitle">盘中 State → Transition 证据</h4>
+        <ul id="deiTransitionRows"><li>等待盘中状态记录</li></ul>
+      </div>
+      <div class="daily-intelligence-box">
+        <h4 id="deiCounterfactualTitle">反事实重放</h4>
+        <ul id="deiCounterfactualRows"><li>等待可重放冻结决策</li></ul>
+      </div>
+      <div class="daily-intelligence-box">
+        <h4 id="deiNextTitle">下一交易日验证</h4>
+        <ul id="deiNextRows"><li>等待形成验证计划</li></ul>
+      </div>
+    </div>
+    <div class="daily-intelligence-table tablewrap">
+      <table>
+        <thead><tr><th id="deiCapitalLabel">资金量</th><th id="deiBasePnlLabel">基线损益</th><th id="deiTriaidPnlLabel">TRIAID损益</th><th id="deiGapPnlLabel">多赚/少赚</th><th id="deiCostPnlLabel">模型交易成本</th></tr></thead>
+        <tbody id="deiCapitalRows"></tbody>
+      </table>
+    </div>
+    <h4 id="deiCrossMarketTitle" style="margin:14px 0 7px">三市场互相学习</h4>
+    <div class="tablewrap daily-intelligence-table">
+      <table>
+        <thead><tr><th id="deiMarketLabel">市场</th><th id="deiMarketDateLabel">交易日</th><th id="deiMarketGapLabel">Goal Gap 层</th><th id="deiMarketReturnLabel">TRIAID相对收益</th><th id="deiMarketTransitionLabel">Transition</th><th id="deiMarketLessonLabel">可迁移经验</th></tr></thead>
+        <tbody id="deiCrossMarketRows"></tbody>
+      </table>
+    </div>
+    <div class="status-note" id="deiTransferRule">跨市场只共享假设、失败模式和验证设计，不共享权重、结果或阈值作为证据。</div>
   </div>
   </section>
 
@@ -3661,6 +3724,112 @@ function renderRecoveryWave(report){
     '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
  }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
 }
+function renderDailyExperimentIntelligence(intel,cross,investmentReport){
+ const zh=lang==='zh';
+ const panel=el('dailyExperimentPanel');
+ if(!panel)return;
+ intel=intel||{};
+ cross=cross||{};
+ const score=intel.realized_scorecard||{};
+ const attr=intel.intervention_attribution||{};
+ const trans=intel.transition_evidence||{};
+ const gap=intel.goal_gap||{};
+ const cf=intel.counterfactual_replay||{};
+ const next=intel.next_validation_plan||{};
+ const realized=score.status==='EVALUATED';
+ el('dailyExperimentTitle').textContent=zh?'每日实验与进化复盘':'Daily Experiment & Evolution Review';
+ el('dailyExperimentMeta').textContent=zh
+  ? '最高纪律：验证和进化 TRIAID，同时持续缩小它与最大长期可实现收益之间的距离。所有结论只使用冻结后可验证证据。'
+  : 'Highest discipline: validate and evolve TRIAID while continuously narrowing the distance to maximum long-run realizable return. Conclusions use frozen, verifiable evidence only.';
+ const gapLayer=String(gap.primary_gap_layer||'OUTCOME_PENDING');
+ el('dailyExperimentGapTag').textContent=gapLayer.replaceAll('_',' ');
+ el('deiBaselineLabel').textContent=zh?'冻结基线后验':'Frozen baseline posterior';
+ el('deiTriaidLabel').textContent=zh?'TRIAID 后验':'TRIAID posterior';
+ el('deiExcessLabel').textContent=zh?'TRIAID 相对基线':'TRIAID vs baseline';
+ el('deiOpportunityLabel').textContent=zh?'距事后最优策略':'Gap to hindsight best';
+ el('deiBaseline').textContent=realized?fmtPct(score.baseline_realized_return):(zh?'待后验':'Pending');
+ el('deiTriaid').textContent=realized?fmtPct(score.triaid_realized_return):(zh?'待后验':'Pending');
+ el('deiExcess').textContent=realized?signedPct(score.realized_excess_return):(zh?'待后验':'Pending');
+ el('deiExcess').className=realized?cls(Number(score.realized_excess_return||0)):'';
+ el('deiOpportunity').textContent=realized&&score.opportunity_gap_to_hindsight_best!=null
+  ? fmtPct(score.opportunity_gap_to_hindsight_best)
+  : (zh?'待后验':'Pending');
+ const lesson=gap.lesson||(zh?'等待新的可验证证据。':'Awaiting new verifiable evidence.');
+ el('dailyExperimentLesson').textContent=lesson;
+ el('dailyExperimentLesson').className='daily-intelligence-lesson '+(
+  gap.evolution_to_economic_alignment==='NEGATIVE'?'daily-intelligence-warning':
+  gap.evolution_to_economic_alignment==='POSITIVE'?'daily-intelligence-good':''
+ );
+
+ el('deiAttributionTitle').textContent=zh?'TRIAID 今天哪里做对、哪里做错':'What TRIAID got right and wrong';
+ const pos=(attr.positive||[]).slice(0,3),neg=(attr.negative||[]).slice(0,3);
+ const attrRows=[];
+ if(attr.status==='EVALUATED'){
+  attrRows.push((zh?'权重调整毛贡献 ':'Gross allocation effect ')+signedPct(attr.gross_intervention_effect||0)+
+    ' · '+(zh?'交易成本 ':'trading cost ')+fmtPct(attr.trading_cost||0)+
+    ' · '+(zh?'净相对收益 ':'net excess ')+signedPct(attr.net_excess_return||0));
+  pos.forEach(x=>attrRows.push((zh?'做对 ':'Positive ')+strategyName(x.strategy_id)+' '+signedPct(x.delta)));
+  neg.forEach(x=>attrRows.push((zh?'做错 ':'Negative ')+strategyName(x.strategy_id)+' '+signedPct(x.delta)));
+  if(score.hindsight_best_strategy_id)attrRows.push((zh?'事后最优仅作机会成本上限：':'Hindsight best is only an opportunity ceiling: ')+strategyName(score.hindsight_best_strategy_id)+' '+fmtPct(score.hindsight_best_strategy_return));
+ }else attrRows.push(zh?'等待上一轮冻结决策产生完整后验。':'Awaiting a complete posterior for the prior frozen decision.');
+ el('deiAttributionRows').innerHTML=attrRows.map(x=>'<li>'+esc(x)+'</li>').join('');
+
+ el('deiTransitionTitle').textContent=zh?'盘中 State → Transition 证据':'Intraday State → Transition evidence';
+ const transRows=[
+  (zh?'触发重算 ':'Recomputed ')+(trans.recomputed_count??0)+(zh?' 次；过滤 ':' times; skipped ')+(trans.skipped_count??0)+(zh?' 次':' times'),
+  (zh?'Risk-off ':'Risk-off ')+(trans.risk_off_decisions??0)+' · Risk-on '+(trans.risk_on_decisions??0),
+  (zh?'状态方向切换 ':'Regime switches ')+(trans.regime_switch_count??0)+(trans.oscillation_flag?(zh?'，存在时间尺度抖动风险':' with timescale oscillation risk'):''),
+  (zh?'Urgent 事件 ':'Urgent events ')+(trans.urgent_event_count??0)+(zh?'；建议配置变化 ':'; allocation changes recommended ')+(trans.allocation_change_recommended_count??0)
+ ];
+ el('deiTransitionRows').innerHTML=transRows.map(x=>'<li>'+esc(x)+'</li>').join('');
+
+ el('deiCounterfactualTitle').textContent=zh?'反事实重放':'Counterfactual replay';
+ const cfRows=[];
+ cfRows.push((zh?'可重放冻结 Transition 决策 ':'Frozen transition decisions available ')+(cf.frozen_transition_decisions_available??0));
+ (cf.comparisons||[]).slice(0,4).forEach(x=>cfRows.push(x));
+ cfRows.push(zh
+  ? '纪律：必须用各冻结时点之后的时间对齐数据，不能拿全日事后收益替代盘中反事实。'
+  : 'Discipline: use timestamp-aligned data after each freeze; never substitute full-day hindsight returns for intraday counterfactuals.');
+ el('deiCounterfactualRows').innerHTML=cfRows.map(x=>'<li>'+esc(x)+'</li>').join('');
+
+ el('deiNextTitle').textContent=zh?'下一交易日验证':'Next-session validation';
+ const nextRows=[(zh?'优先修复层：':'Primary layer to test: ')+(next.diagnose_first||gapLayer),...(next.tests||[]).slice(0,4)];
+ el('deiNextRows').innerHTML=nextRows.map(x=>'<li>'+esc(x)+'</li>').join('');
+
+ const cap=((investmentReport||{}).performance_review||{}).capitalized||{};
+ const capRows=cap.rows||[];
+ el('deiCapitalLabel').textContent=zh?'资金量':'Capital';
+ el('deiBasePnlLabel').textContent=zh?'基线损益':'Baseline P&L';
+ el('deiTriaidPnlLabel').textContent=zh?'TRIAID损益':'TRIAID P&L';
+ el('deiGapPnlLabel').textContent=zh?'多赚/少赚':'Gain / loss vs baseline';
+ el('deiCostPnlLabel').textContent=zh?'模型交易成本':'Modeled trading cost';
+ el('deiCapitalRows').innerHTML=capRows.map(x=>'<tr>'+
+   '<td class="num">'+esc(cap.currency||'')+' '+fmtMoney(x.starting_capital)+'</td>'+
+   '<td class="num '+cls(Number(x.baseline_realized_pnl||0))+'">'+(x.baseline_realized_pnl==null?'-':fmtMoney(x.baseline_realized_pnl))+'</td>'+
+   '<td class="num '+cls(Number(x.triaid_realized_pnl||0))+'">'+(x.triaid_realized_pnl==null?'-':fmtMoney(x.triaid_realized_pnl))+'</td>'+
+   '<td class="num '+cls(Number(x.realized_excess_pnl||0))+'">'+(x.realized_excess_pnl==null?'-':fmtMoney(x.realized_excess_pnl))+'</td>'+
+   '<td class="num">'+(x.trading_cost_amount==null?'-':fmtMoney(x.trading_cost_amount))+'</td></tr>'
+ ).join('')||'<tr><td colspan="5">'+(zh?'等待可资本化的真实后验':'Awaiting capitalized realized posterior')+'</td></tr>';
+
+ el('deiCrossMarketTitle').textContent=zh?'三市场互相学习':'Cross-market learning';
+ el('deiMarketLabel').textContent=zh?'市场':'Market';
+ el('deiMarketDateLabel').textContent=zh?'交易日':'Session';
+ el('deiMarketGapLabel').textContent='Goal Gap';
+ el('deiMarketReturnLabel').textContent=zh?'TRIAID相对收益':'TRIAID excess';
+ el('deiMarketTransitionLabel').textContent='Transition';
+ el('deiMarketLessonLabel').textContent=zh?'可迁移经验':'Transferable lesson';
+ el('deiCrossMarketRows').innerHTML=(cross.markets||[]).map(x=>'<tr>'+
+   '<td>'+esc(x.market_id||'-')+'</td>'+
+   '<td class="nowrap">'+esc(x.session_date||'-')+'</td>'+
+   '<td>'+esc(String(x.primary_gap_layer||'-').replaceAll('_',' '))+'</td>'+
+   '<td class="num '+cls(Number(x.realized_excess_return||0))+'">'+(x.realized_excess_return==null?'-':signedPct(x.realized_excess_return))+'</td>'+
+   '<td class="num">'+esc((x.risk_off_decisions??0)+' OFF / '+(x.risk_on_decisions??0)+' ON · '+(x.regime_switch_count??0)+' switch')+'</td>'+
+   '<td class="reason">'+esc(x.lesson||'-')+'</td></tr>'
+ ).join('')||'<tr><td colspan="6">'+(zh?'等待三市场实验记录':'Awaiting three-market experiment records')+'</td></tr>';
+ el('deiTransferRule').textContent=zh
+  ? '跨市场只共享假设、失败模式和验证设计，不共享权重、结果或阈值作为证据，避免交叉污染。'
+  : 'Markets share hypotheses, failure modes and validation designs only. Weights, outcomes and thresholds are not borrowed as evidence.';
+}
 function humanRunState(status){
  const s=String(status||'').trim();
  const zh=lang==='zh';
@@ -3752,6 +3921,11 @@ async function refreshAll(preferStale=false){
   renderHomeSummary();
   renderMarketRouteOverview(m,latest,routeEvaluated,selected,d);
   renderComparison(evaluated);
+  renderDailyExperimentIntelligence(
+   d.experiment_intelligence||null,
+   d.cross_market_learning||null,
+   (d.investment_strategy_reports||{})[m]||null
+  );
   const marketDate=(previewRun?.market?.as_of)||d.date||null;
   el('date').textContent=marketDate||(lang==='zh'?'等待数据':'Awaiting data');
   setStatusNote('dateNote',marketDate?'当前市场最近可用交易日':'尚未取得当前市场数据日',marketDate?'Latest available trading day for the selected market':'No market date is available yet');
