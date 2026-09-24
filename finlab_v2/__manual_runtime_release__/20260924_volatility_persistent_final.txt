@@ -1,0 +1,2 @@
+Release final audited volatility forecast stack: explainability + hover indicators + benchmark-only parallel compute + Supabase persistent cache + request-path isolation.
+Feature merge: 92633e7a38663b8b927d434df66a90eeb35295c2
