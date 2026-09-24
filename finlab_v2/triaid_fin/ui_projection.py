@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from .market_data import session_phase
 from .market_registry import MARKET_REGISTRY, normalize_market_id
 from .market_interfaces import market_interface
+from .ui_ports import UiReadServices
 
 
 VERSION="market-page-projection@1.2.0"
@@ -56,8 +57,9 @@ def _finite(value)->bool:
     return isinstance(value,(int,float)) and math.isfinite(float(value))
 
 
-def _run_rows(engine,market_id:str,limit:int=100)->list[dict]:
-    rows=[r for r in engine.all_runs() if r.market.market_id.upper()==market_id]
+def _run_rows(services,market_id:str,limit:int=100)->list[dict]:
+    services=services if isinstance(services,UiReadServices) else UiReadServices(services)
+    rows=[r for r in services.all_runs() if r.market.market_id.upper()==market_id]
     return [
         {
             "run_id":r.run_id,
@@ -69,7 +71,7 @@ def _run_rows(engine,market_id:str,limit:int=100)->list[dict]:
             "experiment_mode":r.market.metadata.get("experiment_mode"),
             "run_scope":r.market.metadata.get("run_scope","OFFICIAL_EVIDENCE"),
             "evidence_eligible":r.market.metadata.get("evidence_eligible") is not False,
-            "persistent_record":engine._evidence_eligible_run(r),
+            "persistent_record":services.evidence_eligible_run(r),
             "diagnostic_summary":r.diagnostic_summary,
             "evaluation":r.evaluation.model_dump() if r.evaluation else None,
         }
@@ -77,22 +79,23 @@ def _run_rows(engine,market_id:str,limit:int=100)->list[dict]:
     ]
 
 
-def strategy_rows(engine,market_id:str,lang:str="zh",run_id:str|None=None)->list[dict]:
+def strategy_rows(services,market_id:str,lang:str="zh",run_id:str|None=None)->list[dict]:
+    services=services if isinstance(services,UiReadServices) else UiReadServices(services)
     market=normalize_market_id(market_id)
     if lang not in {"zh","en"}:
         raise ValueError("lang must be zh or en")
     latest_run=None
     if run_id:
-        latest_run=engine.get_run(run_id)
+        latest_run=services.get_run(run_id)
         if latest_run.market.market_id.upper()!=market:
             raise ValueError("run_id market does not match market_id")
         if latest_run.strategy_group is None or latest_run.triaid_decision is None:
             raise ValueError("run decision is not ready")
     else:
-        latest_run=engine.latest_decision_run(market)
+        latest_run=services.latest_decision_run(market)
 
     effective_market=latest_run.market.market_id if latest_run else market
-    cards=engine.strategy_population.strategy_cards(lang,effective_market)
+    cards=services.strategy_cards(lang,effective_market)
     state_map={s.strategy_id:s for s in latest_run.strategy_states} if latest_run else {}
     group=latest_run.strategy_group if latest_run else None
     decision=latest_run.triaid_decision if latest_run else None
@@ -138,9 +141,9 @@ def strategy_rows(engine,market_id:str,lang:str="zh",run_id:str|None=None)->list
     return out
 
 
-def _strategy_section(engine,market:str,lang:str,run_id:str|None)->dict:
+def _strategy_section(services,market:str,lang:str,run_id:str|None)->dict:
     try:
-        rows=strategy_rows(engine,market,lang,run_id)
+        rows=strategy_rows(services,market,lang,run_id)
     except Exception as exc:
         return _error_section(
             "strategy_population+latest_decision_run",
@@ -647,8 +650,12 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
 class MarketPageProjection:
     version=VERSION
 
-    def __init__(self,engine,automation,scheduler)->None:
-        self.engine=engine
+    def __init__(self,services,automation,scheduler)->None:
+        self.services=(
+            services
+            if isinstance(services,UiReadServices)
+            else UiReadServices(services)
+        )
         self.automation=automation
         self.scheduler=scheduler
 
@@ -686,7 +693,7 @@ class MarketPageProjection:
         market=normalize_market_id(market_id)
 
         try:
-            daily=self.engine.daily_summary(market,compact=True)
+            daily=self.services.daily_summary(market,compact=True)
             daily_section=_section(
                 READY,
                 daily,
@@ -703,11 +710,11 @@ class MarketPageProjection:
             )
 
         strategies_section=_strategy_section(
-            self.engine,market,lang,run_id
+            self.services,market,lang,run_id
         )
 
         try:
-            curves=self.engine.curves(market)
+            curves=self.services.curves(market)
             curves_section=_section(
                 READY if curves else WAITING,
                 curves,
@@ -720,7 +727,7 @@ class MarketPageProjection:
             curves_section=_error_section("engine.curves",exc,data=[])
 
         try:
-            runs=_run_rows(self.engine,market,100)
+            runs=_run_rows(self.services,market,100)
             runs_section=_section(
                 READY if runs else WAITING,
                 runs,
@@ -733,7 +740,7 @@ class MarketPageProjection:
             runs_section=_error_section("engine.all_runs",exc,data=[])
 
         try:
-            evolution=self.engine.evolution_status()
+            evolution=self.services.evolution_status()
             evolution_section=_section(
                 READY,
                 evolution,
@@ -755,7 +762,7 @@ class MarketPageProjection:
         preview_data={}
         if run_id:
             try:
-                preview_data=self.engine.get_run(run_id).model_dump()
+                preview_data=self.services.get_run(run_id).model_dump()
                 preview_section=_section(
                     READY,
                     preview_data,
@@ -800,8 +807,8 @@ class MarketPageProjection:
             "generated_at_utc":datetime.now(timezone.utc).isoformat(),
             "contract":self._contract(),
             "core":{
-                "version":self.engine.core.version,
-                "architecture_version":self.engine.architecture_version,
+                "version":self.services.core_version,
+                "architecture_version":self.services.architecture_version,
             },
             "market":{
                 "benchmark":spec.benchmark,
