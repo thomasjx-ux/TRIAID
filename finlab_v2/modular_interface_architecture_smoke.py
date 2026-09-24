@@ -10,6 +10,7 @@ from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 
 ROOT=Path(__file__).resolve().parent
 market_data_source=(ROOT/"triaid_fin"/"market_data.py").read_text(encoding="utf-8")
+interfaces_source=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
 runtime_source=(ROOT/"triaid_fin"/"market_runtime.py").read_text(encoding="utf-8")
 scheduler_source=(ROOT/"triaid_fin"/"decision_scheduler.py").read_text(encoding="utf-8")
 projection_source=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
@@ -19,6 +20,8 @@ risk_projection_source=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encodi
 runtime_ports_source=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
 ui_ports_source=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
 projection_repository_source=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
+market_contracts_source=(ROOT/"triaid_fin"/"market_contracts.py").read_text(encoding="utf-8")
+market_profiles_source=(ROOT/"triaid_fin"/"market_profiles"/"__init__.py").read_text(encoding="utf-8")
 
 markets=market_ids()
 profiles=MARKET_INTERFACE_REGISTRY.ids()
@@ -27,6 +30,9 @@ chains=(hub.registry.status().get("chains") or {})
 
 checks={
     "all_registered_markets_have_interface_profiles":set(markets)==set(profiles),
+    "market_contracts_are_separate":"class MarketInterfaceRegistry" in market_contracts_source and "class MarketInterfaceProfile" in market_contracts_source,
+    "market_profiles_are_plugin_loaded":"builtin_profiles" in market_profiles_source and "build_us_profile" in market_profiles_source and "build_cn_profile" in market_profiles_source and "build_hk_profile" in market_profiles_source,
+    "central_market_interfaces_has_no_builtin_market_logic":all(token not in interfaces_source for token in ("US_ROUTE=","CN_ROUTE=","HK_ROUTE=","market_id=\"US\"","market_id=\"CN\"","market_id=\"HK\"")),
     "all_profiles_have_route_contracts":all(
         bool(market_interface(m).route.daily_fields) for m in markets
     ),
