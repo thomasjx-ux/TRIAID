@@ -57,6 +57,62 @@ class RiskReadPort:
         return self._engine.risk_control_latest()
 
 
+class OutcomeReadPort:
+    """Read-only realized outcome access for T0/T1 pairing."""
+
+    version="outcome-read-port@1.0.0"
+
+    def __init__(self,engine)->None:
+        self._engine=engine
+
+    @staticmethod
+    def _model_dump(value):
+        if value is None:
+            return None
+        if hasattr(value,"model_dump"):
+            return value.model_dump(mode="json")
+        if isinstance(value,dict):
+            return dict(value)
+        return None
+
+    def review(self,market_id:str,decision_id:str|None,run_id:str|None=None)->dict|None:
+        market=str(market_id).upper()
+        if market=="US":
+            rows=self._engine.us_return_max_ledger.decisions(5000)
+            decision=next((row for row in rows if row.get("decision_id")==decision_id),None)
+            if decision is None:
+                return None
+            return {
+                "kind":"ROUTE_REVIEW",
+                "review":self._engine.us_return_max_ledger.review_decision(decision),
+            }
+        if market=="HK":
+            rows=self._engine.hk_return_max_ledger.decisions(5000)
+            decision=next((row for row in rows if row.get("decision_id")==decision_id),None)
+            if decision is None:
+                return None
+            return {
+                "kind":"ROUTE_REVIEW",
+                "review":self._engine.hk_return_max_ledger.review_decision(decision),
+            }
+        resolved_run_id=run_id or decision_id
+        if not resolved_run_id:
+            return None
+        try:
+            run=self._engine.get_run(resolved_run_id)
+        except Exception:
+            return None
+        evaluation=self._model_dump(run.evaluation)
+        return {
+            "kind":"RUN_EVALUATION",
+            "run_id":resolved_run_id,
+            "status":run.status,
+            "outcome_as_of":(run.diagnostic_summary or {}).get("outcome_as_of"),
+            "evaluation":evaluation,
+            "diagnostic_summary":dict(run.diagnostic_summary or {}),
+        }
+
+
 class UiReadServices:
     """Composition root for UI capability ports.
 
@@ -69,6 +125,7 @@ class UiReadServices:
     def __init__(self,engine)->None:
         self.market_page=MarketPageReadPort(engine)
         self.risk=RiskReadPort(engine)
+        self.outcome=OutcomeReadPort(engine)
 
     @property
     def core_version(self)->str:
@@ -114,5 +171,6 @@ class UiReadServices:
             "ports":{
                 "market_page":self.market_page.version,
                 "risk":self.risk.version,
+                "outcome":self.outcome.version,
             },
         }
