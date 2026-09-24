@@ -45,6 +45,7 @@ BUILD_CASES=[
     "hazard_prospective_smoke.py",
     "risk_warning_smoke.py",
     "risk_control_smoke.py",
+    "volatility_forecast_smoke.py",
     "hk_market_smoke.py",
     "hk_high_frequency_degradation_smoke.py",
     "ui_smoke.py",
