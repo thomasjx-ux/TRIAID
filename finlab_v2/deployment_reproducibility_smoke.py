@@ -65,7 +65,7 @@ assert railway_json["build"]["watchPatterns"]==[
 assert railway_json["build"]["buildCommand"]=="sh build_gate.sh"
 assert railway_json["deploy"]["startCommand"]=="sh start.sh"
 assert railway_json["deploy"]["healthcheckPath"]=="/health"
-assert railway_json["deploy"]["healthcheckTimeout"]==180
+assert railway_json["deploy"]["healthcheckTimeout"]==300
 assert railway_json["deploy"]["restartPolicyType"]=="ON_FAILURE"
 assert railway_json["deploy"]["restartPolicyMaxRetries"]==1
 
