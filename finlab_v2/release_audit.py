@@ -73,6 +73,7 @@ BUILD_CASES=[
     "modular_interface_architecture_smoke.py",
     "capability_ports_evidence_smoke.py",
     "outcome_resolver_smoke.py",
+    "validation_projection_smoke.py",
     "runtime_plugin_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
@@ -104,6 +105,9 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
+    "/api/ui/validation-summary?market_id=US",
+    "/api/ui/validation-summary?market_id=CN",
+    "/api/ui/validation-summary?market_id=HK",
     "/api/experiments/evidence/US/latest",
     "/api/experiments/evidence/CN/latest",
     "/api/experiments/evidence/HK/latest",
@@ -191,6 +195,7 @@ def structural_checks()->list[dict]:
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
+    validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
@@ -290,6 +295,18 @@ def structural_checks()->list[dict]:
         and "does not recalculate market returns" in outcome_resolver
         and "outcome_resolver=OutcomeResolver" in app
         and '@app.get("/api/experiments/outcomes/{market_id}/status")' in app,
+        None,
+    )
+    check(
+        "validation_summary_is_single_ui_projection",
+        "class ValidationSummaryProjection" in validation_projection
+        and "does not recompute returns" in validation_projection
+        and '@app.get("/api/ui/validation-summary")' in app
+        and "/api/ui/validation-summary?market_id=" in app
+        and "/api/experiments/outcomes/" not in app[
+            app.find("async function refreshValidationSummary"):
+            app.find("function phaseText")
+        ],
         None,
     )
     check(
@@ -416,6 +433,10 @@ def runtime_checks()->list[dict]:
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
     risk_projection_payload=payloads.get("/api/ui/risk-center") or {}
+    validation_payloads={
+        market:payloads.get(f"/api/ui/validation-summary?market_id={market}") or {}
+        for market in ("US","CN","HK")
+    }
     home=payloads.get("/") or ""
 
     risk_projection_sections=risk_projection_payload.get("sections") or {}
@@ -455,11 +476,32 @@ def runtime_checks()->list[dict]:
                 "risk",
             )
         )
-        and evidence_repo_status.get("version")=="verified-projection-repository@1.0.0",
+        and evidence_repo_status.get("version")=="verified-projection-repository@1.0.0"
+        and ((interface_status.get("ui_projections") or {}).get("validation_summary")
+             =="validation-summary-projection@1.0.0"),
         interface_status,
     )
 
     for market in ("US","CN","HK"):
+        validation=validation_payloads.get(market) or {}
+        selected_validation=validation.get("selected_market") or {}
+        overall_validation=validation.get("overall") or {}
+        check(
+            f"{market}_validation_summary_projection_contract",
+            validation.get("contract_version")=="validation-summary-projection@1.0.0"
+            and validation.get("projection_scope")=="TRIAID_REALIZED_VALUE_VALIDATION"
+            and validation.get("market_id")==market
+            and (validation.get("integrity") or {}).get("passed") is True
+            and selected_validation.get("market_id")==market
+            and int(overall_validation.get("evaluated_samples") or 0)>=0,
+            validation,
+        )
+        definitions=validation.get("definitions") or {}
+        check(
+            f"{market}_validation_summary_not_account_return",
+            "not account cumulative return" in str(definitions.get("sample_excess_sum") or ""),
+            definitions,
+        )
         outcome_status=payloads.get(f"/api/experiments/outcomes/{market}/status") or {}
         check(
             f"{market}_t0_t1_outcome_status_contract",
