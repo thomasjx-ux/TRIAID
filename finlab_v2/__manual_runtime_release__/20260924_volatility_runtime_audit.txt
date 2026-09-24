@@ -1,0 +1,2 @@
+Release audited volatility runtime-gate hardening.
+Includes merge d18c65fdaa3b903c903c5a6ced3328243e3da4ac.
