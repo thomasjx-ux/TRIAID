@@ -43,6 +43,9 @@ checks={
     "projection_has_explicit_section_states":"NO_UNEXPLAINED_EMPTY_SURFACES" in projection and "WAITING_FOR_NEXT_COMPLETE_TRADING_DAY_OUTCOME" in projection,
     "projection_validates_ready_numeric_contracts":"NUMERIC_FIELDS_INCOMPLETE" in projection,
     "risk_panels_refresh_independently":"async function refreshRiskPanels()" in app and "setInterval(refreshRiskPanels,10000)" in app,
+    "validation_uses_single_ui_projection":"async function refreshValidationSummary" in app and "/api/ui/validation-summary?market_id=" in app,
+    "validation_no_domain_outcome_fanout":"/api/experiments/outcomes/" not in app[app.find("async function refreshValidationSummary"):app.find("function phaseText")],
+    "validation_stale_response_guard":"seq!==refreshSeq||el('market').value!==m" in app[app.find("async function refreshValidationSummary"):app.find("function phaseText")],
 }
 
 failed=[name for name,ok in checks.items() if not ok]
