@@ -28,6 +28,7 @@ BUILD_CASES=[
     "strategy_contract_smoke.py",
     "policy_triage_smoke.py",
     "transition_triage_gate_smoke.py",
+    "preopen_baseline_freshness_smoke.py",
     "n_market_multi_account_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -101,6 +102,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/decision-scheduler/events?market_id=US&limit=1",
     "/api/decision-scheduler/events?market_id=CN&limit=1",
     "/api/decision-scheduler/events?market_id=HK&limit=1",
+    "/api/decision-scheduler/status",
     "/api/daily?compact=true&market_id=US",
     "/api/daily?compact=true&market_id=CN",
     "/api/daily?compact=true&market_id=HK",
@@ -158,6 +160,7 @@ def structural_checks()->list[dict]:
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
     check("risk_increase_requires_persistence","INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE" in scheduler)
+    check("preopen_baseline_freshness_guard","PREOPEN_BASELINE_STALE" in scheduler and "baseline_expected_as_of" in scheduler and "baseline_reference_as_of" in scheduler)
     check("runtime_audit_is_blocking","release_audit.py runtime" in start and "wait \"$SERVER_PID\"" in start,start)
     check("critical_audit_not_echo_only","TRIAID_POSTDEPLOY_RUNTIME_SMOKE_FAILED" not in start and "TRIAID_RISK_CENTER_FULL_AUDIT_FAILED" not in start,start)
     check("liveness_endpoint_present",'@app.get("/health/live")' in app,None)
@@ -251,6 +254,7 @@ def runtime_checks()->list[dict]:
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
+    scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
     volatility_forecast=payloads.get("/api/volatility-forecast") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
@@ -360,6 +364,34 @@ def runtime_checks()->list[dict]:
         check(f"{market}_market_clock_phase_present",phase in {"OPEN","PREOPEN","BREAK","POSTCLOSE","CLOSED","CALENDAR_UNAVAILABLE"},row)
         check(f"{market}_market_clock_green_semantics",bool(row.get("is_open"))==(phase=="OPEN"),row)
         check(f"{market}_market_clock_local_time_present",bool(row.get("local_iso")),row)
+        if phase in {"PREOPEN","OPEN"}:
+            baseline_deadline=time.monotonic()+120
+            market_state=((scheduler_status.get("markets") or {}).get(market) or {})
+            while (
+                (
+                    market_state.get("baseline_done") is not True
+                    or market_state.get("baseline_fresh") is not True
+                    or not market_state.get("baseline_expected_as_of")
+                    or not market_state.get("baseline_reference_as_of")
+                    or str(market_state.get("baseline_reference_as_of"))<str(market_state.get("baseline_expected_as_of"))
+                )
+                and time.monotonic()<baseline_deadline
+            ):
+                time.sleep(2)
+                try:
+                    _,scheduler_status=http_get("/api/decision-scheduler/status",timeout=10)
+                except Exception:
+                    continue
+                market_state=((scheduler_status.get("markets") or {}).get(market) or {})
+            check(
+                f"{market}_active_session_baseline_fresh",
+                market_state.get("baseline_done") is True
+                and market_state.get("baseline_fresh") is True
+                and bool(market_state.get("baseline_expected_as_of"))
+                and bool(market_state.get("baseline_reference_as_of"))
+                and str(market_state.get("baseline_reference_as_of"))>=str(market_state.get("baseline_expected_as_of")),
+                market_state,
+            )
 
     table_runtime_summary={}
     for market in ("US","CN","HK"):
