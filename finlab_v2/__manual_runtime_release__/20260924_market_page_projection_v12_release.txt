@@ -1,0 +1,21 @@
+TRIAID FIN structural market-page projection release
+date: 2026-09-24
+
+release objective:
+- eliminate recurring blank market-page columns structurally
+- use one backend-owned MarketPageProjection contract for US/CN/HK
+- require explicit READY/WAITING/STALE/ERROR/NOT_APPLICABLE state and reason
+- forbid unexplained blank UI surfaces
+- isolate frozen/full-page evidence from stale intraday data
+- keep live projection strict during active sessions
+- make frontend consume one market-page source instead of endpoint fanout
+- gate numeric completeness, route coverage, live coverage and posterior semantics
+- codify Railway watch path as /finlab_v2/__manual_runtime_release__/**
+
+verified pre-release main:
+523cf14c09842f8975005b3e52305400f9b379aa
+projection:
+market-page-projection@1.2.0
+
+release discipline:
+Build audit and runtime audit must both pass. Railway runtime commit identity must match this release marker commit.
