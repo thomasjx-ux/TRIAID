@@ -480,7 +480,7 @@ def _live_sections(automation,scheduler,market:str)->dict:
     }
 
 
-def _validate_projection(market:str,sections:dict)->dict:
+def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
     errors=[]
     warnings=[]
     unexplained=[]
@@ -572,7 +572,7 @@ class MarketPageProjection:
     def live(self,market_id:str)->dict:
         market=normalize_market_id(market_id)
         sections=_live_sections(self.automation,self.scheduler,market)
-        integrity=_validate_projection(market,sections)
+        integrity=_validate_projection(market,sections,strict_live=True)
         return {
             "contract_version":self.version,
             "projection_scope":"LIVE",
@@ -692,7 +692,7 @@ class MarketPageProjection:
             **live_sections,
         }
 
-        integrity=_validate_projection(market,sections)
+        integrity=_validate_projection(market,sections,strict_live=False)
         spec=MARKET_REGISTRY.get(market)
         return {
             "contract_version":self.version,
