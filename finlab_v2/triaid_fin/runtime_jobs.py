@@ -52,14 +52,25 @@ class RuntimeJobRegistry:
 
     def __init__(self)->None:
         self._handlers:dict[str,RuntimeJobHandler]={}
+        self._stages:dict[str,str]={}
 
-    def register(self,name:str,handler:RuntimeJobHandler)->None:
+    def register(
+        self,
+        name:str,
+        handler:RuntimeJobHandler,
+        *,
+        stage:str="POST_REFRESH",
+    )->None:
         key=str(name).strip().upper()
+        stage_key=str(stage).strip().upper()
         if not key:
             raise ValueError("runtime job name is required")
+        if stage_key not in {"PRE_REFRESH","POST_REFRESH"}:
+            raise ValueError("runtime job stage must be PRE_REFRESH or POST_REFRESH")
         if key in self._handlers:
             raise ValueError(f"runtime job already registered:{key}")
         self._handlers[key]=handler
+        self._stages[key]=stage_key
 
     def handler(self,name:str)->RuntimeJobHandler:
         key=str(name).strip().upper()
@@ -71,8 +82,20 @@ class RuntimeJobRegistry:
     async def run(self,name:str,context:RuntimeJobContext)->dict|None:
         return await self.handler(name)(context)
 
-    def names(self)->tuple[str,...]:
-        return tuple(self._handlers)
+    def names(self,stage:str|None=None)->tuple[str,...]:
+        if stage is None:
+            return tuple(self._handlers)
+        stage_key=str(stage).strip().upper()
+        return tuple(
+            name for name in self._handlers
+            if self._stages.get(name)==stage_key
+        )
+
+    def stage(self,name:str)->str:
+        key=str(name).strip().upper()
+        if key not in self._handlers:
+            raise KeyError(f"runtime_job_not_registered:{key}")
+        return self._stages[key]
 
 
 async def _cn_preopen_auction_shadow(ctx:RuntimeJobContext)->dict|None:
@@ -307,7 +330,23 @@ async def _hazard_research_postclose(ctx:RuntimeJobContext)->dict|None:
 
 
 RUNTIME_JOB_REGISTRY=RuntimeJobRegistry()
-RUNTIME_JOB_REGISTRY.register("CN_PREOPEN_AUCTION_SHADOW",_cn_preopen_auction_shadow)
-RUNTIME_JOB_REGISTRY.register("LONG_CYCLE_POSTCLOSE",_long_cycle_postclose)
-RUNTIME_JOB_REGISTRY.register("CROSS_MARKET_POSTCLOSE",_cross_market_postclose)
-RUNTIME_JOB_REGISTRY.register("HAZARD_RESEARCH_POSTCLOSE",_hazard_research_postclose)
+RUNTIME_JOB_REGISTRY.register(
+    "CN_PREOPEN_AUCTION_SHADOW",
+    _cn_preopen_auction_shadow,
+    stage="PRE_REFRESH",
+)
+RUNTIME_JOB_REGISTRY.register(
+    "LONG_CYCLE_POSTCLOSE",
+    _long_cycle_postclose,
+    stage="POST_REFRESH",
+)
+RUNTIME_JOB_REGISTRY.register(
+    "CROSS_MARKET_POSTCLOSE",
+    _cross_market_postclose,
+    stage="POST_REFRESH",
+)
+RUNTIME_JOB_REGISTRY.register(
+    "HAZARD_RESEARCH_POSTCLOSE",
+    _hazard_research_postclose,
+    stage="POST_REFRESH",
+)
