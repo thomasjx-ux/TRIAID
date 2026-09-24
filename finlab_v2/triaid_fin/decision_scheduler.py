@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from .trading_calendar import trading_day_info
 from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+from .runtime_ports import RuntimeServices
 
 def _env_int(name:str,default:int)->int:
     raw=(os.getenv(name) or str(default)).strip()
@@ -28,9 +29,13 @@ def _env_float(name:str,default:float)->float:
 class DecisionScheduler:
     version="decision-scheduler@0.2.5"
 
-    def __init__(self,engine)->None:
-        self.engine=engine
-        self.store=engine.store
+    def __init__(self,services)->None:
+        self.services=(
+            services
+            if isinstance(services,RuntimeServices)
+            else RuntimeServices(services)
+        )
+        self.store=self.services.journal
         self.enabled=os.getenv("TRIAID_DECISION_AUTOMATION","1").lower() not in {"0","false","off","no"}
         self.state_name="decision_scheduler_state.json"
         self.events_name="decision_events.jsonl"
@@ -166,7 +171,7 @@ class DecisionScheduler:
 
         source_ts=transition.get("source_latest_ts")
         rows=[
-            r for r in self.engine.market_transitions(market,mode,250)
+            r for r in self.services.market_transitions(market,mode,250)
             if r.get("source_latest_ts")!=source_ts
         ]
         prior=rows[-200:]
@@ -252,7 +257,7 @@ class DecisionScheduler:
         market=market_id.upper()
         state=self._market_state(market)
         expected_as_of=self._previous_trading_day(market)
-        reference=self.engine.latest_decision_run(market)
+        reference=self.services.latest_decision_run(market)
         reference_as_of=str(reference.market.as_of) if reference is not None else None
         fresh=bool(
             expected_as_of
@@ -273,8 +278,8 @@ class DecisionScheduler:
                 state["baseline_refresh_attempt_count"]=int(
                     state.get("baseline_refresh_attempt_count") or 0
                 )+1
-                attempted=self.engine.run_live_research(market)
-                reference=self.engine.latest_decision_run(market)
+                attempted=self.services.run_live_research(market)
+                reference=self.services.latest_decision_run(market)
                 reference_as_of=str(reference.market.as_of) if reference is not None else None
                 fresh=bool(
                     expected_as_of
@@ -382,7 +387,7 @@ class DecisionScheduler:
             })
             return None
 
-        result=self.engine.recompute_transition_research(market,transition,mode)
+        result=self.services.recompute_transition_research(market,transition,mode)
         l1=max(0.0,float(result.get("weight_change_l1_vs_reference") or 0.0))
         raw_allocation_candidate=bool(l1>=self.allocation_action_l1_threshold)
         transition_regime=str(result.get("transition_regime") or "")
@@ -455,7 +460,7 @@ class DecisionScheduler:
             return None
 
         source_ts=snapshot.get("source_latest_ts")
-        signature=self.engine.observations.snapshot_signature(snapshot)
+        signature=self.services.snapshot_signature(snapshot)
         recorded=bool((observed or {}).get("recorded"))
         settled=self._postclose_settled(market)
         if not settled:
@@ -474,7 +479,7 @@ class DecisionScheduler:
             self._save()
             return row
 
-        run=self.engine.run_live_research(market)
+        run=self.services.run_live_research(market)
         close_reference_run_id=None
         final_complete=run.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
         if (
@@ -484,7 +489,7 @@ class DecisionScheduler:
             and getattr(run,"previous_run_id",None)
         ):
             try:
-                reference=self.engine.get_run(run.previous_run_id)
+                reference=self.services.get_run(run.previous_run_id)
             except Exception:
                 reference=None
             final_complete=bool(
