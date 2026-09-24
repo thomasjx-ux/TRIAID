@@ -83,6 +83,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/registry",
     "/api/accounts/status",
     "/api/ui/market-clocks",
+    "/api/volatility-forecast",
     "/api/risk-warning/latest",
     "/api/risk-control/latest",
     "/api/strategy-population/rules/US",
@@ -237,6 +238,7 @@ def runtime_checks()->list[dict]:
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
+    volatility_forecast=payloads.get("/api/volatility-forecast") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
     home=payloads.get("/") or ""
@@ -277,6 +279,66 @@ def runtime_checks()->list[dict]:
         for row in clock_rows if isinstance(row,dict)
     }
     check("market_clock_base_market_coverage",base_markets.issubset(set(clock_map)),sorted(clock_map))
+    forecast_markets=volatility_forecast.get("markets") or {}
+    forecast_errors=volatility_forecast.get("errors") or {}
+    check(
+        "volatility_forecast_base_market_coverage",
+        base_markets.issubset({str(x).upper() for x in forecast_markets}),
+        {"markets":sorted(forecast_markets),"errors":forecast_errors},
+    )
+    check(
+        "volatility_forecast_no_base_market_errors",
+        not any(str(m).upper() in base_markets for m in forecast_errors),
+        forecast_errors,
+    )
+    for market in sorted(base_markets):
+        row=forecast_markets.get(market) or {}
+        move=row.get("forecast_move_pct")
+        expected_abs=row.get("expected_abs_move_pct")
+        r68=row.get("range_68") or {}
+        wf=row.get("walk_forward") or {}
+        sample_count=wf.get("sample_count")
+        coverage_68=wf.get("coverage_68")
+        ratio=wf.get("rms_calibration_ratio")
+        quality=str(wf.get("calibration_quality") or "")
+        check(
+            f"{market}_volatility_forecast_move_positive",
+            isinstance(move,(int,float)) and math.isfinite(float(move)) and float(move)>0.0,
+            move,
+        )
+        check(
+            f"{market}_volatility_expected_abs_move_nonnegative",
+            isinstance(expected_abs,(int,float)) and math.isfinite(float(expected_abs)) and float(expected_abs)>=0.0,
+            expected_abs,
+        )
+        check(
+            f"{market}_volatility_range_ordered",
+            isinstance(r68.get("lower"),(int,float))
+            and isinstance(r68.get("upper"),(int,float))
+            and float(r68["lower"])<float(r68["upper"]),
+            r68,
+        )
+        check(
+            f"{market}_volatility_walkforward_sample",
+            isinstance(sample_count,int) and sample_count>=60,
+            sample_count,
+        )
+        check(
+            f"{market}_volatility_coverage_68_valid",
+            isinstance(coverage_68,(int,float)) and 0.0<=float(coverage_68)<=1.0,
+            coverage_68,
+        )
+        check(
+            f"{market}_volatility_calibration_ratio_valid",
+            isinstance(ratio,(int,float)) and math.isfinite(float(ratio)) and float(ratio)>0.0,
+            ratio,
+        )
+        check(
+            f"{market}_volatility_calibration_quality_present",
+            quality in {"WELL_CALIBRATED","USABLE","POORLY_CALIBRATED","INSUFFICIENT"},
+            quality,
+        )
+
     expected_timezones={"US":"America/New_York","CN":"Asia/Shanghai","HK":"Asia/Hong_Kong"}
     for market,timezone_name in expected_timezones.items():
         row=clock_map.get(market) or {}
@@ -396,7 +458,7 @@ def runtime_checks()->list[dict]:
         ):
             check("ui_marker:"+marker,marker in home,None if marker in home else "missing")
         check("ui_no_raw_json_dump","JSON.stringify(d,null,2)" not in home,None)
-        for marker in ('id="homeSummary"','id="homeSummaryPurpose"','id="homeSummaryDecision"','id="homeSummaryValidation"','id="homeSummaryRisk"','data-clock-market="US"','data-clock-market="CN"','data-clock-market="HK"','id="marketHero"'):
+        for marker in ('id="homeSummary"','id="homeSummaryPurpose"','id="homeSummaryDecision"','id="homeSummaryValidation"','id="homeSummaryRisk"','id="homeVolatility"','id="volCardUS"','id="volCardCN"','id="volCardHK"','data-clock-market="US"','data-clock-market="CN"','data-clock-market="HK"','id="marketHero"'):
             check("ui_market_identity_marker:"+marker,marker in home,None if marker in home else "missing")
         risk_pos=home.find('id="riskWarningPanel"')
         specialty_positions=[
