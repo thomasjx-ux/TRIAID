@@ -149,6 +149,52 @@ class MarketInterfaceRegistry:
     def mapping(self) -> Mapping[str, MarketInterfaceProfile]:
         return MappingProxyType(self._profiles)
 
+    def status(self) -> dict:
+        profiles={}
+        for market,profile in self._profiles.items():
+            route=profile.route
+            contract=route.contract
+            profiles[market]={
+                "provider_chains":{
+                    mode:list(chain)
+                    for mode,chain in profile.provider_chains.items()
+                },
+                "route":{
+                    "payload_mode":route.payload_mode,
+                    "primary_output_key":route.primary_output_key,
+                    "daily_fields":[list(row) for row in route.daily_fields],
+                    "source":route.source,
+                    "missing_reason":route.missing_reason,
+                    "posterior_kind":route.posterior_kind,
+                    "contract":{
+                        "require_decision_id":contract.require_decision_id,
+                        "require_frozen_at":contract.require_frozen_at,
+                        "strategy_weights_field":contract.strategy_weights_field,
+                        "extra_weight_fields":list(contract.extra_weight_fields),
+                        "min_asset_weights":contract.min_asset_weights,
+                        "decision_numeric_fields":list(contract.decision_numeric_fields),
+                        "capital_numeric_fields":list(contract.capital_numeric_fields),
+                        "capital_sleeves":contract.capital_sleeves,
+                        "sleeve_numeric_fields":list(contract.sleeve_numeric_fields),
+                        "posterior_sleeve_numeric_fields":list(contract.posterior_sleeve_numeric_fields),
+                        "posterior_path_numeric_fields":list(contract.posterior_path_numeric_fields),
+                    },
+                },
+                "instrument_labels":dict(profile.instrument_labels),
+                "optional_sparse_symbols":{
+                    mode:list(symbols)
+                    for mode,symbols in profile.optional_sparse_symbols.items()
+                },
+                "min_aligned_points":dict(profile.min_aligned_points),
+                "partial_symbol_policy":dict(profile.partial_symbol_policy),
+                "auction_shadow_provider_name":profile.auction_shadow_provider_name,
+                "runtime_jobs":list(profile.runtime_jobs),
+            }
+        return {
+            "version":self.version,
+            "markets":profiles,
+        }
+
 
 def _reserved(note: str | None=None) -> ProductCapabilitySpec:
     return ProductCapabilitySpec(note=note)
