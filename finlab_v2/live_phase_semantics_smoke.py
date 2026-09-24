@@ -31,7 +31,7 @@ class FakeEngine:
 
 
 automation=object.__new__(MarketDataAutomation)
-automation.engine=FakeEngine()
+automation.services=FakeEngine()
 
 original=runtime.session_phase
 try:
