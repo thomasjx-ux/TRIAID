@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from app import engine, home, status
+from app import engine, home, status, risk_center_projection
 
 issues=[]
 checks={}
@@ -105,10 +105,50 @@ required_ui=[
     'id="riskWarningPanel"','id="riskThreeMarketRows"','id="riskDynamicsRows"',
     'id="riskMacroRows"','id="riskTermRows"','id="riskCurveContractRows"',
     'id="riskHistoryRows"','id="riskControlRows"','id="riskDataQuality"',
-    'id="riskDataGaps"','/api/risk-warning/latest','/api/risk-control/latest',
+    'id="riskDataGaps"','/api/ui/risk-center',
     'TRIAID 三市场联动风险中心','它不是第四个市场',
 ]
-check("risk_center_ui_complete",all(x in html for x in required_ui),[x for x in required_ui if x not in html])
+check(
+    "risk_center_ui_complete",
+    all(x in html for x in required_ui),
+    [x for x in required_ui if x not in html],
+)
+check(
+    "risk_center_ui_no_legacy_domain_fanout",
+    '/api/risk-warning/latest' not in html and '/api/risk-control/latest' not in html,
+    {
+        "legacy_warning_endpoint_in_html":'/api/risk-warning/latest' in html,
+        "legacy_control_endpoint_in_html":'/api/risk-control/latest' in html,
+    },
+)
+
+risk_projection=risk_center_projection.full()
+risk_projection_sections=risk_projection.get("sections") or {}
+risk_projection_integrity=risk_projection.get("integrity") or {}
+check(
+    "risk_center_projection_contract",
+    risk_projection.get("contract_version")=="risk-center-projection@1.0.0"
+    and risk_projection.get("projection_scope")=="RISK_CENTER",
+    {
+        "contract_version":risk_projection.get("contract_version"),
+        "projection_scope":risk_projection.get("projection_scope"),
+    },
+)
+check(
+    "risk_center_projection_integrity",
+    risk_projection_integrity.get("passed") is True
+    and risk_projection_integrity.get("frontend_safe") is True,
+    risk_projection_integrity,
+)
+check(
+    "risk_center_projection_sections",
+    set(risk_projection_sections)=={"warning","control"}
+    and all(
+        (risk_projection_sections.get(name) or {}).get("state")=="READY"
+        for name in ("warning","control")
+    ),
+    risk_projection_sections,
+)
 
 receipt={
     "audit":"TRIAID_THREE_MARKET_RISK_CENTER_FULL_AUDIT",
