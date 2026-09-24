@@ -5,7 +5,8 @@ from app import home
 
 ROOT=Path(__file__).resolve().parent
 source=(ROOT/"app.py").read_text(encoding="utf-8")
-projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")\ninterfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
+projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
+interfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
 html=home()
 
 live_start=source.find("async function refreshLiveWindows()")
