@@ -97,6 +97,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/status",
     "/api/market-data/registry",
     "/api/accounts/status",
+    "/api/system/interfaces",
     "/api/ui/market-clocks",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
@@ -331,6 +332,7 @@ def runtime_checks()->list[dict]:
     market_status=payloads.get("/api/market-data/status") or {}
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
+    interface_status=payloads.get("/api/system/interfaces") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
     scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
     volatility_forecast=payloads.get("/api/volatility-forecast") or {}
@@ -352,6 +354,18 @@ def runtime_checks()->list[dict]:
         "risk_center_projection_sections_present",
         {"warning","control"}.issubset(set(risk_projection_sections)),
         sorted(risk_projection_sections),
+    )
+
+    interface_markets=(
+        ((interface_status.get("market_interfaces") or {}).get("markets") or {})
+    )
+    check(
+        "system_interface_registry_contract",
+        interface_status.get("architecture")=="MODULAR_INTERFACE_REGISTRY"
+        and set(interface_markets)>={"US","CN","HK"}
+        and (interface_status.get("ports") or {}).get("runtime_services")
+        and (interface_status.get("ports") or {}).get("ui_read_services"),
+        interface_status,
     )
 
     registered_markets=[str(x).upper() for x in (status.get("markets") or [])]
