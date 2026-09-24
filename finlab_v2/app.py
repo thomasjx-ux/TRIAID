@@ -3631,7 +3631,26 @@ function renderHKRoutePanel(m,report){
 }
 function renderUSReturnMax(report){
  const panel=el('usReturnMaxPanel');
- if(!report){panel.className='prospective-panel';return;}
+ if(!report){
+  panel.className='prospective-panel show unavailable';
+  el('usReturnMaxTitle').textContent=lang==='zh'?'美股 Return-Max 路线 · 数据未就绪':'US Return-Max Route · Data not ready';
+  el('usReturnMaxStatus').textContent=lang==='zh'?'等待正式冻结数据':'Awaiting formal frozen data';
+  el('usReturnMaxMeta').textContent='US_RETURN_MAX_CAPACITY';
+  for(const id of ['usrmExpected','usrmGeneric','usrmSpy','usrmRisk'])el(id).textContent='-';
+  el('usReturnMaxNote').textContent=lang==='zh'
+   ? '该区块没有可验证的正式冻结数据，因此不渲染半成品数字。盘中实时状态仍在上方独立显示，完整日线冻结后这里会自动恢复。'
+   : 'No verifiable formal frozen route data are available, so partial numbers are not rendered. Live intraday state remains visible above and this section will recover automatically after a complete daily freeze.';
+  el('usrmStrategyRows').innerHTML=tableEmptyRow(3,'正式冻结策略尚未就绪。','Formal frozen strategy data are not ready.');
+  el('usrmAssetRows').innerHTML=tableEmptyRow(2,'正式ETF敞口尚未就绪。','Formal ETF exposure is not ready.');
+  el('usrmCapitalRows').innerHTML=tableEmptyRow(5,'四档资金容量数据尚未就绪。','Four-sleeve capacity data are not ready.');
+  el('usrmRealizedWrap').style.display='none';
+  el('usrmRealizedEmpty').style.display='block';
+  el('usrmRealizedEmpty').textContent=lang==='zh'?'等待可验证的上一轮真实后验。':'Awaiting a verifiable prior realized posterior.';
+  el('usrmDailyWrap').style.display='none';
+  el('usrmDailyEmpty').style.display='block';
+  el('usrmDailyEmpty').textContent=lang==='zh'?'等待完整交易日后验路径。':'Awaiting a complete trading-day posterior path.';
+  return;
+ }
  panel.className='prospective-panel show';
  const d=report.latest_decision||{};
  const review=report.previous_decision_review||null;
@@ -3993,17 +4012,27 @@ async function refreshAll(preferStale=false){
  try{
   const marketGet=preferStale?jsonCachedStale:jsonCached;
   const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
-  const [page,evo,previewRun]=await Promise.all([
-   marketGet(projectionUrl,30000),jsonCachedStale('/api/evolution',30000),
-   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
-  ]);
+  const page=await marketGet(projectionUrl,30000);
   if(seq!==refreshSeq||el('market').value!==m)return;
   const sections=page.sections||{};
   const s=page.core||{};
-  const d=(sections.daily||{}).data||{};
-  const cards=(sections.strategies||{}).data||[];
-  const curves=(sections.curves||{}).data||[];
-  const runs=(sections.runs||{}).data||[];
+  const dailySection=sections.daily||{};
+  const strategySection=sections.strategies||{};
+  const curveSection=sections.curves||{};
+  const runsSection=sections.runs||{};
+  const evolutionSection=sections.evolution||{};
+  const previewSection=sections.preview||{};
+  const d=dailySection.state==='READY'?(dailySection.data||{}):{};
+  const cards=strategySection.state==='READY'?(strategySection.data||[]):[];
+  const curves=curveSection.state==='READY'?(curveSection.data||[]):[];
+  const runs=['READY','WAITING'].includes(runsSection.state)?(runsSection.data||[]):[];
+  const evo=evolutionSection.state==='READY'?(evolutionSection.data||{}):{};
+  const previewRun=previewSection.state==='READY'?(previewSection.data||null):null;
+  const projectionIntegrity=page.integrity||{};
+  if(projectionIntegrity.status==='BLOCKED'){
+   const reason=(projectionIntegrity.errors||[]).slice(0,2).join(' · ');
+   el('marketScopeStatus').textContent=(lang==='zh'?'页面数据契约阻塞：':'Market-page data contract blocked: ')+reason;
+  }
   const isCN=m==='CN';
   const isHK=m==='HK';
   const routeMode=(MARKET_UI[m]||{}).routeMode||null;
@@ -4212,6 +4241,11 @@ async function refreshAll(preferStale=false){
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · ')||(lang==='zh'?'当前没有补充说明':'No additional explanation'))+'</td></tr>';
   }).join('') || tableEmptyRow(5,'当前没有未入选候选策略。','There are no unselected candidate strategies.');
+  if(strategySection.state!=='READY'){
+   const reason=String(strategySection.reason||'STRATEGY_SECTION_NOT_READY');
+   el('strategyRows').innerHTML=tableEmptyRow(8,(lang==='zh'?'策略数据契约未就绪：':'Strategy data contract not ready: ')+reason,(lang==='zh'?'策略数据契约未就绪：':'Strategy data contract not ready: ')+reason);
+   el('candidateRows').innerHTML=tableEmptyRow(5,(lang==='zh'?'候选池暂不渲染半成品数据：':'Candidate pool partial data suppressed: ')+reason,(lang==='zh'?'候选池暂不渲染半成品数据：':'Candidate pool partial data suppressed: ')+reason);
+  }
   const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
   el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
     (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
