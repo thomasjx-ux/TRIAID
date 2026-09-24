@@ -1339,6 +1339,7 @@ class EvolutionLabEngine:
             )
             run.diagnostic_summary={
                 **previous_diagnostics,
+                "outcome_as_of":outcome.as_of,
                 "policy_triage_outcome":triage_outcome,
                 "positive_interventions":sum(1 for x in deltas.values() if x>0),
                 "negative_interventions":sum(1 for x in deltas.values() if x<0),
