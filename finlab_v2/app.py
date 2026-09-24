@@ -31,6 +31,7 @@ from triaid_fin.market_interfaces import MARKET_INTERFACE_REGISTRY
 from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 from triaid_fin.projection_repository import VerifiedProjectionRepository
 from triaid_fin.outcome_resolver import OutcomeResolver
+from triaid_fin.validation_projection import ValidationSummaryProjection
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -51,6 +52,7 @@ market_page_projection=MarketPageProjection(
     verified_projection_repository,
 )
 risk_center_projection=RiskCenterProjection(ui_read_services.risk)
+validation_summary_projection=ValidationSummaryProjection(outcome_resolver)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -541,6 +543,7 @@ def system_interfaces()->dict:
         "ui_projections":{
             "market_page":market_page_projection.version,
             "risk_center":risk_center_projection.version,
+            "validation_summary":validation_summary_projection.version,
         },
         "provider_registry":(
             (market_data_status.get("providers") or {}).get("registry")
@@ -617,6 +620,14 @@ def ui_market_page_live(market_id:str)->dict:
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
         return payload
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+
+
+@app.get("/api/ui/validation-summary")
+def ui_validation_summary(market_id:str=Query(default="US"))->dict:
+    try:
+        return validation_summary_projection.full(market_id)
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
 
