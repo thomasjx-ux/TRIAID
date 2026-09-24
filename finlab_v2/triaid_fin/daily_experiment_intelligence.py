@@ -192,6 +192,9 @@ def _transition_summary(store, market_id: str, session_date: str, events: list[d
     regimes = []
     urgent = 0
     allocation = 0
+    raw_allocation_candidates = 0
+    risk_increase_candidates = 0
+    risk_increase_suppressed = 0
     l1_values = []
     first_risk_off = None
     last_risk_off = None
@@ -207,6 +210,12 @@ def _transition_summary(store, market_id: str, session_date: str, events: list[d
             urgent += 1
         if decision.get("allocation_change_recommended") is True:
             allocation += 1
+        if decision.get("raw_allocation_candidate") is True:
+            raw_allocation_candidates += 1
+        if decision.get("risk_increase_candidate") is True:
+            risk_increase_candidates += 1
+            if decision.get("persistence_gate_pass") is False:
+                risk_increase_suppressed += 1
         l1 = _as_float(decision.get("weight_change_l1_vs_reference"))
         if l1 is not None:
             l1_values.append(l1)
@@ -244,6 +253,9 @@ def _transition_summary(store, market_id: str, session_date: str, events: list[d
         "regime_switch_count": switches,
         "urgent_event_count": urgent,
         "allocation_change_recommended_count": allocation,
+        "raw_allocation_candidate_count": raw_allocation_candidates,
+        "risk_increase_candidate_count": risk_increase_candidates,
+        "risk_increase_suppressed_count": risk_increase_suppressed,
         "first_risk_off_at": first_risk_off,
         "last_risk_off_at": last_risk_off,
         "first_risk_on_at": first_risk_on,
