@@ -186,8 +186,7 @@ def structural_checks()->list[dict]:
         None,
     )
     refresh_start=app.find("async function refreshAll(preferStale=false)")
-    refresh_end=app.find("async function refreshRiskPanels",refresh_start)
-    refresh_block=app[refresh_start:refresh_end] if refresh_start>=0 and refresh_end>refresh_start else ""
+    refresh_block=app[refresh_start:refresh_start+18000] if refresh_start>=0 else ""
     check(
         "market_page_frontend_no_legacy_multi_api_fanout",
         "projectionUrl=" in refresh_block
@@ -432,7 +431,7 @@ def runtime_checks()->list[dict]:
         live_page=payloads.get(f"/api/ui/market-page/{market}/live") or {}
         check(
             f"{market}_market_page_projection_contract",
-            page.get("contract_version")=="market-page-projection@1.1.0"
+            page.get("contract_version")=="market-page-projection@1.2.0"
             and page.get("projection_scope")=="FULL"
             and page.get("market_id")==market,
             {
@@ -493,7 +492,7 @@ def runtime_checks()->list[dict]:
         )
         check(
             f"{market}_live_projection_contract",
-            live_page.get("contract_version")=="market-page-projection@1.1.0"
+            live_page.get("contract_version")=="market-page-projection@1.2.0"
             and live_page.get("projection_scope")=="LIVE"
             and live_page.get("market_id")==market,
             {
