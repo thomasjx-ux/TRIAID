@@ -117,6 +117,9 @@ class FakeEngine:
 
 
 class FakeAutomation:
+    def __init__(self,stale:bool=False)->None:
+        self.stale=stale
+
     def live_indicators(self,market):
         return {
             "market_id":market,
@@ -125,7 +128,7 @@ class FakeAutomation:
             "provider":"fake",
             "source_latest_ts":1790265600,
             "source_time_utc":"2026-09-24T14:40:00+00:00",
-            "freshness_seconds":20.0,
+            "freshness_seconds":240.0 if self.stale else 20.0,
             "instruments":[
                 {"symbol":"SPY","close":600.0,"change_pct":0.001},
                 {"symbol":"QQQ","close":520.0,"change_pct":0.002},
