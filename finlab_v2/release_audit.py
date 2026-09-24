@@ -35,6 +35,8 @@ BUILD_CASES=[
     "recovery_wave_smoke.py",
     "capital_capacity_smoke.py",
     "us_return_max_smoke.py",
+    "hk_return_max_smoke.py",
+    "hk_full_alignment_smoke.py",
     "adaptive_alpha_promotion_smoke.py",
     "core_evolution_validation_smoke.py",
     "strategy_evolution_validation_smoke.py",
