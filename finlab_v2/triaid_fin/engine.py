@@ -1466,10 +1466,11 @@ class EvolutionLabEngine:
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
         summary=self.review.daily_summary(rows,compact=compact)
+        decision_events=self.store.read_jsonl("decision_events.jsonl",limit=10000)
         session_dates={}
         for market in market_ids():
             market_events=[
-                row for row in self.store.read_jsonl("decision_events.jsonl",limit=20000)
+                row for row in decision_events
                 if str(row.get("market_id") or "").upper()==market
                 and row.get("session_date")
             ]
@@ -1487,10 +1488,10 @@ class EvolutionLabEngine:
         if market_id:
             market_key=market_id.upper()
             summary["experiment_intelligence"]=build_market_intelligence(
-                all_rows,self.store,market_key,session_dates.get(market_key) or summary.get("date")
+                all_rows,self.store,market_key,session_dates.get(market_key) or summary.get("date"),events=decision_events
             )
         summary["cross_market_learning"]=build_cross_market_learning(
-            all_rows,self.store,session_dates
+            all_rows,self.store,session_dates,events=decision_events
         )
         include_us=(market_id is None) or market_id.upper()=="US"
         if include_us:
