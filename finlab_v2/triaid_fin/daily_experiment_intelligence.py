@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Iterable
 
 from .contracts import RunRecord
+from .capital_capacity import CAPITAL_SLEEVES_CNY
+from .us_return_max import USD_CAPITAL_SLEEVES
+from .hk_return_max import HKD_CAPITAL_SLEEVES
 
 
 VERSION = "daily-experiment-intelligence@0.1.0"
@@ -139,6 +142,37 @@ def _scorecard(run: RunRecord | None) -> dict:
             "The best realized strategy is an opportunity ceiling only. "
             "It must not be used as if it were knowable at decision time."
         ),
+    }
+
+
+def _capitalized_scorecard(market_id: str, scorecard: dict) -> dict:
+    market = str(market_id).upper()
+    if market == "US":
+        currency, sleeves = "USD", USD_CAPITAL_SLEEVES
+    elif market == "CN":
+        currency, sleeves = "CNY", CAPITAL_SLEEVES_CNY
+    elif market == "HK":
+        currency, sleeves = "HKD", HKD_CAPITAL_SLEEVES
+    else:
+        currency, sleeves = "NATIVE", ()
+    baseline = scorecard.get("baseline_realized_return")
+    triaid = scorecard.get("triaid_realized_return")
+    excess = scorecard.get("realized_excess_return")
+    cost = scorecard.get("trading_cost")
+    rows = []
+    for capital in sleeves:
+        capital = float(capital)
+        rows.append({
+            "starting_capital": capital,
+            "baseline_realized_pnl": capital * baseline if baseline is not None else None,
+            "triaid_realized_pnl": capital * triaid if triaid is not None else None,
+            "realized_excess_pnl": capital * excess if excess is not None else None,
+            "trading_cost_amount": capital * cost if cost is not None else None,
+        })
+    return {
+        "currency": currency,
+        "rows": rows,
+        "semantics": "Amounts scale the latest evaluated primary-route return. They are realized analytical P&L equivalents, not a forecast.",
     }
 
 
@@ -354,6 +388,7 @@ def build_market_intelligence(
             "no_hindsight_contamination": True,
         },
         "realized_scorecard": scorecard,
+        "capitalized_scorecard": _capitalized_scorecard(market_id, scorecard),
         "intervention_attribution": attribution,
         "transition_evidence": transition,
         "goal_gap": gap,
