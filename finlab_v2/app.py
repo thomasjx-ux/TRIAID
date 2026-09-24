@@ -23,11 +23,13 @@ from triaid_fin.market_runtime import MarketDataAutomation
 from triaid_fin.market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
 from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION, official_session_phase, trading_day_info
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
+from triaid_fin.ui_projection import MarketPageProjection, strategy_rows
 
 engine=EvolutionLabEngine()
 decision_scheduler=DecisionScheduler(engine)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(engine,decision_scheduler)
+market_page_projection=MarketPageProjection(engine,market_automation,decision_scheduler)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -498,6 +500,28 @@ def ui_core_status()->dict:
     }
 
 
+@app.get("/api/ui/market-page/{market_id}")
+def ui_market_page(
+    market_id:str,
+    lang:str=Query(default="zh",pattern="^(zh|en)$"),
+    run_id:str|None=None,
+)->dict:
+    try:
+        return market_page_projection.full(market_id,lang,run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+
+
+@app.get("/api/ui/market-page/{market_id}/live")
+def ui_market_page_live(market_id:str)->dict:
+    try:
+        return market_page_projection.live(market_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+
+
 @app.get("/api/ui/market-clocks")
 def ui_market_clocks()->dict:
     now_utc=datetime.now(ZoneInfo("UTC"))
@@ -751,74 +775,18 @@ def recovery_wave_history(
 
 @app.get("/api/strategies")
 def strategies(
-    lang: str = Query(default="zh", pattern="^(zh|en)$"),
-    market_id: str | None = Query(default=None),
-    run_id: str | None = None,
-) -> list[dict]:
-    latest_run=None
-    if run_id:
-        try:
-            latest_run=engine.get_run(run_id)
-        except (KeyError,FileNotFoundError) as exc:
-            raise HTTPException(status_code=404,detail="run_id not found") from exc
-        if market_id and latest_run.market.market_id.upper()!=market_id.upper():
-            raise HTTPException(status_code=400,detail="run_id market does not match market_id")
-        if latest_run.strategy_group is None or latest_run.triaid_decision is None:
-            raise HTTPException(status_code=409,detail="run decision is not ready")
-    elif market_id:
-        market_key=market_id.upper()
-        latest_run=engine.latest_decision_run(market_key)
-    effective_market=(
-        latest_run.market.market_id
-        if latest_run
-        else market_id
-    )
-    cards = engine.strategy_population.strategy_cards(lang, effective_market)
-    state_map = {s.strategy_id: s for s in latest_run.strategy_states} if latest_run else {}
-    group = latest_run.strategy_group if latest_run else None
-    decision = latest_run.triaid_decision if latest_run else None
-    selected = set(group.members) if group else set()
-
-    out = []
-    for card in cards:
-        strategy_id = card["strategy_id"]
-        state = state_map.get(strategy_id)
-        row = dict(card)
-        row.update(
-            {
-                "market_id": latest_run.market.market_id if latest_run else market_id,
-                "as_of": latest_run.market.as_of if latest_run else None,
-                "run_id":latest_run.run_id if latest_run else None,
-                "run_scope":(
-                    (latest_run.market.metadata or {}).get("run_scope","OFFICIAL_EVIDENCE")
-                    if latest_run else None
-                ),
-                "evidence_eligible":(
-                    (latest_run.market.metadata or {}).get("evidence_eligible") is not False
-                    if latest_run else None
-                ),
-                "lifecycle": state.lifecycle if state else None,
-                "expected_net_return": state.expected_net_return if state else None,
-                "risk": state.risk if state else None,
-                "uncertainty": state.uncertainty if state else None,
-                "metrics": state.metrics if state else {},
-                "selected": strategy_id in selected,
-                "baseline_weight": group.weights.get(strategy_id, 0.0) if group else 0.0,
-                "triaid_weight": decision.weights_after.get(strategy_id, 0.0) if decision else 0.0,
-                "selection_reason": (
-                    getattr(group.reasons[strategy_id], lang)
-                    if group and strategy_id in group.reasons
-                    else None
-                ),
-                "triaid_reason": (
-                    getattr(decision.reasons[strategy_id], lang)
-                    if decision and strategy_id in decision.reasons
-                    else None
-                ),
-            }
-        )
-        out.append(row)
-    return out
+    lang:str=Query(default="zh",pattern="^(zh|en)$"),
+    market_id:str|None=Query(default=None),
+    run_id:str|None=None,
+)->list[dict]:
+    if not market_id:
+        raise HTTPException(status_code=400,detail="market_id is required")
+    try:
+        return strategy_rows(engine,market_id,lang,run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404,detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
 
 
 @app.get("/api/strategy-population/rules/{market_id}")
@@ -2622,10 +2590,8 @@ function clearMarketCache(m){
 }
 function warmMarketCache(m){
  const urls=[
-   '/api/daily?compact=true&market_id='+m,
-   '/api/strategies?market_id='+m+'&lang='+lang,
-   '/api/curves?market_id='+m,
-   '/api/runs?market_id='+m+'&limit=100'
+   '/api/ui/market-page/'+m+'?lang='+lang,
+   '/api/ui/market-page/'+m+'/live'
  ];
  urls.forEach(url=>jsonCached(url,30000).catch(()=>null));
 }
@@ -3001,22 +2967,20 @@ function setPulse(id,on,warn=false){
 async function refreshLiveWindows(){
  const m=el('market').value;
  const seq=++liveSeq;
- const idxPromise=jsonCached('/api/market-data/live-indicators/'+m,2000);
- const actPromise=jsonCached('/api/market-data/activity/'+m+'?limit=80',2500);
- const decisionPromise=m==='US'?jsonOrNullCached('/api/decision-scheduler/events?market_id=US&limit=120',2500):Promise.resolve(null);
- const schedulerPromise=m==='US'?jsonOrNullCached('/api/decision-scheduler/status',2500):Promise.resolve(null);
- let livePayload=null;
-
  try{
-  const idx=await idxPromise;
-  livePayload=idx;
+  const page=await jsonCached('/api/ui/market-page/'+m+'/live',2000);
   if(seq!==liveSeq||el('market').value!==m)return;
-  const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
+  const sections=page.sections||{};
+  const idx=(sections.live||{}).data||{};
+  const act=(sections.activity||{}).data||{};
+  const scheduler=(sections.scheduler||{}).data||{};
+  const liveState=(sections.live||{}).state||'ERROR';
+  const fresh=liveState==='READY'&&idx.available&&Number(idx.freshness_seconds||999999)<180;
   setPulse('marketPulse',fresh,idx.available&&!fresh);
   el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
   el('indexMeta').textContent=idx.available
    ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
-   : (lang==='zh'?'暂无可用市场数据':'No market data available');
+   : ((sections.live||{}).reason||(lang==='zh'?'暂无可用市场数据':'No market data available'));
   el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
    const p=Number(x.change_pct);
    const pText=Number.isFinite(p)?signedPct(p):'-';
@@ -3025,17 +2989,8 @@ async function refreshLiveWindows(){
     '<div class="small muted">'+esc(x.name||x.symbol)+'</div>'+
     '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
     '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
-  }).join('');
- }catch(e){
-  if(seq===liveSeq&&el('market').value===m){
-   setPulse('marketPulse',false,true);
-   el('indexMeta').textContent='Live data error: '+e.message;
-  }
- }
+  }).join('') || '<div class="cmd">'+esc((sections.live||{}).reason||(lang==='zh'?'当前没有可展示的盘中行情':'No intraday market data to display'))+'</div>';
 
- try{
-  const act=await actPromise;
-  if(seq!==liveSeq||el('market').value!==m)return;
   const events=act.events||[];
   const last=events.length?events[events.length-1]:null;
   const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
@@ -3047,19 +3002,18 @@ async function refreshLiveWindows(){
     '<span class="cmdkind">'+esc(e.kind||'EVENT')+'</span> '+
     '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
     esc(e.message||'')+'</div>';
-  }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+  }).join('') || '<div class="cmd">'+esc((sections.activity||{}).reason||(lang==='zh'?'暂无后台事件':'No backend events'))+'</div>';
+
+  if(m==='US'){
+   renderUSIntradayState(idx,scheduler.events||[],scheduler.state||{});
+  }
  }catch(e){
   if(seq===liveSeq&&el('market').value===m){
+   setPulse('marketPulse',false,true);
    setPulse('activityPulse',false,true);
-   el('scheduleMeta').textContent='Activity error: '+e.message;
+   el('indexMeta').textContent='Market-page projection error: '+e.message;
+   el('scheduleMeta').textContent='Market-page projection error: '+e.message;
   }
- }
-
- if(m==='US'){
-  Promise.all([decisionPromise,schedulerPromise]).then(([events,scheduler])=>{
-   if(seq!==liveSeq||el('market').value!==m)return;
-   renderUSIntradayState(livePayload,events||[],((scheduler||{}).markets||{}).US||{});
-  }).catch(()=>{});
  }
  jsonCached('/api/market-data/strategy-context/'+m,60000)
    .then(ctx=>{strategyMarketContext[m]=ctx;})
@@ -4016,14 +3970,19 @@ async function refreshAll(preferStale=false){
  const seq=++refreshSeq;
  const previewId=previewRunIds[m];
  try{
-  const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
   const marketGet=preferStale?jsonCachedStale:jsonCached;
-  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
-   jsonCachedStale('/api/ui/core',60000),marketGet('/api/daily?compact=true&market_id='+m,30000),marketGet(cardsUrl,30000),
-   marketGet('/api/curves?market_id='+m,30000),jsonCachedStale('/api/evolution',30000),marketGet('/api/runs?market_id='+m+'&limit=100',30000),
+  const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const [page,evo,previewRun]=await Promise.all([
+   marketGet(projectionUrl,30000),jsonCachedStale('/api/evolution',30000),
    previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
   ]);
   if(seq!==refreshSeq||el('market').value!==m)return;
+  const sections=page.sections||{};
+  const s=page.core||{};
+  const d=(sections.daily||{}).data||{};
+  const cards=(sections.strategies||{}).data||[];
+  const curves=(sections.curves||{}).data||[];
+  const runs=(sections.runs||{}).data||[];
   const isCN=m==='CN';
   const isHK=m==='HK';
   const routeMode=(MARKET_UI[m]||{}).routeMode||null;
@@ -4203,10 +4162,11 @@ async function refreshAll(preferStale=false){
     activeSession?'Live market data and candidate strategies are still updating; formal posterior evidence starts only after the close freeze':'There is no frozen decision eligible for formal posterior evaluation'
    );
   }
-  renderUSReturnMax(m==='US'?d.us_return_max:null);
-  renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null);
-  renderRecoveryWave(isCN?d.recovery_wave:null);
-  renderHKRoutePanel(m,d.hk_return_max||null);
+  const routeData=(sections.route||{}).data||{};
+  renderUSReturnMax(m==='US'?routeData:null);
+  renderProspective(isCN?routeData.prospective_experiment:null,isCN?routeData.prospective_experiment_status:null);
+  renderRecoveryWave(isCN?routeData.recovery_wave:null);
+  renderHKRoutePanel(m,isHK?routeData:null);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
