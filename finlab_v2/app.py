@@ -25,6 +25,7 @@ from triaid_fin.market_registry import MARKET_REGISTRY, market_ids, normalize_ma
 from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION, official_session_phase, trading_day_info
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
 from triaid_fin.ui_projection import MarketPageProjection, strategy_rows
+from triaid_fin.risk_projection import RiskCenterProjection
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -32,6 +33,7 @@ decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
 market_page_projection=MarketPageProjection(engine,market_automation,decision_scheduler)
+risk_center_projection=RiskCenterProjection(engine)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -528,6 +530,14 @@ def ui_market_page_live(market_id:str)->dict:
         return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
+
+
+@app.get("/api/ui/risk-center")
+def ui_risk_center()->dict:
+    payload=risk_center_projection.full()
+    if not (payload.get("integrity") or {}).get("passed"):
+        return JSONResponse(status_code=503,content=payload)
+    return payload
 
 
 @app.get("/api/ui/market-clocks")
@@ -4267,12 +4277,17 @@ async function refreshAll(preferStale=false){
  }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
 }
 async function refreshRiskPanels(){
- const [riskWarning,riskControl]=await Promise.all([
-  jsonOrNullCached('/api/risk-warning/latest',10000),
-  jsonOrNullCached('/api/risk-control/latest',10000)
- ]);
- renderRiskWarning(riskWarning);
- renderRiskControl(riskControl);
+ try{
+  const projection=await jsonCached('/api/ui/risk-center',10000);
+  const sections=projection.sections||{};
+  const warning=sections.warning||{};
+  const control=sections.control||{};
+  renderRiskWarning(warning.state==='READY'?(warning.data||null):null);
+  renderRiskControl(control.state==='READY'?(control.data||null):null);
+ }catch(e){
+  renderRiskWarning(null);
+  renderRiskControl(null);
+ }
 }
 async function propose(){
  const x=await json('/api/evolution/propose',{method:'POST'});
