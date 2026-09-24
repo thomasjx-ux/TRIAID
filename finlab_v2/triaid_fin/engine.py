@@ -1463,7 +1463,7 @@ class EvolutionLabEngine:
         rows=self.all_runs()
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
-        summary=self.review.daily_summary(rows)
+        summary=self.review.daily_summary(rows,compact=compact)
         include_us=(market_id is None) or market_id.upper()=="US"
         if include_us:
             us_return=self.us_return_max_ledger.daily_report()
