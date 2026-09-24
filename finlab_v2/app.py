@@ -1993,7 +1993,16 @@ const TABLE_HEADER_TIPS={
   '最差池':'登记时冻结的最差策略池对照，不允许根据后续结果换成员。',
   'TRIAID':'登记时冻结的 TRIAID 配置或其对应的真实后验表现。',
   '差值':'TRIAID 与当前表格对照方案之间的收益或指标差异。',
-  '目标风险仓位':'当前路线允许配置到风险资产的目标比例，其余部分保留为现金或防守资产。'
+  '目标风险仓位':'当前路线允许配置到风险资产的目标比例，其余部分保留为现金或防守资产。',
+  '资金量':'把同一真实后验收益率换算到当前市场四档标准资金规模后的分析本金，用于直观看收益差的金额影响；不是实际账户余额。',
+  '基线损益':'同一冻结基线在已完成真实后验上的收益率乘以该资金量得到的分析损益。',
+  'TRIAID损益':'同一冻结TRIAID配置在已完成真实后验上的收益率乘以该资金量得到的分析损益。',
+  '多赚/少赚':'TRIAID损益减去同一冻结基线损益。正值代表相对多赚或少亏，负值代表少赚或多亏。',
+  '模型交易成本':'把本轮后验记录中的模型交易成本率换算为该资金量的金额。它是模型成本，不是券商真实收费。',
+  'Goal Gap 层':'当前市场中TRIAID能力提升未能转化为经济收益的主要断点，例如状态识别、Transition识别或Transition到干预的时间尺度。',
+  'TRIAID相对收益':'该市场最近完成后验中TRIAID配置相对同冻结基线的真实收益差。',
+  'Transition':'该交易日盘中被系统保留下来的risk-off、risk-on和状态切换统计，用于定位状态变化与动作层是否匹配。',
+  '可迁移经验':'从该市场得到、允许其他市场共同验证的假设或失败模式。只迁移研究问题和验证设计，不借用该市场的权重、阈值或结果作为证据。'
  },
  en:{
   'Strategy':'Current strategy name or ID. Hovering a lifecycle badge provides additional state detail.',
@@ -2054,7 +2063,16 @@ const TABLE_HEADER_TIPS={
   'Tradingday':'Complete trading day represented by this row.',
   'Worstpool':'Worst-strategy control pool frozen at registration; membership cannot be changed after outcomes are observed.',
   'TRIAID':'Frozen TRIAID allocation or its realized prospective performance.',
-  'Gap':'Difference between TRIAID and the control shown in this table.'
+  'Gap':'Difference between TRIAID and the control shown in this table.',
+  'Capital':'Standard market-specific capital sleeve used to translate the same realized posterior return into an analytical P&L amount; not an actual account balance.',
+  'BaselineP&L':'Analytical P&L obtained by applying the completed realized baseline return to this capital sleeve.',
+  'TRIAIDP&L':'Analytical P&L obtained by applying the completed realized TRIAID return to this capital sleeve.',
+  'Gain/lossvsbaseline':'TRIAID analytical P&L minus the same-freeze baseline P&L. Positive means more gain or less loss; negative means less gain or more loss.',
+  'Modeledtradingcost':'Capitalized modeled trading-cost rate from the evaluated run. It is not an actual broker charge.',
+  'GoalGaplayer':'Primary layer where observed TRIAID capability has not yet converted into economic value, such as state recognition, transition recognition, or transition-to-intervention timing.',
+  'TRIAIDexcess':'Latest completed realized TRIAID return gap versus the same-freeze baseline for this market.',
+  'Transition':'Counts of preserved intraday risk-off, risk-on and regime-switch evidence used to diagnose whether state changes and actions were aligned.',
+  'Transferablelesson':'A hypothesis or failure mode that other markets may test. Only the research question and validation design transfer; weights, thresholds and outcomes do not become cross-market evidence.'
  }
 };
 
