@@ -32,6 +32,7 @@ from .recovery_ledger import RecoveryWaveLedger
 from .observation import MarketObservationStore
 from .objective import VERSION as OBJECTIVE_CONSTITUTION_VERSION
 from .review import ReviewModule
+from .daily_experiment_intelligence import build_cross_market_learning, build_market_intelligence
 from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
@@ -1460,10 +1461,37 @@ class EvolutionLabEngine:
         return refresh_market_data(market_id,mode)
 
     def daily_summary(self,market_id:str|None=None,compact:bool=False)->dict:
-        rows=self.all_runs()
+        all_rows=self.all_runs()
+        rows=all_rows
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
         summary=self.review.daily_summary(rows,compact=compact)
+        session_dates={}
+        for market in market_ids():
+            market_events=[
+                row for row in self.store.read_jsonl("decision_events.jsonl",limit=20000)
+                if str(row.get("market_id") or "").upper()==market
+                and row.get("session_date")
+            ]
+            session_dates[market]=(
+                str(market_events[-1].get("session_date"))
+                if market_events
+                else next(
+                    (
+                        r.market.as_of for r in reversed(all_rows)
+                        if r.market.market_id.upper()==market and r.market.as_of
+                    ),
+                    summary.get("date"),
+                )
+            )
+        if market_id:
+            market_key=market_id.upper()
+            summary["experiment_intelligence"]=build_market_intelligence(
+                all_rows,self.store,market_key,session_dates.get(market_key) or summary.get("date")
+            )
+        summary["cross_market_learning"]=build_cross_market_learning(
+            all_rows,self.store,session_dates
+        )
         include_us=(market_id is None) or market_id.upper()=="US"
         if include_us:
             us_return=self.us_return_max_ledger.daily_report()
