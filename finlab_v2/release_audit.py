@@ -70,6 +70,7 @@ BUILD_CASES=[
     "all_table_surface_smoke.py",
     "us_page_live_surface_smoke.py",
     "ui_projection_smoke.py",
+    "modular_interface_architecture_smoke.py",
     "cn_prospective_route_contract_smoke.py",
     "rendered_home_js_smoke.py",
     "calendar_sync_config_smoke.py",
@@ -102,6 +103,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/market-page/US/live",
     "/api/ui/market-page/CN/live",
     "/api/ui/market-page/HK/live",
+    "/api/ui/risk-center",
     "/api/volatility-forecast",
     "/api/risk-warning/latest",
     "/api/risk-control/latest",
@@ -167,6 +169,9 @@ def structural_checks()->list[dict]:
     engine=(ROOT/"triaid_fin"/"engine.py").read_text(encoding="utf-8")
     scheduler=(ROOT/"triaid_fin"/"decision_scheduler.py").read_text(encoding="utf-8")
     projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
+    runtime=(ROOT/"triaid_fin"/"market_runtime.py").read_text(encoding="utf-8")
+    interfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
+    risk_projection=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
@@ -184,6 +189,35 @@ def structural_checks()->list[dict]:
         "class MarketPageProjection" in projection
         and "NO_UNEXPLAINED_EMPTY_SURFACES" in projection
         and '@app.get("/api/ui/market-page/{market_id}")' in app,
+        None,
+    )
+    check(
+        "market_interfaces_are_registry_driven",
+        "class MarketInterfaceRegistry" in interfaces
+        and "provider_chains" in interfaces
+        and "runtime_jobs" in interfaces,
+        None,
+    )
+    check(
+        "runtime_orchestration_uses_ports_and_plugins",
+        "self.services." in runtime
+        and "self.engine." not in runtime
+        and "_run_registered_jobs" in runtime
+        and 'market_id=="US"' not in runtime
+        and 'market_id=="CN"' not in runtime
+        and 'market_id=="HK"' not in runtime,
+        None,
+    )
+    check(
+        "scheduler_uses_runtime_services_port",
+        "self.services." in scheduler and "self.engine." not in scheduler,
+        None,
+    )
+    check(
+        "risk_center_projection_is_single_ui_contract",
+        "class RiskCenterProjection" in risk_projection
+        and '@app.get("/api/ui/risk-center")' in app
+        and "jsonCached('/api/ui/risk-center',10000)" in app,
         None,
     )
     refresh_start=app.find("async function refreshAll(preferStale=false)")
@@ -292,7 +326,23 @@ def runtime_checks()->list[dict]:
     volatility_forecast=payloads.get("/api/volatility-forecast") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
+    risk_projection_payload=payloads.get("/api/ui/risk-center") or {}
     home=payloads.get("/") or ""
+
+    risk_projection_sections=risk_projection_payload.get("sections") or {}
+    risk_projection_integrity=risk_projection_payload.get("integrity") or {}
+    check(
+        "risk_center_projection_contract",
+        risk_projection_payload.get("contract_version")=="risk-center-projection@1.0.0"
+        and risk_projection_payload.get("projection_scope")=="RISK_CENTER"
+        and risk_projection_integrity.get("passed") is True,
+        risk_projection_payload,
+    )
+    check(
+        "risk_center_projection_sections_present",
+        {"warning","control"}.issubset(set(risk_projection_sections)),
+        sorted(risk_projection_sections),
+    )
 
     registered_markets=[str(x).upper() for x in (status.get("markets") or [])]
     base_markets={"US","CN","HK"}
