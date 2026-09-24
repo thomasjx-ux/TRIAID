@@ -19,7 +19,8 @@ checks={
     "ui_explains_protocol_mismatch":"这套前瞻协议只在 CN_WORST_POOL_RESCUE 下登记" in app,
     "ui_hides_empty_prospective_tables":".prospective-panel.unavailable .summary" in html and ".prospective-panel.unavailable h3" in html and ".prospective-panel.unavailable .tablewrap" in html,
     "ui_keeps_protocol_status_visible":"A股辅助前瞻协议 · 当前未激活" in html and "非当前主路线证据" in html,
-    "ui_passes_status_to_renderer":"renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null)" in html,
+    "ui_passes_status_to_renderer":"renderProspective(isCN?routeData.prospective_experiment:null,isCN?routeData.prospective_experiment_status:null)" in html,
+    "ui_route_data_comes_from_projection":"const routeData=(sections.route||{}).data||{};" in html,
     "cn_scope_separates_legacy_evidence":"旧 CN_WORST_POOL_RESCUE 前瞻协议单独显示状态，不混入当前主路线" in html,
 }
 failed=[name for name,ok in checks.items() if not ok]
