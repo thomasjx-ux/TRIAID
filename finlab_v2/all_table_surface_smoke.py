@@ -10,7 +10,7 @@ expected_tbodies={
     "usrmStrategyRows","usrmAssetRows","usrmCapitalRows","usrmRealizedRows","usrmDailyRows",
     "prospectiveStrategyRows","prospectiveDailyRows",
     "recoveryOpinionRows","capitalSleeveRows","capitalRealizedRows","recoveryReviewRows",
-    "hkAssetRows",
+    "hkStrategyRows","hkAssetRows","hkCapitalRows","hkRealizedRows","hkDailyRows",
     "riskThreeMarketRows","riskDynamicsRows","riskMacroRows","riskTermRows",
     "riskCurveContractRows","riskHistoryRows","riskControlRows",
 }
@@ -18,7 +18,7 @@ actual_tbodies=set(re.findall(r'<tbody[^>]*id="([^"]+)"',html))
 tables=re.findall(r'<table(?:\s[^>]*)?>([\s\S]*?)</table>',html)
 
 checks={
-    "table_count_is_expected":len(tables)==21,
+    "table_count_is_expected":len(tables)==25,
     "tbody_contract_exact":actual_tbodies==expected_tbodies,
     "dynamic_cn_daily_header_present":'id="prospectiveDailyHead"' in html,
     "all_static_tables_have_headers":all(
@@ -40,6 +40,14 @@ checks={
         "暂无冻结研究配置意见","等待当前资金容量决策",
         "上一轮资金袖套尚无可用的后验模拟执行结果",
         "上一轮尚未产生可用的下一完整交易日结果",
+    )),
+    "hk_tables_have_empty_states":all(x in html for x in (
+        "等待首个正式港股冻结策略群",
+        "等待港股冻结ETF敞口",
+        "等待首个四档港币容量决策",
+        "尚无上一轮港股容量后验",
+        "尚无上一轮港股真实后验路径",
+        "等待下一完整港股交易日结果",
     )),
     "risk_tables_have_empty_states":all(x in html for x in (
         "当前没有可用的三市场联动状态",

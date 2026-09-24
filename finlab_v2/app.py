@@ -1546,23 +1546,52 @@ tbody tr:hover td{background:#f8fbff}
   <div class="prospective-panel" id="hkRoutePanel">
     <div class="prospective-head">
       <div>
-        <b id="hkRouteTitle">港股独立 Return-Max 路线</b>
+        <b id="hkRouteTitle">港股 Return-Max 路线</b>
         <div class="prospective-meta" id="hkRouteMeta">-</div>
       </div>
       <span class="tag" id="hkRouteStatus">-</span>
     </div>
     <div class="summary prospective-kpis">
-      <div class="item"><span class="label" id="hkSelectedLabel">当前入选策略</span><b id="hkSelected">-</b></div>
-      <div class="item"><span class="label" id="hkChangedLabel">发生权重调整</span><b id="hkChanged">-</b></div>
-      <div class="item"><span class="label" id="hkPosteriorLabel">最近路线后验差</span><b id="hkPosterior">-</b></div>
-      <div class="item"><span class="label" id="hkCapacityLabel">独立容量证据</span><b id="hkCapacity">待建立专属账本</b></div>
+      <div class="item"><span class="label" id="hkExpectedLabel">TRIAID 多周期年化状态估计</span><b id="hkExpected">-</b></div>
+      <div class="item"><span class="label" id="hkBaselineLabel">冻结基线多周期年化状态估计</span><b id="hkBaseline">-</b></div>
+      <div class="item"><span class="label" id="hkBenchmarkLabel">2800.HK 多周期年化状态估计</span><b id="hkBenchmark">-</b></div>
+      <div class="item"><span class="label" id="hkRiskLabel">目标风险仓位</span><b id="hkRisk">-</b></div>
     </div>
-    <div class="prospective-note" id="hkRouteNote">港股只使用港股冻结基线与真实后验。当前没有可替代的 US/CN 容量结果；港股专属容量账本未形成前，页面明确保留这一证据缺口。</div>
-    <h3 id="hkAssetTitle">港股主路线资产角色</h3>
+    <div class="prospective-note" id="hkRouteNote">-</div>
+    <h3 id="hkStrategyTitle">当前冻结策略权重</h3>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkStrategyHeader">策略</th><th id="hkTriaidWeightHeader">TRIAID 权重</th><th id="hkBaseWeightHeader">冻结基线权重</th></tr></thead>
+        <tbody id="hkStrategyRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkAssetTitle">底层港股 ETF 目标敞口</h3>
     <div class="tablewrap" style="max-height:280px">
       <table>
-        <thead><tr><th id="hkAssetSymbolHeader">ETF</th><th id="hkAssetRoleHeader">角色</th></tr></thead>
+        <thead><tr><th id="hkAssetSymbolHeader">ETF</th><th id="hkAssetWeightHeader">目标权重</th></tr></thead>
         <tbody id="hkAssetRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkCapitalTitle">四档港币资金规模容量实验</h3>
+    <div class="prospective-meta" id="hkCapitalMeta">-</div>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkCapCapital">起始资金</th><th id="hkCapInvested">目标投入</th><th id="hkCapParticipation">最大目标仓位/ADV</th><th id="hkCapDays">最少成交天数</th><th id="hkCapCost">模型往返成本代理</th></tr></thead>
+        <tbody id="hkCapitalRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkRealizedTitle">上一轮真实市场后验与模拟执行容量回顾</h3>
+    <div class="tablewrap" style="max-height:360px">
+      <table>
+        <thead><tr><th id="hkRealCapital">起始资金</th><th id="hkRealFill">模拟成交比例</th><th id="hkRealEquity">模拟当前净值</th><th id="hkRealPnl">模拟净损益</th><th id="hkRealReturn">模拟净收益率</th><th id="hkRealCost">模型执行成本</th></tr></thead>
+        <tbody id="hkRealizedRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkDailyTitle">上一轮冻结配置理论持仓后验路径</h3>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkDailyDate">结果日</th><th id="hkDailyTriaid">TRIAID 累计</th><th id="hkDailyBase">冻结基线累计</th><th id="hkDailyBenchmark">2800.HK 累计</th></tr></thead>
+        <tbody id="hkDailyRows"></tbody>
       </table>
     </div>
   </div>
@@ -1873,6 +1902,10 @@ const TABLE_HEADER_TIPS={
   'TRIAID冻结综合排序':'登记时冻结的无拟合系数等权Borda排序，综合多周期年化状态收益估计、20日动量、风险、不确定性，以及可用时的状态方向。后续结果不能倒推修改。',
   '基线权重':'当前运行由Strategy Population在TRIAID重加权前冻结的基线目标权重。它是研究配置，不代表券商真实持仓。',
   'TRIAID权重':'当前运行或前瞻实验冻结的TRIAID目标权重。后续结果不能倒推修改，也不代表券商真实持仓。',
+  '冻结基线权重':'港股主路线在同一冻结时点由 Strategy Population 给出的基线权重，用于与 TRIAID 权重做同周期比较。它不是券商真实持仓。',
+  'TRIAID 累计':'港股主路线从上一轮正式冻结决策起，TRIAID 理论持仓在后续真实完整交易日上的累计收益；容量分批成交结果在独立模拟执行表中报告。',
+  '冻结基线累计':'从同一港股冻结时点起，未经过 TRIAID 二次重加权的冻结基线理论持仓累计收益。',
+  '2800.HK 累计':'从同一港股冻结时点起，盈富基金 2800.HK 买入持有对照的累计真实收益。',
   '最近一日':'最新一个完整交易日该策略的真实单日收益。',
   '累计收益':'从实验登记或冻结起点到当前的累计真实收益。',
   '当前实际名次':'根据已经发生的真实累计收益计算出的当前实际排序。',
@@ -1932,6 +1965,10 @@ const TABLE_HEADER_TIPS={
   'TRIAIDfrozencompositerank':'Coefficient-free equal-weight Borda rank frozen at registration across the multi-window annualized state-return estimate, 20-day momentum, risk, uncertainty, and state direction when available. Future outcomes cannot retune it.',
   'Baselineweight':'Baseline target weight frozen by Strategy Population before TRIAID reweighting for the current run. It is a research allocation, not a broker position.',
   'TRIAIDweight':'TRIAID target weight frozen for the current run or prospective registration. Future outcomes cannot retune it, and it is not a broker position.',
+  'Frozenbaselineweight':'HK Strategy Population baseline weight frozen at the same decision time as the TRIAID allocation. It is a research control, not a broker position.',
+  'TRIAIDcumulative':'Cumulative theoretical-holdings return of the frozen HK TRIAID allocation on subsequent complete realized trading days. Capacity-staged simulated execution is reported separately.',
+  'Frozenbaselinecumulative':'Cumulative theoretical-holdings return of the HK frozen baseline from the same decision time, before the TRIAID overlay.',
+  '2800.HKcumulative':'Cumulative realized buy-and-hold return of 2800.HK from the same HK freeze time.',
   'Latestday':'Realized return for the latest complete trading day.',
   'Cumulativereturn':'Realized cumulative return since experiment registration or decision freeze.',
   'Currentrealizedrank':'Current ranking computed from realized cumulative returns observed so far.',
@@ -2253,6 +2290,7 @@ function applyTableHeaderTooltips(root=document){
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function fmtMoney(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return '¥'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function fmtUsd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return "$"+v.toLocaleString(undefined,{maximumFractionDigits:0})}
+function fmtHkd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return 'HK$'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return Number.isFinite(v)?((v>0?'+':'')+v.toFixed(2)+'%'):'-'}
 function fmtRiskWithUnit(x,unit,digits=4){const n=Number(x);return Number.isFinite(n)?n.toFixed(digits)+(unit||''):'—'}
 function fmtMultiplier(x){const n=Number(x);return Number.isFinite(n)?n.toFixed(2)+'×':'—'}
@@ -3349,39 +3387,97 @@ function renderMarketRouteOverview(m,latest,routeEvaluated,selected,d){
  const real={
   US:zh?'四档USD容量 + 模型成本 + 模拟成交后验已接入':'4 USD capacity sleeves + modeled costs + simulated-execution posterior connected',
   CN:zh?'人民币容量袖套 + 恢复波段已接入；前瞻协议按当前状态单独标记':'CNY capacity sleeves + recovery-wave evidence connected; prospective protocol is shown separately by current status',
-  HK:zh?'港股独立容量后验账本尚未形成；不借用US/CN结果':'Dedicated HK capacity posterior ledger not yet formed; US/CN results are not substituted'
+  HK:zh?'四档HKD容量 + 模型成本 + 模拟成交后验已接入':'4 HKD capacity sleeves + modeled costs + simulated-execution posterior connected'
  };
  el('marketRouteRealizability').textContent=real[m]||'-';
  el('marketRouteStatus').textContent=(routeEvaluated?.evaluation?.status)||(latest?.status)||(zh?'等待数据':'WAITING');
 }
-function renderHKRoutePanel(m,latest,routeEvaluated,selected){
+function renderHKRoutePanel(m,report){
  const panel=el('hkRoutePanel');
  if(m!=='HK'){panel.className='prospective-panel';return;}
  panel.className='prospective-panel show';
- const meta=MARKET_UI.HK;
- const changed=selected.filter(x=>Math.abs(Number(x.triaid_weight||0)-Number(x.baseline_weight||0))>1e-8).length;
- el('hkRouteTitle').textContent=lang==='zh'?'港股独立 Return-Max 路线':'HK Independent Return-Max Route';
- el('hkRouteMeta').textContent=(meta.routeMode||'-')+' · '+(lang==='zh'?'只比较港股自身冻结基线':'HK-only frozen-control comparison');
- el('hkRouteStatus').textContent=(routeEvaluated?.evaluation?.status)||(latest?.status)||'-';
- el('hkSelected').textContent=String(selected.length);
- el('hkChanged').textContent=String(changed);
- if(routeEvaluated){
-  const gap=Number(routeEvaluated.evaluation?.excess_return||0);
-  el('hkPosterior').textContent=signedPct(gap);
-  el('hkPosterior').className=cls(gap);
- }else{
-  el('hkPosterior').textContent=lang==='zh'?'等待真实后验':'Awaiting posterior';
-  el('hkPosterior').className='';
+ if(!report){
+  el('hkRouteStatus').textContent=lang==='zh'?'等待首个正式冻结决策':'Awaiting first formal frozen decision';
+  el('hkRouteMeta').textContent='HK_RETURN_MAX_CAPACITY';
+  el('hkRouteNote').textContent=lang==='zh'
+   ? '港股实时行情与策略候选可以盘中更新，但主路线、四档港币容量和正式后验只在完整日线冻结后进入证据链。'
+   : 'HK live data and candidate strategies may update intraday, but the primary route, four HKD capacity sleeves and formal posterior evidence enter the ledger only after a complete daily freeze.';
+  for(const id of ['hkExpected','hkBaseline','hkBenchmark','hkRisk'])el(id).textContent='-';
+  el('hkStrategyRows').innerHTML=tableEmptyRow(3,'等待首个正式港股冻结策略群。','Awaiting the first formal HK frozen strategy group.');
+  el('hkAssetRows').innerHTML=tableEmptyRow(2,'等待港股冻结ETF敞口。','Awaiting frozen HK ETF exposure.');
+  el('hkCapitalRows').innerHTML=tableEmptyRow(5,'等待首个四档港币容量决策。','Awaiting the first four-sleeve HKD capacity decision.');
+  el('hkRealizedRows').innerHTML=tableEmptyRow(6,'尚无上一轮港股容量后验。','No prior HK capacity posterior is available yet.');
+  el('hkDailyRows').innerHTML=tableEmptyRow(4,'尚无上一轮港股真实后验路径。','No prior HK realized posterior path is available yet.');
+  return;
  }
- el('hkCapacity').textContent=lang==='zh'?'待建立专属账本':'Dedicated ledger pending';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ el('hkRouteTitle').textContent=lang==='zh'?'港股 Return-Max 路线':'HK Return-Max Route';
+ el('hkRouteStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('hkRouteMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · HK_RETURN_MAX_CAPACITY';
+ el('hkExpectedLabel').textContent=lang==='zh'?'TRIAID 多周期年化状态估计':'TRIAID multi-window annualized state estimate';
+ el('hkBaselineLabel').textContent=lang==='zh'?'冻结基线多周期年化状态估计':'Frozen-baseline multi-window annualized state estimate';
+ el('hkBenchmarkLabel').textContent=lang==='zh'?'2800.HK 多周期年化状态估计':'2800.HK multi-window annualized state estimate';
+ el('hkRiskLabel').textContent=lang==='zh'?'目标风险仓位':'Target risk exposure';
+ el('hkExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
+ el('hkBaseline').textContent=fmtPct(d.baseline_projected_annualized_expected_net_return);
+ el('hkBenchmark').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
+ el('hkRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
  el('hkRouteNote').textContent=lang==='zh'
-  ?'港股策略选择、冻结基线与后验全部独立记录。当前页面不会用美股或A股容量结果填补港股证据；在专属容量账本形成前，这一项明确保持“待验证”。'
-  :'HK strategy selection, frozen controls and posterior evidence are recorded independently. The page will not fill HK capacity evidence with US/CN results; this remains explicitly unvalidated until an HK-specific capacity ledger exists.';
- const rows=[
-  ...meta.riskAssets.map(x=>[x,lang==='zh'?'风险资产':'Risk asset']),
-  ...meta.defensiveAssets.map(x=>[x,lang==='zh'?'防御资产':'Defensive asset'])
- ];
- el('hkAssetRows').innerHTML=rows.map(x=>'<tr><td>'+esc(x[0])+'</td><td>'+esc(x[1])+'</td></tr>').join('');
+  ? '港股现在与美股/A股处于同一级主路线：独立冻结策略、港股ETF敞口、四档HKD资金容量、模型执行成本和未来真实后验全部使用港股自身数据。状态收益估计只用于冻结排序，不是未来收益保证；模拟成交不是券商真实成交。'
+  : 'HK now has the same primary-route evidence level as US/CN: HK-only frozen strategies, ETF exposures, four HKD capacity sleeves, modeled execution costs and future realized posterior evidence. State-return estimates are ranking inputs rather than guaranteed future returns, and simulated fills are not broker executions.';
+
+ const tw=d.target_strategy_weights||{},bw=d.baseline_strategy_weights||{};
+ const sids=Array.from(new Set([...Object.keys(tw),...Object.keys(bw)])).sort((a,b)=>Number(tw[b]||0)-Number(tw[a]||0)||a.localeCompare(b));
+ el('hkStrategyRows').innerHTML=sids.map(sid=>'<tr><td>'+strategyLabelHtml(strategyNameIndex.HK[sid]||sid,sid)+'</td><td class="num triaid">'+fmtPct(tw[sid]||0)+'</td><td class="num">'+fmtPct(bw[sid]||0)+'</td></tr>').join('') ||
+  tableEmptyRow(3,'等待冻结策略权重。','Awaiting frozen strategy weights.');
+
+ const aw=d.target_asset_weights||{};
+ el('hkAssetRows').innerHTML=Object.entries(aw).filter(([_,w])=>Number(w)>1e-12).sort((a,b)=>Number(b[1])-Number(a[1])).map(([a,w])=>'<tr><td>'+esc(a)+'</td><td class="num">'+fmtPct(w)+'</td></tr>').join('') ||
+  tableEmptyRow(2,'当前无风险ETF敞口。','No current risky ETF exposure.');
+
+ const cap=d.capital_capacity||{};
+ el('hkCapitalMeta').textContent=(lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+'ADV20 · '+fmtPct(cap.max_participation_adv)+' cap · '+(cap.base_cost_bps??'-')+'bps base · '+(cap.impact_coefficient_bps??'-')+'bps×√participation';
+ el('hkCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtHkd(x.starting_capital_hkd)+'</td><td class="num">'+fmtHkd(x.target_invested_notional_hkd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtHkd(x.estimated_round_trip_cost_proxy_hkd)+'</td></tr>').join('') ||
+  tableEmptyRow(5,'等待资金容量决策。','Awaiting HKD capacity decision.');
+
+ const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('hkRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtHkd(x.starting_capital_hkd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtHkd(x.current_equity_hkd)+'</td><td class="num '+cls(Number(x.current_net_pnl_hkd||0))+'">'+fmtHkd(x.current_net_pnl_hkd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtHkd(x.total_execution_cost_hkd)+'</td></tr>').join('') ||
+  tableEmptyRow(6,'上一轮尚无可用的后验模拟执行结果。','No eligible posterior simulated-execution result for the prior HK decision yet.');
+
+ const path=(review&&review.daily_path)||[];
+ el('hkDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.triaid_cumulative_return||0))+'">'+fmtPct(x.triaid_cumulative_return)+'</td><td class="num '+cls(Number(x.baseline_cumulative_return||0))+'">'+fmtPct(x.baseline_cumulative_return)+'</td><td class="num '+cls(Number(x.benchmark_cumulative_return||0))+'">'+fmtPct(x.benchmark_cumulative_return)+'</td></tr>').join('') ||
+  tableEmptyRow(4,'等待下一完整港股交易日结果。','Awaiting the next complete HK trading-day outcome.');
+
+ const labels={
+  hkStrategyTitle:lang==='zh'?'当前冻结策略权重':'Current frozen strategy weights',
+  hkStrategyHeader:lang==='zh'?'策略':'Strategy',
+  hkTriaidWeightHeader:lang==='zh'?'TRIAID 权重':'TRIAID weight',
+  hkBaseWeightHeader:lang==='zh'?'冻结基线权重':'Frozen baseline weight',
+  hkAssetTitle:lang==='zh'?'底层港股 ETF 目标敞口':'Underlying HK ETF target exposure',
+  hkAssetSymbolHeader:'ETF',
+  hkAssetWeightHeader:lang==='zh'?'目标权重':'Target weight',
+  hkCapitalTitle:lang==='zh'?'四档港币资金规模容量实验':'Four HKD capital-sleeve capacity experiment',
+  hkCapCapital:lang==='zh'?'起始资金':'Starting capital',
+  hkCapInvested:lang==='zh'?'目标投入':'Target invested',
+  hkCapParticipation:lang==='zh'?'最大目标仓位/ADV':'Max target/ADV',
+  hkCapDays:lang==='zh'?'最少成交天数':'Minimum execution days',
+  hkCapCost:lang==='zh'?'模型往返成本代理':'Modeled round-trip cost proxy',
+  hkRealizedTitle:lang==='zh'?'上一轮真实市场后验与模拟执行容量回顾':'Prior realized market posterior and simulated capacity review',
+  hkRealCapital:lang==='zh'?'起始资金':'Starting capital',
+  hkRealFill:lang==='zh'?'模拟成交比例':'Simulated fill ratio',
+  hkRealEquity:lang==='zh'?'模拟当前净值':'Simulated current equity',
+  hkRealPnl:lang==='zh'?'模拟净损益':'Simulated net P&L',
+  hkRealReturn:lang==='zh'?'模拟净收益率':'Simulated net return',
+  hkRealCost:lang==='zh'?'模型执行成本':'Modeled execution cost',
+  hkDailyTitle:lang==='zh'?'上一轮冻结配置理论持仓后验路径':'Prior frozen-allocation theoretical posterior path',
+  hkDailyDate:lang==='zh'?'结果日':'Outcome date',
+  hkDailyTriaid:lang==='zh'?'TRIAID 累计':'TRIAID cumulative',
+  hkDailyBase:lang==='zh'?'冻结基线累计':'Frozen baseline cumulative',
+  hkDailyBenchmark:lang==='zh'?'2800.HK 累计':'2800.HK cumulative'
+ };
+ for(const [id,value] of Object.entries(labels))if(el(id))el(id).textContent=value;
 }
 function renderUSReturnMax(report){
  const panel=el('usReturnMaxPanel');
@@ -3787,7 +3883,7 @@ async function refreshAll(preferStale=false){
   renderUSReturnMax(m==='US'?d.us_return_max:null);
   renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null);
   renderRecoveryWave(isCN?d.recovery_wave:null);
-  renderHKRoutePanel(m,latest,routeEvaluated,selected);
+  renderHKRoutePanel(m,d.hk_return_max||null);
   drawCurve(curves);
   const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
   const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));

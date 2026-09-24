@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Optional
 from .contracts import RunRecord
 from .capital_capacity import CAPITAL_SLEEVES_CNY
 from .us_return_max import USD_CAPITAL_SLEEVES
+from .hk_return_max import HKD_CAPITAL_SLEEVES
 
 
 class ReviewModule:
@@ -23,7 +24,7 @@ class ReviewModule:
     @staticmethod
     def _primary_mode(market_id:str)->str:
         market_id=str(market_id).upper()
-        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else ""
+        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else "HK_RETURN_MAX_CAPACITY" if market_id=="HK" else ""
 
     @classmethod
     def _primary_route(cls,run:RunRecord)->bool:
@@ -225,6 +226,8 @@ class ReviewModule:
             return "USD",tuple(float(x) for x in USD_CAPITAL_SLEEVES)
         if market=="CN":
             return "CNY",tuple(float(x) for x in CAPITAL_SLEEVES_CNY)
+        if market=="HK":
+            return "HKD",tuple(float(x) for x in HKD_CAPITAL_SLEEVES)
         return "NATIVE",()
 
     @classmethod
