@@ -89,7 +89,8 @@ assert 'id="riskDataQuality"' in html
 assert 'id="riskDataGaps"' in html
 assert "数据完整性与降级状态" in html
 assert "renderRiskControl" in html
-assert "/api/risk-warning/latest" not in html\nassert "/api/risk-control/latest" not in html
+assert "/api/risk-warning/latest" not in html
+assert "/api/risk-control/latest" not in html
 assert "三市场风控 Shadow 实验" in html
 assert "港股独立路线" in html
 assert "不能借用美股/A股权重、容量或结果补齐港股结论" in html
