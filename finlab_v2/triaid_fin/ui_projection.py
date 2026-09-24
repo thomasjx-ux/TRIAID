@@ -380,12 +380,26 @@ def _live_sections(automation,scheduler,market:str)->dict:
         )
     else:
         events=activity.get("events") or []
-        activity_section=_section(
-            READY if events else WAITING,
-            activity,
-            reason=None if events else "NO_ACTIVITY_EVENTS_IN_CURRENT_WINDOW",
-            source="market_data_automation.activity",
-        )
+        if events:
+            activity_section=_section(
+                READY,
+                activity,
+                source="market_data_automation.activity",
+            )
+        elif phase in {"PREOPEN","OPEN","BREAK"}:
+            activity_section=_section(
+                WAITING,
+                activity,
+                reason="NO_ACTIVITY_EVENTS_IN_CURRENT_WINDOW",
+                source="market_data_automation.activity",
+            )
+        else:
+            activity_section=_section(
+                NOT_APPLICABLE,
+                activity,
+                reason="ACTIVITY_NOT_EXPECTED_OUTSIDE_ACTIVE_SESSION",
+                source="market_data_automation.activity",
+            )
 
     try:
         scheduler_status=scheduler.status()
@@ -433,25 +447,36 @@ def _live_sections(automation,scheduler,market:str)->dict:
             row for row in session_events
             if row.get("event_type")=="TRANSITION_RESEARCH_DECISION"
         ]
-        intraday_section=_section(
-            READY if decisions else WAITING,
-            {
-                "state":scheduler_state,
-                "events":session_events,
-                "decision_events":decisions,
-                "latest_decision":decisions[-1] if decisions else None,
-                "decision_count":int(scheduler_state.get("decision_count") or len(decisions)),
-                "allocation_action_count":int(
-                    scheduler_state.get("allocation_action_count") or 0
-                ),
-            },
-            reason=None if decisions else (
-                "OPEN_SESSION_MONITORING_NO_RECOMPUTE_YET"
-                if phase=="OPEN"
-                else "INTRADAY_RECOMPUTE_NOT_EXPECTED_OUTSIDE_OPEN"
+        intraday_payload={
+            "state":scheduler_state,
+            "events":session_events,
+            "decision_events":decisions,
+            "latest_decision":decisions[-1] if decisions else None,
+            "decision_count":int(scheduler_state.get("decision_count") or len(decisions)),
+            "allocation_action_count":int(
+                scheduler_state.get("allocation_action_count") or 0
             ),
-            source="decision_scheduler.intraday",
-        )
+        }
+        if decisions:
+            intraday_section=_section(
+                READY,
+                intraday_payload,
+                source="decision_scheduler.intraday",
+            )
+        elif phase=="OPEN":
+            intraday_section=_section(
+                WAITING,
+                intraday_payload,
+                reason="OPEN_SESSION_MONITORING_NO_RECOMPUTE_YET",
+                source="decision_scheduler.intraday",
+            )
+        else:
+            intraday_section=_section(
+                NOT_APPLICABLE,
+                intraday_payload,
+                reason="INTRADAY_RECOMPUTE_NOT_EXPECTED_OUTSIDE_OPEN",
+                source="decision_scheduler.intraday",
+            )
     except Exception as exc:
         scheduler_section=_error_section(
             "decision_scheduler",
@@ -678,7 +703,13 @@ class MarketPageProjection:
     def live(self,market_id:str)->dict:
         market=normalize_market_id(market_id)
         sections=_live_sections(self.automation,self.scheduler,market)
-        integrity=_validate_projection(market,sections,strict_live=True)
+        live_data=(sections.get("live") or {}).get("data") or {}
+        phase=str(live_data.get("session_phase") or "").upper()
+        integrity=_validate_projection(
+            market,
+            sections,
+            strict_live=phase in {"PREOPEN","OPEN"},
+        )
         return {
             "contract_version":self.version,
             "projection_scope":"LIVE",
