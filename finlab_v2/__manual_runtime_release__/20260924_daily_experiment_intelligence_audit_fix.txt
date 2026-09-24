@@ -1,0 +1,8 @@
+TRIAID FIN evolution-first daily intelligence audited release
+Date: 2026-09-24
+Build audit status: PASS on main commit a45f13a18ddf9a2b7b24aa69a7d0da334d01ebc8
+Audit repairs:
+- experiment-review table headers added to semantic tooltip contract
+- experiment-review tables added to exact table-surface contract
+- no audit gate weakened
+Release purpose: deploy the audited daily experiment intelligence stack to Railway.
