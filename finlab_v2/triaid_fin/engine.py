@@ -720,6 +720,7 @@ class EvolutionLabEngine:
                         previous_states=previous_states,
                     )
                 us_route_bootstrap=None
+                hk_route_bootstrap=None
                 if market_id=="US":
                     us_route_bootstrap=self.us_return_max_ledger.by_snapshot(
                         snapshot.snapshot_id,
@@ -741,6 +742,26 @@ class EvolutionLabEngine:
                         )
                     snapshot.metadata["us_return_max_decision_id"]=us_route_bootstrap.get("decision_id")
                     snapshot.metadata["us_return_max_decision_hash"]=us_route_bootstrap.get("decision_hash")
+                elif market_id=="HK":
+                    hk_route_bootstrap=self.hk_return_max_ledger.by_snapshot(
+                        snapshot.snapshot_id,
+                        self.hk_return_max.version,
+                    )
+                    if hk_route_bootstrap is None:
+                        proposed_hk_route=self.hk_return_max.decide(
+                            prepared["panel"],
+                            existing.strategy_group,
+                            existing.triaid_decision,
+                            existing.strategy_states,
+                            phase,
+                        )
+                        hk_route_bootstrap=self.hk_return_max_ledger.freeze(
+                            proposed_hk_route,
+                            snapshot.snapshot_id,
+                            snapshot.as_of,
+                        )
+                    snapshot.metadata["hk_return_max_decision_id"]=hk_route_bootstrap.get("decision_id")
+                    snapshot.metadata["hk_return_max_decision_hash"]=hk_route_bootstrap.get("decision_hash")
                 with self._lock:
                     run=self._runs[run_id]
                     run.market=snapshot
@@ -763,6 +784,9 @@ class EvolutionLabEngine:
                         "us_return_max_decision_id":us_route_bootstrap.get("decision_id") if us_route_bootstrap else None,
                         "us_return_max_decision_hash":us_route_bootstrap.get("decision_hash") if us_route_bootstrap else None,
                         "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
+                        "hk_return_max_decision_id":hk_route_bootstrap.get("decision_id") if hk_route_bootstrap else None,
+                        "hk_return_max_decision_hash":hk_route_bootstrap.get("decision_hash") if hk_route_bootstrap else None,
+                        "hk_return_max_outcome_recorded":bool((hk_return_outcome or {}).get("recorded")),
                     }
                     self._save_run(run)
                 return
@@ -817,6 +841,7 @@ class EvolutionLabEngine:
                 self._save_run(run)
             self.execute(run_id,request)
             us_route_decision=None
+            hk_route_decision=None
             if market_id=="US" and evidence_eligible:
                 completed_run=self.get_run(run_id)
                 us_route_decision=self.us_return_max_ledger.by_snapshot(
@@ -839,6 +864,27 @@ class EvolutionLabEngine:
                     )
                 snapshot.metadata["us_return_max_decision_id"]=us_route_decision.get("decision_id")
                 snapshot.metadata["us_return_max_decision_hash"]=us_route_decision.get("decision_hash")
+            elif market_id=="HK" and evidence_eligible:
+                completed_run=self.get_run(run_id)
+                hk_route_decision=self.hk_return_max_ledger.by_snapshot(
+                    snapshot.snapshot_id,
+                    self.hk_return_max.version,
+                )
+                if hk_route_decision is None:
+                    proposed_hk_route=self.hk_return_max.decide(
+                        prepared["panel"],
+                        completed_run.strategy_group,
+                        completed_run.triaid_decision,
+                        completed_run.strategy_states,
+                        phase,
+                    )
+                    hk_route_decision=self.hk_return_max_ledger.freeze(
+                        proposed_hk_route,
+                        snapshot.snapshot_id,
+                        snapshot.as_of,
+                    )
+                snapshot.metadata["hk_return_max_decision_id"]=hk_route_decision.get("decision_id")
+                snapshot.metadata["hk_return_max_decision_hash"]=hk_route_decision.get("decision_hash")
             with self._lock:
                 run=self._runs[run_id]
                 run.market=snapshot
@@ -853,6 +899,10 @@ class EvolutionLabEngine:
                     "us_return_max_decision_hash":us_route_decision.get("decision_hash") if us_route_decision else None,
                     "us_return_max_decision_status":us_route_decision.get("decision_status") if us_route_decision else None,
                     "us_return_max_outcome_recorded":bool((us_return_outcome or {}).get("recorded")),
+                    "hk_return_max_decision_id":hk_route_decision.get("decision_id") if hk_route_decision else None,
+                    "hk_return_max_decision_hash":hk_route_decision.get("decision_hash") if hk_route_decision else None,
+                    "hk_return_max_decision_status":hk_route_decision.get("decision_status") if hk_route_decision else None,
+                    "hk_return_max_outcome_recorded":bool((hk_return_outcome or {}).get("recorded")),
                     "daily_bar_complete":daily_bar_complete,
                     "evidence_state":(
                         "MANUAL_PREVIEW_NON_EVIDENCE"
@@ -912,6 +962,18 @@ class EvolutionLabEngine:
 
     def us_return_max_daily_report(self)->dict|None:
         return self.us_return_max_ledger.daily_report()
+
+    def hk_return_max_status(self)->dict:
+        return self.hk_return_max_ledger.status()
+
+    def latest_hk_return_max_decision(self)->dict|None:
+        return self.hk_return_max_ledger.latest()
+
+    def hk_return_max_history(self,limit:int=100)->list[dict]:
+        return self.hk_return_max_ledger.decisions(limit)
+
+    def hk_return_max_daily_report(self)->dict|None:
+        return self.hk_return_max_ledger.daily_report()
 
     def long_cycle_hypothesis_run(self,force:bool=False)->dict:
         return self.long_cycle_hypothesis.run(force=force)
@@ -1429,6 +1491,11 @@ class EvolutionLabEngine:
                 risk_control=self.risk_control.latest()
                 if risk_control:
                     summary["risk_control"]=risk_control
+        include_hk=(market_id is None) or market_id.upper()=="HK"
+        if include_hk:
+            hk_return=self.hk_return_max_ledger.daily_report()
+            if hk_return:
+                summary["hk_return_max"]=hk_return
         include_cn=(market_id is None) or market_id.upper()=="CN"
         if include_cn:
             recovery=self.recovery_wave_ledger.daily_report("CN")
