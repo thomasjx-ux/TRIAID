@@ -86,6 +86,13 @@ assert "/api/experiments/outcomes/" not in html
 assert "样本增量合计" in html
 assert "研究统计，不等于账户累计收益" in html
 assert "前瞻样本增量累计" in html
+assert "已经走完整个“先冻结、后看结果”流程的次数" in html
+assert "有多少次 TRIAID 最后的结果比当时的基线更好" in html
+assert "每次结算后，TRIAID 平均比基线多赚或少赚多少" in html
+assert "正数说明这次调整有帮助，负数说明拖累" in html
+assert "这条线只看 TRIAID 相对基线的累计变化，不是账户净值" in html
+assert "validationValueTitle" in html and "validationPositiveLabel" in html
+assert "marketValidationProofTitle" in html and "vpExcessLabel" in html
 assert "它不是第四个市场" in html
 assert 'id="riskThreeMarketRows"' in html
 assert 'id="riskDynamicsRows"' in html
