@@ -33,7 +33,7 @@ assert "2819.HK" not in panel.close
 assert any("2819.HK:sparse_alignment" in x for x in (panel.degraded_symbols or []))
 assert panel.quality.endswith("_partial_optional_symbol")
 meta=panel.metadata()
-assert meta["partial_symbol_policy"]=="HK_HIGH_FREQUENCY_SPARSE_DEFENSIVE_NO_INTERPOLATION"
+assert meta["partial_symbol_policy"]=="OPTIONAL_SPARSE_SYMBOL_NO_INTERPOLATION"
 assert meta["requested_symbols"]==list(symbols)
 
 failed=False
