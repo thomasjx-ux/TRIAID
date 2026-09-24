@@ -1,0 +1,3 @@
+Release audited volatility explainability update.
+Includes homepage plain-language interpretation and visible hover info markers for US/CN/HK volatility cards.
+Expected feature merge: d6289803840f47018bf579aa717f079735bff4dd.
