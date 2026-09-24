@@ -4,7 +4,7 @@
     "builder": "RAILPACK",
     "buildCommand": "sh build_gate.sh",
     "watchPatterns": [
-      "/finlab_v2/__manual_runtime_release__/**"
+      "/finlab_v2/**"
     ]
   },
   "deploy": {
