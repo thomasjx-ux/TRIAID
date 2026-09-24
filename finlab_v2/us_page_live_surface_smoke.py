@@ -5,7 +5,7 @@ from app import home
 
 ROOT=Path(__file__).resolve().parent
 source=(ROOT/"app.py").read_text(encoding="utf-8")
-projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
+projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")\ninterfaces=(ROOT/"triaid_fin"/"market_interfaces.py").read_text(encoding="utf-8")
 html=home()
 
 live_start=source.find("async function refreshLiveWindows()")
@@ -30,7 +30,7 @@ checks={
     "unavailable_realized_table_collapses":"usrmRealizedWrap').style.display=hasRealized?'block':'none'" in source,
     "unavailable_daily_table_collapses":"usrmDailyWrap').style.display=hasDaily?'block':'none'" in source,
     "formal_return_max_still_present":'id="usrmStrategyRows"' in html and 'id="usrmCapitalRows"' in html,
-    "projection_requires_us_route_completeness":"US_FOUR_CAPITAL_SLEEVES_REQUIRED" in projection and "US_ASSET_WEIGHTS_INCOMPLETE" in projection,
+    "projection_requires_us_route_completeness":"US_ROUTE=RouteProjectionSpec" in interfaces and "capital_sleeves=4" in interfaces and "min_asset_weights=5" in interfaces and "registered_route_contract" in projection.lower(),
 }
 failed=[name for name,ok in checks.items() if not ok]
 if failed:
