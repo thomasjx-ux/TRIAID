@@ -4,15 +4,17 @@ import math
 from copy import deepcopy
 from datetime import datetime, timezone
 
+from .market_data import session_phase
 from .market_registry import MARKET_REGISTRY, normalize_market_id
 
 
-VERSION="market-page-projection@1.0.0"
+VERSION="market-page-projection@1.1.0"
 READY="READY"
 WAITING="WAITING"
 STALE="STALE"
 NOT_APPLICABLE="NOT_APPLICABLE"
 ERROR="ERROR"
+VALID_STATES={READY,WAITING,STALE,NOT_APPLICABLE,ERROR}
 
 
 def _section(
@@ -25,6 +27,8 @@ def _section(
     required:bool=False,
 )->dict:
     state=str(state or ERROR).upper()
+    if state not in VALID_STATES:
+        raise ValueError(f"invalid UI projection state: {state}")
     if state!=READY and not reason:
         raise ValueError("non-ready UI projection section must include a reason")
     return {
@@ -35,6 +39,16 @@ def _section(
         "as_of":as_of,
         "data":deepcopy(data) if data is not None else {},
     }
+
+
+def _error_section(source:str,exc:Exception,*,required:bool=False,data=None)->dict:
+    return _section(
+        ERROR,
+        {} if data is None else data,
+        reason=f"{type(exc).__name__}:{exc}",
+        source=source,
+        required=required,
+    )
 
 
 def _finite(value)->bool:
@@ -123,7 +137,63 @@ def strategy_rows(engine,market_id:str,lang:str="zh",run_id:str|None=None)->list
     return out
 
 
-def _route_section(market:str,daily:dict)->dict:
+def _strategy_section(engine,market:str,lang:str,run_id:str|None)->dict:
+    try:
+        rows=strategy_rows(engine,market,lang,run_id)
+    except Exception as exc:
+        return _error_section(
+            "strategy_population+latest_decision_run",
+            exc,
+            required=True,
+            data=[],
+        )
+    if not rows:
+        return _section(
+            ERROR,
+            [],
+            reason="STRATEGY_TABLE_EMPTY",
+            source="strategy_population+latest_decision_run",
+            required=True,
+        )
+    malformed=[]
+    for row in rows:
+        if not isinstance(row,dict) or not row.get("strategy_id"):
+            malformed.append(None)
+            continue
+        if not all(
+            _finite(row.get(field))
+            for field in ("expected_net_return","risk","baseline_weight","triaid_weight")
+        ):
+            malformed.append(row.get("strategy_id"))
+    if malformed:
+        return _section(
+            ERROR,
+            rows,
+            reason="STRATEGY_NUMERIC_FIELDS_INCOMPLETE:"+",".join(
+                str(x) for x in malformed[:10]
+            ),
+            source="strategy_population+latest_decision_run",
+            as_of=next((x.get("as_of") for x in rows if x.get("as_of")),None),
+            required=True,
+        )
+    return _section(
+        READY,
+        rows,
+        source="strategy_population+latest_decision_run",
+        as_of=next((x.get("as_of") for x in rows if x.get("as_of")),None),
+        required=True,
+    )
+
+
+def _route_section(market:str,daily:dict,daily_state:str=READY)->dict:
+    if daily_state!=READY:
+        return _section(
+            ERROR,
+            {},
+            reason="DEPENDENCY_DAILY_SUMMARY_NOT_READY",
+            source="market_route_projection",
+            required=True,
+        )
     if market=="US":
         report=daily.get("us_return_max")
         return _section(
@@ -160,17 +230,25 @@ def _route_section(market:str,daily:dict)->dict:
     )
 
 
-def _posterior_section(market:str,route:dict,runs:list[dict],curves:list[dict])->dict:
+def _posterior_section(market:str,route:dict,runs_section:dict,curves_section:dict)->dict:
+    if route.get("state") not in {READY,WAITING}:
+        return _section(
+            WAITING,
+            {},
+            reason="POSTERIOR_WAITING_FOR_ROUTE_DEPENDENCY",
+            source="realized_posterior",
+        )
     if market in {"US","HK"}:
         report=route.get("data") or {}
         review=report.get("previous_decision_review") or report.get("latest_decision_review") or {}
         days=int(review.get("observation_days") or 0)
         if days>0:
+            path=review.get("daily_path") or []
             return _section(
                 READY,
                 review,
                 source=f"{market.lower()}_route_realized_posterior",
-                as_of=(review.get("daily_path") or [{}])[-1].get("as_of") if review.get("daily_path") else None,
+                as_of=(path[-1].get("as_of") if path else None),
             )
         return _section(
             WAITING,
@@ -179,9 +257,12 @@ def _posterior_section(market:str,route:dict,runs:list[dict],curves:list[dict])-
             source=f"{market.lower()}_route_realized_posterior",
         )
 
+    runs=(runs_section.get("data") or []) if runs_section.get("state") in {READY,WAITING} else []
+    curves=(curves_section.get("data") or []) if curves_section.get("state") in {READY,WAITING} else []
     evaluated=[
         row for row in runs
-        if isinstance(row.get("evaluation"),dict)
+        if isinstance(row,dict)
+        and isinstance(row.get("evaluation"),dict)
         and row["evaluation"].get("status")=="EVALUATED"
     ]
     if evaluated:
@@ -206,14 +287,43 @@ def _posterior_section(market:str,route:dict,runs:list[dict],curves:list[dict])-
     )
 
 
-def _live_sections(automation,scheduler,market:str)->tuple[dict,dict,dict]:
-    live=automation.live_indicators(market)
-    activity=automation.activity(market,80)
-    scheduler_status=scheduler.status()
-    scheduler_state=((scheduler_status.get("markets") or {}).get(market) or {})
-    scheduler_events=scheduler.events(market,120)
+def _live_sections(automation,scheduler,market:str)->dict:
+    try:
+        fallback_phase=str(session_phase(market) or "").upper()
+    except Exception:
+        fallback_phase=""
 
-    phase=str(live.get("session_phase") or activity.get("session_phase") or "").upper()
+    try:
+        live=automation.live_indicators(market)
+        live_exc=None
+    except Exception as exc:
+        live={
+            "market_id":market,
+            "session_phase":fallback_phase,
+            "available":False,
+            "instruments":[],
+        }
+        live_exc=exc
+
+    try:
+        activity=automation.activity(market,80)
+        activity_exc=None
+    except Exception as exc:
+        activity={
+            "market_id":market,
+            "session_phase":fallback_phase,
+            "refresh_plan":{},
+            "schedule_text":"",
+            "events":[],
+        }
+        activity_exc=exc
+
+    phase=str(
+        live.get("session_phase")
+        or activity.get("session_phase")
+        or fallback_phase
+        or ""
+    ).upper()
     available=bool(live.get("available"))
     freshness=live.get("freshness_seconds")
     stale=bool(
@@ -222,7 +332,14 @@ def _live_sections(automation,scheduler,market:str)->tuple[dict,dict,dict]:
         and _finite(freshness)
         and float(freshness)>180.0
     )
-    if available and not stale:
+    if live_exc is not None:
+        live_section=_error_section(
+            "market_data_automation.live_indicators",
+            live_exc,
+            required=phase=="OPEN",
+            data=live,
+        )
+    elif available and not stale:
         live_section=_section(
             READY,
             live,
@@ -253,27 +370,114 @@ def _live_sections(automation,scheduler,market:str)->tuple[dict,dict,dict]:
             live,
             reason="MARKET_NOT_IN_OPEN_SESSION",
             source="market_data_automation.live_indicators",
-            required=False,
         )
 
-    activity_section=_section(
-        READY,
-        activity,
-        source="market_data_automation.activity",
-        required=phase=="OPEN",
-    )
-    scheduler_section=_section(
-        READY,
-        {
-            "state":scheduler_state,
-            "events":scheduler_events,
-            "version":scheduler_status.get("version"),
-            "enabled":scheduler_status.get("enabled"),
-        },
-        source="decision_scheduler",
-        required=phase=="OPEN",
-    )
-    return live_section,activity_section,scheduler_section
+    if activity_exc is not None:
+        activity_section=_error_section(
+            "market_data_automation.activity",
+            activity_exc,
+            data=activity,
+        )
+    else:
+        events=activity.get("events") or []
+        activity_section=_section(
+            READY if events else WAITING,
+            activity,
+            reason=None if events else "NO_ACTIVITY_EVENTS_IN_CURRENT_WINDOW",
+            source="market_data_automation.activity",
+        )
+
+    try:
+        scheduler_status=scheduler.status()
+        scheduler_state=((scheduler_status.get("markets") or {}).get(market) or {})
+        scheduler_events=scheduler.events(market,120)
+        baseline_required=phase in {"PREOPEN","OPEN"}
+        baseline_ready=bool(
+            not baseline_required
+            or (
+                scheduler_state.get("baseline_done") is True
+                and scheduler_state.get("baseline_fresh") is True
+            )
+        )
+        if baseline_ready:
+            scheduler_section=_section(
+                READY,
+                {
+                    "state":scheduler_state,
+                    "events":scheduler_events,
+                    "version":scheduler_status.get("version"),
+                    "enabled":scheduler_status.get("enabled"),
+                },
+                source="decision_scheduler",
+                required=baseline_required,
+            )
+        else:
+            scheduler_section=_section(
+                STALE,
+                {
+                    "state":scheduler_state,
+                    "events":scheduler_events,
+                    "version":scheduler_status.get("version"),
+                    "enabled":scheduler_status.get("enabled"),
+                },
+                reason="ACTIVE_SESSION_BASELINE_NOT_FRESH",
+                source="decision_scheduler",
+                required=True,
+            )
+        session_date=str(scheduler_state.get("session_date") or "")
+        session_events=[
+            row for row in scheduler_events
+            if not session_date or str(row.get("session_date") or "")==session_date
+        ]
+        decisions=[
+            row for row in session_events
+            if row.get("event_type")=="TRANSITION_RESEARCH_DECISION"
+        ]
+        intraday_section=_section(
+            READY if decisions else WAITING,
+            {
+                "state":scheduler_state,
+                "events":session_events,
+                "decision_events":decisions,
+                "latest_decision":decisions[-1] if decisions else None,
+                "decision_count":int(scheduler_state.get("decision_count") or len(decisions)),
+                "allocation_action_count":int(
+                    scheduler_state.get("allocation_action_count") or 0
+                ),
+            },
+            reason=None if decisions else (
+                "OPEN_SESSION_MONITORING_NO_RECOMPUTE_YET"
+                if phase=="OPEN"
+                else "INTRADAY_RECOMPUTE_NOT_EXPECTED_OUTSIDE_OPEN"
+            ),
+            source="decision_scheduler.intraday",
+        )
+    except Exception as exc:
+        scheduler_section=_error_section(
+            "decision_scheduler",
+            exc,
+            required=phase in {"PREOPEN","OPEN"},
+            data={"state":{},"events":[]},
+        )
+        intraday_section=_error_section(
+            "decision_scheduler.intraday",
+            exc,
+            data={
+                "state":{},
+                "events":[],
+                "decision_events":[],
+                "latest_decision":None,
+                "decision_count":0,
+                "allocation_action_count":0,
+            },
+        )
+
+    return {
+        "live":live_section,
+        "activity":activity_section,
+        "scheduler":scheduler_section,
+        "intraday":intraday_section,
+    }
 
 
 def _validate_projection(market:str,sections:dict)->dict:
@@ -281,26 +485,30 @@ def _validate_projection(market:str,sections:dict)->dict:
     warnings=[]
     unexplained=[]
     for name,section in sections.items():
-        if section.get("state")!=READY and not section.get("reason"):
+        state=section.get("state")
+        if state!=READY and not section.get("reason"):
             unexplained.append(name)
-        if section.get("required") and section.get("state")!=READY:
-            errors.append(f"{name}:{section.get('state')}:{section.get('reason')}")
+        if section.get("required") and state!=READY:
+            errors.append(f"{name}:{state}:{section.get('reason')}")
+        elif state in {WAITING,STALE,ERROR}:
+            warnings.append(f"{name}:{state}:{section.get('reason')}")
 
     strategies=(sections.get("strategies") or {}).get("data") or []
-    malformed_strategy_rows=[]
-    for row in strategies:
-        if not isinstance(row,dict) or not row.get("strategy_id"):
-            malformed_strategy_rows.append(None)
-            continue
-        for field in ("expected_net_return","risk","baseline_weight","triaid_weight"):
-            if not _finite(row.get(field)):
-                malformed_strategy_rows.append(row.get("strategy_id"))
-                break
-    if malformed_strategy_rows:
-        errors.append("strategies:NUMERIC_FIELDS_INCOMPLETE")
+    if (sections.get("strategies") or {}).get("state")==READY:
+        malformed_strategy_rows=[]
+        for row in strategies:
+            if not isinstance(row,dict) or not row.get("strategy_id"):
+                malformed_strategy_rows.append(None)
+                continue
+            for field in ("expected_net_return","risk","baseline_weight","triaid_weight"):
+                if not _finite(row.get(field)):
+                    malformed_strategy_rows.append(row.get("strategy_id"))
+                    break
+        if malformed_strategy_rows:
+            errors.append("strategies:NUMERIC_FIELDS_INCOMPLETE")
 
     route=(sections.get("route") or {}).get("data") or {}
-    if market=="US" and route:
+    if market=="US" and (sections.get("route") or {}).get("state")==READY:
         latest=route.get("latest_decision") or {}
         if not latest.get("decision_id"):
             errors.append("route:US_DECISION_ID_MISSING")
@@ -320,20 +528,26 @@ def _validate_projection(market:str,sections:dict)->dict:
         if len(sleeves)!=4:
             errors.append("route:US_FOUR_CAPITAL_SLEEVES_REQUIRED")
 
-    posterior=sections.get("posterior") or {}
-    if posterior.get("state")==WAITING:
-        warnings.append(str(posterior.get("reason")))
-
     if unexplained:
-        errors.append("UNEXPLAINED_NON_READY_SECTIONS:"+",".join(sorted(unexplained)))
+        errors.append(
+            "UNEXPLAINED_NON_READY_SECTIONS:"+",".join(sorted(unexplained))
+        )
 
+    dedup_errors=list(dict.fromkeys(errors))
+    dedup_warnings=list(dict.fromkeys(warnings))
     return {
-        "passed":not errors,
-        "status":"READY" if not errors and not warnings else ("DEGRADED" if not errors else "BLOCKED"),
-        "errors":errors,
-        "warnings":warnings,
+        "passed":not dedup_errors,
+        "status":(
+            "BLOCKED"
+            if dedup_errors
+            else ("DEGRADED" if dedup_warnings else "READY")
+        ),
+        "errors":dedup_errors,
+        "warnings":dedup_warnings,
         "unexplained_non_ready_sections":unexplained,
-        "rule":"NO_UNEXPLAINED_EMPTY_SURFACES; READY_SECTIONS_MUST_SATISFY_NUMERIC_CONTRACTS; OPEN_SESSION_LIVE_DATA_IS_REQUIRED",
+        "unexplained_empty_count":len(unexplained),
+        "frontend_safe":not dedup_errors,
+        "rule":"NO_UNEXPLAINED_EMPTY_SURFACES; FRONTEND_CONSUMES_ONE_MARKET_PAGE_CONTRACT; READY_SECTIONS_MUST_SATISFY_NUMERIC_CONTRACTS; ACTIVE_SESSION_LIVE_AND_BASELINE_DATA_ARE_REQUIRED",
     }
 
 
@@ -345,70 +559,139 @@ class MarketPageProjection:
         self.automation=automation
         self.scheduler=scheduler
 
+    @staticmethod
+    def _contract()->dict:
+        return {
+            "frontend_must_not_infer_availability":True,
+            "blank_without_reason_forbidden":True,
+            "intraday_is_not_formal_posterior":True,
+            "single_market_page_source_of_truth":True,
+            "allowed_states":sorted(VALID_STATES),
+        }
+
     def live(self,market_id:str)->dict:
         market=normalize_market_id(market_id)
-        live,activity,scheduler=_live_sections(self.automation,self.scheduler,market)
-        sections={
-            "live":live,
-            "activity":activity,
-            "scheduler":scheduler,
-        }
+        sections=_live_sections(self.automation,self.scheduler,market)
         integrity=_validate_projection(market,sections)
         return {
             "contract_version":self.version,
             "projection_scope":"LIVE",
             "market_id":market,
             "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+            "contract":self._contract(),
             "sections":sections,
             "integrity":integrity,
         }
 
     def full(self,market_id:str,lang:str="zh",run_id:str|None=None)->dict:
         market=normalize_market_id(market_id)
-        daily=self.engine.daily_summary(market,compact=True)
-        strategies=strategy_rows(self.engine,market,lang,run_id)
-        curves=self.engine.curves(market)
-        runs=_run_rows(self.engine,market,100)
-        route=_route_section(market,daily)
-        posterior=_posterior_section(market,route,runs,curves)
-        live,activity,scheduler=_live_sections(self.automation,self.scheduler,market)
 
-        strategy_as_of=next((x.get("as_of") for x in strategies if x.get("as_of")),None)
-        sections={
-            "daily":_section(
-                READY if isinstance(daily,dict) else ERROR,
+        try:
+            daily=self.engine.daily_summary(market,compact=True)
+            daily_section=_section(
+                READY,
                 daily,
-                reason=None if isinstance(daily,dict) else "DAILY_SUMMARY_UNAVAILABLE",
                 source="engine.daily_summary.compact",
                 as_of=daily.get("date") if isinstance(daily,dict) else None,
                 required=True,
-            ),
-            "strategies":_section(
-                READY if strategies else ERROR,
-                strategies,
-                reason=None if strategies else "STRATEGY_TABLE_EMPTY",
-                source="strategy_population+latest_decision_run",
-                as_of=strategy_as_of,
+            )
+        except Exception as exc:
+            daily={}
+            daily_section=_error_section(
+                "engine.daily_summary.compact",
+                exc,
                 required=True,
-            ),
-            "curves":_section(
-                READY,
+            )
+
+        strategies_section=_strategy_section(
+            self.engine,market,lang,run_id
+        )
+
+        try:
+            curves=self.engine.curves(market)
+            curves_section=_section(
+                READY if curves else WAITING,
                 curves,
+                reason=None if curves else "WAITING_FOR_FIRST_REALIZED_POSTERIOR",
                 source="engine.curves",
                 as_of=(curves[-1].get("as_of") if curves else None),
-            ),
-            "runs":_section(
-                READY,
+            )
+        except Exception as exc:
+            curves=[]
+            curves_section=_error_section("engine.curves",exc,data=[])
+
+        try:
+            runs=_run_rows(self.engine,market,100)
+            runs_section=_section(
+                READY if runs else WAITING,
                 runs,
+                reason=None if runs else "NO_RUN_HISTORY_YET",
                 source="engine.all_runs",
                 as_of=(runs[-1].get("as_of") if runs else None),
-            ),
+            )
+        except Exception as exc:
+            runs=[]
+            runs_section=_error_section("engine.all_runs",exc,data=[])
+
+        try:
+            evolution=self.engine.evolution_status()
+            evolution_section=_section(
+                READY,
+                evolution,
+                source="engine.evolution_status",
+            )
+        except Exception as exc:
+            evolution={}
+            evolution_section=_error_section(
+                "engine.evolution_status",
+                exc,
+                data={},
+            )
+
+        route=_route_section(market,daily,daily_section.get("state"))
+        posterior=_posterior_section(
+            market,route,runs_section,curves_section
+        )
+
+        preview_data={}
+        if run_id:
+            try:
+                preview_data=self.engine.get_run(run_id).model_dump()
+                preview_section=_section(
+                    READY,
+                    preview_data,
+                    source="engine.get_run.preview",
+                    as_of=(preview_data.get("market") or {}).get("as_of"),
+                )
+            except Exception as exc:
+                preview_section=_error_section(
+                    "engine.get_run.preview",
+                    exc,
+                    data={},
+                )
+        else:
+            preview_section=_section(
+                NOT_APPLICABLE,
+                {},
+                reason="NO_PREVIEW_REQUESTED",
+                source="engine.get_run.preview",
+            )
+
+        live_sections=_live_sections(
+            self.automation,self.scheduler,market
+        )
+        sections={
+            "daily":daily_section,
+            "strategies":strategies_section,
+            "curves":curves_section,
+            "runs":runs_section,
+            "evolution":evolution_section,
             "route":route,
             "posterior":posterior,
-            "live":live,
-            "activity":activity,
-            "scheduler":scheduler,
+            "preview":preview_section,
+            **live_sections,
         }
+
         integrity=_validate_projection(market,sections)
         spec=MARKET_REGISTRY.get(market)
         return {
@@ -416,6 +699,7 @@ class MarketPageProjection:
             "projection_scope":"FULL",
             "market_id":market,
             "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+            "contract":self._contract(),
             "core":{
                 "version":self.engine.core.version,
                 "architecture_version":self.engine.architecture_version,
@@ -425,7 +709,9 @@ class MarketPageProjection:
                 "currency":spec.currency,
                 "timezone":spec.timezone,
                 "assets":list(spec.assets),
-                "primary_experiment_mode":str(spec.metadata.get("primary_experiment_mode") or ""),
+                "primary_experiment_mode":str(
+                    spec.metadata.get("primary_experiment_mode") or ""
+                ),
             },
             "sections":sections,
             "integrity":integrity,
