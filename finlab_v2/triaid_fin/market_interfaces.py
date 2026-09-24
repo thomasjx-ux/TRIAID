@@ -72,6 +72,9 @@ class MarketInterfaceProfile:
     route: RouteProjectionSpec
     instrument_labels: Mapping[str, str] = field(default_factory=dict)
     optional_sparse_symbols: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    min_aligned_points: Mapping[str, int] = field(default_factory=dict)
+    partial_symbol_policy: Mapping[str, str] = field(default_factory=dict)
+    auction_shadow_provider_name: str | None = None
     product_capabilities: Mapping[str, ProductCapabilitySpec] = field(default_factory=dict)
     runtime_jobs: tuple[str, ...] = ()
 
@@ -80,6 +83,18 @@ class MarketInterfaceProfile:
 
     def optional_symbols(self, mode: str) -> tuple[str, ...]:
         return tuple(self.optional_sparse_symbols.get(str(mode).upper(), ()))
+
+    def aligned_minimum(self, mode: str, default: int) -> int:
+        value=self.min_aligned_points.get(str(mode).upper())
+        return int(value) if value is not None else int(default)
+
+    def partial_policy(self, mode: str) -> str:
+        return str(
+            self.partial_symbol_policy.get(
+                str(mode).upper(),
+                "STRICT_COMPLETE_PANEL",
+            )
+        )
 
 
 class MarketInterfaceRegistry:
@@ -106,6 +121,15 @@ class MarketInterfaceRegistry:
                 str(mode).upper():tuple(symbols)
                 for mode,symbols in dict(profile.optional_sparse_symbols).items()
             }),
+            min_aligned_points=MappingProxyType({
+                str(mode).upper():int(value)
+                for mode,value in dict(profile.min_aligned_points).items()
+            }),
+            partial_symbol_policy=MappingProxyType({
+                str(mode).upper():str(value)
+                for mode,value in dict(profile.partial_symbol_policy).items()
+            }),
+            auction_shadow_provider_name=profile.auction_shadow_provider_name,
             product_capabilities=MappingProxyType(dict(profile.product_capabilities)),
             runtime_jobs=tuple(profile.runtime_jobs),
         )
@@ -277,6 +301,8 @@ MARKET_INTERFACE_REGISTRY.register(MarketInterfaceProfile(
         "512100.SS":"中证1000ETF · 512100",
         "511010.SS":"国债ETF · 511010",
     },
+    min_aligned_points={"PREOPEN":1},
+    auction_shadow_provider_name="tencent_equity_primary",
     product_capabilities={
         "BAR_DAILY":ProductCapabilitySpec(route_mode="DAILY",grade="research"),
         "BAR_INTRADAY":ProductCapabilitySpec(route_mode="INTRADAY",grade="research"),
@@ -318,6 +344,10 @@ MARKET_INTERFACE_REGISTRY.register(MarketInterfaceProfile(
     optional_sparse_symbols={
         "INTRADAY":("2819.HK",),
         "REALTIME":("2819.HK",),
+    },
+    partial_symbol_policy={
+        "INTRADAY":"OPTIONAL_SPARSE_SYMBOL_NO_INTERPOLATION",
+        "REALTIME":"OPTIONAL_SPARSE_SYMBOL_NO_INTERPOLATION",
     },
     product_capabilities={
         "BAR_DAILY":ProductCapabilitySpec(route_mode="DAILY",grade="research"),
