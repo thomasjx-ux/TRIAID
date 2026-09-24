@@ -22,6 +22,7 @@ from .long_cycle_hypothesis import LongCycleHypothesisExperiment
 from .cross_market_crash import CrossMarketCrashExperiment
 from .latent_hazard import LatentHazardExperiment
 from .policy_curve import PolicyExpectationCurve
+from .policy_triage import PolicyTriageModule
 from .hazard_prospective import HazardProspectiveLedger
 from .risk_warning import RiskWarningSystem
 from .risk_control import CrossMarketRiskControlExperiment
@@ -57,6 +58,7 @@ class EvolutionLabEngine:
         self.evolution=EvolutionModule(self.store)
         self.strategy_evolution=StrategyEvolutionModule(self.store)
         self.strategy_population=StrategyPopulationModule()
+        self.policy_triage=PolicyTriageModule()
         self._apply_strategy_profiles()
         self.population_state=PopulationStateTracker(self.store,self.strategy_population)
         self.core=TriaidCoreModule(self.evolution.active())
@@ -171,6 +173,7 @@ class EvolutionLabEngine:
             "official_trading_calendar_sync":TRADING_CALENDAR_SYNC_VERSION,
             "market_observation":self.observations.version if hasattr(self,"observations") else "market-observation@0.1.0",
             "strategy_population":self.strategy_population.version,
+            "policy_triage":self.policy_triage.version if hasattr(self,"policy_triage") else "policy-triage@unknown",
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,
             "strategy_rules_US":self.strategy_evolution.active("US").version,
@@ -416,6 +419,12 @@ class EvolutionLabEngine:
                 experiment_mode=request.market.metadata.get("experiment_mode"),
             )
             decision=self.core.decide(request.market,group,request.strategy_states)
+            policy_triage_snapshot=self.policy_triage.snapshot(
+                request.market.market_id,
+                request.market.regime,
+                request.strategy_states,
+                group,
+            )
             state_map={s.strategy_id:s for s in request.strategy_states}
             projected_baseline=sum(
                 float(w)*(0.0 if sid=="P28_CASH" else float(state_map[sid].expected_net_return))
@@ -470,6 +479,7 @@ class EvolutionLabEngine:
                     "projected_baseline_expected_return":projected_baseline,
                     "projected_triaid_expected_return":projected_after,
                     "projected_excess_expected_return":projected_after-projected_baseline,
+                    "policy_triage":policy_triage_snapshot,
                     "realized_outcome_pending":True,
                     "prospective_experiment_id":prospective.get("experiment_id") if prospective else None,
                     "prospective_protocol_version":prospective.get("protocol_version") if prospective else None,
@@ -1322,8 +1332,14 @@ class EvolutionLabEngine:
             tri=run.evaluation.triaid_contributions
             deltas={k:tri.get(k,0.0)-base.get(k,0.0) for k in set(base)|set(tri)}
             previous_diagnostics=dict(run.diagnostic_summary or {})
+            triage_outcome=self.policy_triage.evaluate_outcome(
+                previous_diagnostics.get("policy_triage"),
+                run.evaluation.strategy_realized_returns,
+                run.evaluation.baseline_return,
+            )
             run.diagnostic_summary={
                 **previous_diagnostics,
+                "policy_triage_outcome":triage_outcome,
                 "positive_interventions":sum(1 for x in deltas.values() if x>0),
                 "negative_interventions":sum(1 for x in deltas.values() if x<0),
                 "largest_positive":max(deltas.items(),key=lambda x:x[1]) if deltas else None,
