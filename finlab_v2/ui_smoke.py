@@ -96,8 +96,10 @@ assert "不能借用美股/A股权重、容量或结果补齐港股结论" in ht
 assert 'id="hkRoutePanel"' in html
 assert "renderHKRoutePanel" in html
 assert "预览三个市场" in html
-assert "/api/market-data/live-indicators/" in html
-assert "/api/market-data/activity/" in html
+assert "/api/ui/market-page/" in html
+assert "'/live'" in html
+assert "/api/market-data/live-indicators/" not in html
+assert "/api/market-data/activity/" not in html
 assert "/api/market-data/strategy-context/" in html
 assert "strategyMarketTip" in html
 assert "strategyLabelHtml" in html
