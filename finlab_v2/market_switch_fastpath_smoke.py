@@ -30,7 +30,7 @@ checks={
     "strategy_context_external_refresh_only_on_cache_miss":'if cached_daily is None:\n        daily=fetch_panel(key,"DAILY",force=False)' in market,
     "unified_projection_endpoint":'@app.get("/api/ui/market-page/{market_id}")' in app,
     "unified_live_projection_endpoint":'@app.get("/api/ui/market-page/{market_id}/live")' in app,
-    "market_switch_uses_one_projection_fetch":"const [page,evo,previewRun]=await Promise.all" in refresh_block and "projectionUrl=" in refresh_block,
+    "market_switch_uses_one_projection_fetch":"const page=await marketGet(projectionUrl,30000);" in refresh_block and "projectionUrl=" in refresh_block,
     "market_switch_no_legacy_data_fanout":all(token not in refresh_block for token in (
         "/api/daily?compact=true&market_id=",
         "/api/strategies?market_id=",
