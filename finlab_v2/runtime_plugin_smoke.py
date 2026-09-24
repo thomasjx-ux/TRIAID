@@ -16,10 +16,8 @@ class FakeJournal:
         self.lines.setdefault(name,[]).append(payload)
 
 
-class FakeServices:
-    def __init__(self)->None:
-        self.journal=FakeJournal()
-    def market_data_auction_shadow_probe(self,market):
+class FakeMarketDataPort:
+    def auction_shadow_probe(self,market):
         return {
             "market_id":market,
             "available_symbols":5,
@@ -27,6 +25,9 @@ class FakeServices:
             "all_symbols_available":True,
             "symbols":{},
         }
+
+
+class FakeResearchPort:
     def long_cycle_hypothesis_run(self,force=False):
         return {
             "experiment_id":"LONG-1",
@@ -77,6 +78,13 @@ class FakeServices:
             "experiment_id":"CONTROL-1",
             "risk_control_experiment":{"stage":"WATCH_ONLY"},
         }
+
+
+class FakeServices:
+    def __init__(self)->None:
+        self.journal=FakeJournal()
+        self.market_data=FakeMarketDataPort()
+        self.research=FakeResearchPort()
 
 
 async def main()->None:
