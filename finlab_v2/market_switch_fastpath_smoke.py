@@ -8,8 +8,7 @@ market=(ROOT/"triaid_fin"/"market_lab.py").read_text(encoding="utf-8")
 projection=(ROOT/"triaid_fin"/"ui_projection.py").read_text(encoding="utf-8")
 
 refresh_start=app.find("async function refreshAll(preferStale=false)")
-refresh_end=app.find("async function refreshRiskPanels",refresh_start)
-refresh_block=app[refresh_start:refresh_end] if refresh_start>=0 and refresh_end>refresh_start else ""
+refresh_block=app[refresh_start:refresh_start+18000] if refresh_start>=0 else ""
 
 live_start=app.find("async function refreshLiveWindows()")
 live_end=app.find("function applyMarketScope",live_start)
