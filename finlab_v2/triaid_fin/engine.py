@@ -39,6 +39,7 @@ from .strategy_registry import strategy_ids_for_market
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
+from .volatility_forecast import all_market_volatility_forecasts, volatility_forecast
 
 
 class EvolutionLabEngine:
@@ -1340,6 +1341,12 @@ class EvolutionLabEngine:
 
     def strategy_market_context(self,market_id:str)->dict:
         return strategy_market_context(market_id)
+
+    def volatility_forecast(self,market_id:str)->dict:
+        return volatility_forecast(market_id)
+
+    def volatility_forecasts(self)->dict:
+        return all_market_volatility_forecasts()
 
     def record_market_observation(self,snapshot:dict)->dict:
         return self.observations.record(snapshot)
