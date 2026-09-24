@@ -1,0 +1,4 @@
+Release HK full-market alignment.
+Adds HK_RETURN_MAX_CAPACITY review parity, four HKD capital sleeves, dedicated hash-chained route/outcome ledger, future-only simulated execution capacity, HK posterior paths, daily-report HKD capital amounts, and aligned UI/tooltips.
+No historical HK capacity backfill.
+Feature merge: 06c0af14012827c0b91414eb55eaeb37cdec9882
