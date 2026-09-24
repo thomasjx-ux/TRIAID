@@ -41,6 +41,7 @@ BUILD_CASES=[
     "core_evolution_validation_smoke.py",
     "strategy_evolution_validation_smoke.py",
     "daily_report_change_attribution_smoke.py",
+    "daily_experiment_intelligence_smoke.py",
     "long_cycle_hypothesis_smoke.py",
     "cross_market_crash_smoke.py",
     "latent_hazard_smoke.py",
@@ -361,6 +362,32 @@ def runtime_checks()->list[dict]:
         curve_payload=payloads.get(f"/api/curves?market_id={market}")
         live_payload=payloads.get(f"/api/market-data/live-indicators/{market}")
         check(f"{market}_table_daily_payload",isinstance(daily_payload,dict),type(daily_payload).__name__)
+        if isinstance(daily_payload,dict):
+            intelligence=daily_payload.get("experiment_intelligence") or {}
+            cross_learning=daily_payload.get("cross_market_learning") or {}
+            check(
+                f"{market}_daily_experiment_intelligence_present",
+                isinstance(intelligence,dict) and intelligence.get("market_id")==market,
+                intelligence,
+            )
+            check(
+                f"{market}_daily_goal_gap_present",
+                isinstance(intelligence.get("goal_gap"),dict)
+                and bool(intelligence["goal_gap"].get("primary_gap_layer")),
+                intelligence.get("goal_gap"),
+            )
+            check(
+                f"{market}_daily_transition_evidence_present",
+                isinstance(intelligence.get("transition_evidence"),dict)
+                and "recomputed_count" in intelligence["transition_evidence"],
+                intelligence.get("transition_evidence"),
+            )
+            check(
+                f"{market}_cross_market_learning_present",
+                isinstance(cross_learning,dict)
+                and isinstance(cross_learning.get("markets"),list),
+                cross_learning,
+            )
         check(f"{market}_table_strategy_payload",isinstance(strategy_payload,list) and len(strategy_payload)>0,{"type":type(strategy_payload).__name__,"rows":len(strategy_payload) if isinstance(strategy_payload,list) else None})
         check(f"{market}_table_curve_payload",isinstance(curve_payload,list),type(curve_payload).__name__)
         check(f"{market}_table_live_payload",isinstance(live_payload,dict),type(live_payload).__name__)
