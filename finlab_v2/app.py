@@ -1123,6 +1123,36 @@ tbody tr:hover td{background:#f8fbff}
     </div>
     <div class="home-summary-story" id="homeSummaryStory">本页阅读顺序：先确认当前市场 → 看 TRIAID 选了什么、改了什么 → 看真实后验是否增值 → 最后看三市场联合风险与深层实验。</div>
     <div class="home-summary-guide" id="homeSummaryGuide">下面的复杂表格用于追溯证据；第一次使用不需要逐项读完。</div>
+    <div class="home-volatility" id="homeVolatility">
+      <div class="home-volatility-head">
+        <div>
+          <div class="home-volatility-title" id="homeVolatilityTitle">下一交易日波动预测</div>
+          <div class="home-volatility-sub" id="homeVolatilitySub">预测的是收盘到收盘的波动幅度，不预测涨跌方向。</div>
+        </div>
+        <div class="home-volatility-sub" id="homeVolatilityModel">读取模型与校准状态</div>
+      </div>
+      <div class="home-volatility-grid">
+        <div class="home-volatility-card" id="volCardUS">
+          <div class="vh"><span class="home-volatility-market" id="volMarketUS">美股 / US</span><span class="home-volatility-band normal" id="volBandUS">-</span></div>
+          <div class="home-volatility-move" id="volMoveUS">读取中</div>
+          <div class="home-volatility-range" id="volRangeUS">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyUS">等待历史校准</div>
+        </div>
+        <div class="home-volatility-card" id="volCardCN">
+          <div class="vh"><span class="home-volatility-market" id="volMarketCN">A股 / CN</span><span class="home-volatility-band normal" id="volBandCN">-</span></div>
+          <div class="home-volatility-move" id="volMoveCN">读取中</div>
+          <div class="home-volatility-range" id="volRangeCN">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyCN">等待历史校准</div>
+        </div>
+        <div class="home-volatility-card" id="volCardHK">
+          <div class="vh"><span class="home-volatility-market" id="volMarketHK">港股 / HK</span><span class="home-volatility-band normal" id="volBandHK">-</span></div>
+          <div class="home-volatility-move" id="volMoveHK">读取中</div>
+          <div class="home-volatility-range" id="volRangeHK">等待预测区间</div>
+          <div class="home-volatility-accuracy" id="volAccuracyHK">等待历史校准</div>
+        </div>
+      </div>
+      <div class="home-volatility-note" id="homeVolatilityNote">68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用当时可见数据。</div>
+    </div>
   </section>
 
   <div class="market-clock-strip" id="marketClockStrip" aria-label="Market clocks">
