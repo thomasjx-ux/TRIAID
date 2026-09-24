@@ -653,14 +653,17 @@ def runtime_checks()->list[dict]:
         excluded=set(frozen.get("future_information_excluded") or [])
         check(
             f"{market}_formal_evidence_repository_contract",
-            frozen.get("evidence_schema")=="formal-market-projection-evidence@1.0.0"
+            frozen.get("evidence_schema")=="formal-market-projection-evidence@1.1.0"
             and frozen.get("evidence_id")==formal_evidence.get("evidence_id")
             and frozen.get("evidence_hash_sha256")==formal_evidence.get("evidence_hash_sha256")
-            and excluded=={"posterior","curves","live","activity","intraday"}
+            and excluded=={"posterior","curves","live","activity","intraday","route_embedded_reviews","localized_presentation_copy"}
             and all(
                 key not in frozen
-                for key in ("posterior","curves","live","activity","intraday")
-            ),
+                for key in ("posterior","curves","live","activity","intraday","route","strategies")
+            )
+            and "formal_route" in frozen
+            and "formal_strategies" in frozen
+            and "latest_decision_review" not in (frozen.get("formal_route") or {}),
             {
                 "evidence_id":frozen.get("evidence_id"),
                 "excluded":sorted(excluded),
