@@ -26,14 +26,16 @@ from triaid_fin.trading_calendar import VERSION as TRADING_CALENDAR_VERSION, off
 from triaid_fin.trading_calendar_sync import TradingCalendarSync
 from triaid_fin.ui_projection import MarketPageProjection, strategy_rows
 from triaid_fin.risk_projection import RiskCenterProjection
+from triaid_fin.ui_ports import UiReadServices
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
+ui_read_services=UiReadServices(engine)
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
-market_page_projection=MarketPageProjection(engine,market_automation,decision_scheduler)
-risk_center_projection=RiskCenterProjection(engine)
+market_page_projection=MarketPageProjection(ui_read_services,market_automation,decision_scheduler)
+risk_center_projection=RiskCenterProjection(ui_read_services)
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -821,7 +823,7 @@ def strategies(
             for card in cards
         ]
     try:
-        return strategy_rows(engine,market_id,lang,run_id)
+        return strategy_rows(ui_read_services,market_id,lang,run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
     except ValueError as exc:
