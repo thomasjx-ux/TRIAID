@@ -26,7 +26,7 @@ def _env_float(name:str,default:float)->float:
 
 
 class DecisionScheduler:
-    version="decision-scheduler@0.2.3"
+    version="decision-scheduler@0.2.4"
 
     def __init__(self,engine)->None:
         self.engine=engine
@@ -306,16 +306,36 @@ class DecisionScheduler:
 
         result=self.engine.recompute_transition_research(market,transition,mode)
         l1=max(0.0,float(result.get("weight_change_l1_vs_reference") or 0.0))
-        allocation_change_recommended=bool(l1>=self.allocation_action_l1_threshold)
+        raw_allocation_candidate=bool(l1>=self.allocation_action_l1_threshold)
+        transition_regime=str(result.get("transition_regime") or "")
+        risk_increase_candidate=bool(
+            raw_allocation_candidate and transition_regime=="intraday_risk_on"
+        )
+        persistence_gate_pass=bool(
+            not risk_increase_candidate
+            or assessment.get("confirmed_state_change") is True
+        )
+        allocation_change_recommended=bool(
+            raw_allocation_candidate and persistence_gate_pass
+        )
         result={
             **result,
             "decision_layer":(
                 "ALLOCATION_ACTION_CANDIDATE"
                 if allocation_change_recommended
-                else "STATE_ONLY_RECOMPUTE"
+                else (
+                    "STATE_ONLY_RISK_INCREASE_AWAITING_CONFIRMATION"
+                    if risk_increase_candidate and not persistence_gate_pass
+                    else "STATE_ONLY_RECOMPUTE"
+                )
             ),
             "allocation_change_recommended":allocation_change_recommended,
+            "raw_allocation_candidate":raw_allocation_candidate,
+            "risk_increase_candidate":risk_increase_candidate,
+            "persistence_gate_pass":persistence_gate_pass,
+            "persistence_gate_rule":"INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE",
             "allocation_action_l1_threshold":self.allocation_action_l1_threshold,
+            "risk_increase_persistence_gate":"INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE",
             "close_settle_seconds":self.close_settle_seconds,
             "broker_order_generated":False,
         }
