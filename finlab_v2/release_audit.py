@@ -191,11 +191,14 @@ def structural_checks()->list[dict]:
     check(
         "market_page_frontend_no_legacy_multi_api_fanout",
         "projectionUrl=" in refresh_block
+        and "const page=await marketGet(projectionUrl,30000);" in refresh_block
         and all(token not in refresh_block for token in (
             "/api/daily?compact=true&market_id=",
             "/api/strategies?market_id=",
             "/api/curves?market_id=",
             "/api/runs?market_id=",
+            "jsonCachedStale('/api/evolution'",
+            "json('/api/runs/'+encodeURIComponent(previewId)",
         )),
         None,
     )
@@ -429,7 +432,7 @@ def runtime_checks()->list[dict]:
         live_page=payloads.get(f"/api/ui/market-page/{market}/live") or {}
         check(
             f"{market}_market_page_projection_contract",
-            page.get("contract_version")=="market-page-projection@1.0.0"
+            page.get("contract_version")=="market-page-projection@1.1.0"
             and page.get("projection_scope")=="FULL"
             and page.get("market_id")==market,
             {
@@ -438,19 +441,48 @@ def runtime_checks()->list[dict]:
                 "market_id":page.get("market_id"),
             },
         )
+        contract=page.get("contract") or {}
         integrity=page.get("integrity") or {}
         check(
             f"{market}_market_page_projection_integrity",
             integrity.get("passed") is True
+            and integrity.get("frontend_safe") is True
+            and integrity.get("unexplained_empty_count")==0
             and not (integrity.get("unexplained_non_ready_sections") or []),
             integrity,
         )
+        check(
+            f"{market}_market_page_single_source_contract",
+            contract.get("single_market_page_source_of_truth") is True
+            and contract.get("blank_without_reason_forbidden") is True
+            and contract.get("intraday_is_not_formal_posterior") is True,
+            contract,
+        )
         sections=page.get("sections") or {}
+        required_projection_sections={
+            "daily","strategies","curves","runs","evolution","route",
+            "posterior","preview","live","activity","scheduler","intraday",
+        }
+        check(
+            f"{market}_market_page_projection_section_coverage",
+            required_projection_sections.issubset(set(sections)),
+            sorted(sections),
+        )
         for required_section in ("daily","strategies","route"):
             section=sections.get(required_section) or {}
             check(
                 f"{market}_projection_{required_section}_ready",
                 section.get("state")=="READY",
+                section,
+            )
+        for section_name,section in sections.items():
+            check(
+                f"{market}_projection_reason_contract_{section_name}",
+                bool(section.get("state"))
+                and (
+                    section.get("state")=="READY"
+                    or bool(section.get("reason"))
+                ),
                 section,
             )
         posterior=sections.get("posterior") or {}
@@ -461,7 +493,7 @@ def runtime_checks()->list[dict]:
         )
         check(
             f"{market}_live_projection_contract",
-            live_page.get("contract_version")=="market-page-projection@1.0.0"
+            live_page.get("contract_version")=="market-page-projection@1.1.0"
             and live_page.get("projection_scope")=="LIVE"
             and live_page.get("market_id")==market,
             {
@@ -471,11 +503,19 @@ def runtime_checks()->list[dict]:
             },
         )
         live_integrity=live_page.get("integrity") or {}
+        live_sections=live_page.get("sections") or {}
         check(
             f"{market}_live_projection_integrity",
             live_integrity.get("passed") is True
+            and live_integrity.get("frontend_safe") is True
+            and live_integrity.get("unexplained_empty_count")==0
             and not (live_integrity.get("unexplained_non_ready_sections") or []),
             live_integrity,
+        )
+        check(
+            f"{market}_live_projection_section_coverage",
+            {"live","activity","scheduler","intraday"}.issubset(set(live_sections)),
+            sorted(live_sections),
         )
 
     table_runtime_summary={}
