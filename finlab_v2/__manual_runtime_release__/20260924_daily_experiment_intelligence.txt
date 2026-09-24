@@ -1,0 +1,13 @@
+TRIAID FIN daily experiment intelligence release
+Date: 2026-09-24
+Purpose: make post-close experiment learning the primary daily-report information layer.
+Includes:
+- realized baseline vs TRIAID vs hindsight opportunity ceiling
+- intervention attribution and trading-cost decomposition
+- intraday transition evidence and oscillation diagnostics
+- Goal Gap localization
+- counterfactual replay discipline
+- next-session prospective validation plan
+- four capital-sleeve P&L impact
+- cross-market hypothesis sharing without evidence contamination
+- blocking build/runtime audit requirements
