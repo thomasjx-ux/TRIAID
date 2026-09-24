@@ -417,7 +417,19 @@ def runtime_checks()->list[dict]:
     backend_name=backend.get("backend") if isinstance(backend,dict) else backend
     durability=storage.get("durability")
     check("storage_backend_known",backend_name in {"supabase","file"},{"backend":backend_name,"durability":durability})
-    if backend_name=="supabase":
+    railway_runtime=bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_SERVICE_ID"))
+    if railway_runtime:
+        check(
+            "railway_production_storage_must_be_supabase",
+            backend_name=="supabase",
+            {"backend":backend_name,"durability":durability},
+        )
+        check(
+            "railway_production_storage_must_be_persistent",
+            durability=="PERSISTENT",
+            {"backend":backend_name,"durability":durability},
+        )
+    elif backend_name=="supabase":
         check("production_storage_persistent",durability=="PERSISTENT",durability)
 
     check("market_data_status_present",bool(market_status),None if market_status else "missing")
