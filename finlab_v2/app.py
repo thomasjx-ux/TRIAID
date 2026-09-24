@@ -989,6 +989,21 @@ tbody tr:hover td{background:#f8fbff}
 .home-summary-risk{font-size:17px}
 .home-summary-story{margin-top:11px;padding-top:10px;border-top:1px solid #e4eaf1;font-size:12px;line-height:1.6;color:#43546a}
 .home-summary-guide{margin-top:4px;font-size:11px;color:#748091}
+.home-volatility{margin-top:12px;padding-top:11px;border-top:1px solid #e4eaf1}
+.home-volatility-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
+.home-volatility-title{font-size:13px;font-weight:800;color:#26384f}
+.home-volatility-sub{font-size:11px;color:#748091;line-height:1.45}
+.home-volatility-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.home-volatility-card{border:1px solid #e4eaf1;border-radius:11px;background:#fff;padding:11px 12px;min-height:112px}
+.home-volatility-card .vh{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.home-volatility-market{font-size:12px;font-weight:800;color:#43546a}
+.home-volatility-band{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef1f5;font-size:10px;font-weight:800}
+.home-volatility-band.low{background:#edf8f1;color:#138a4b}.home-volatility-band.normal{background:#eef3f9;color:#526174}.home-volatility-band.elevated{background:#fff7df;color:#946200}.home-volatility-band.high{background:#fff1ef;color:#b42318}
+.home-volatility-move{font-size:22px;font-weight:850;margin-top:5px;font-variant-numeric:tabular-nums}
+.home-volatility-range{font-size:11px;color:#5f6b7a;margin-top:3px;line-height:1.4}
+.home-volatility-accuracy{font-size:11px;color:#43546a;margin-top:6px;line-height:1.45}
+.home-volatility-note{font-size:10.5px;color:#87909d;margin-top:7px;line-height:1.45}
+@media(max-width:850px){.home-volatility-grid{grid-template-columns:1fr}}
 @media(max-width:950px){.home-summary-grid{grid-template-columns:repeat(2,1fr)}.home-summary-head{display:block}.home-summary-mode{display:inline-block;margin-top:8px}}
 @media(max-width:600px){.home-summary-grid{grid-template-columns:1fr}}
 .market-clock-strip{display:grid;grid-template-columns:repeat(3,minmax(190px,1fr));gap:10px;margin:12px 0}
