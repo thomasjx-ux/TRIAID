@@ -1,0 +1,3 @@
+Post-launch self-audit performance release.
+Makes /api/daily?compact=true keep the same top-level daily contract while replacing heavy per-run detail with the lightweight fields the UI consumes. Full /api/daily remains unchanged.
+Feature merge: 198b6e2710e76f310cef92cf04cc9c3bd7ada619
