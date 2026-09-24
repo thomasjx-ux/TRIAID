@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from .market_data import session_phase
 from .market_registry import MARKET_REGISTRY, normalize_market_id
+from .market_interfaces import market_interface
 
 
 VERSION="market-page-projection@1.2.0"
@@ -194,41 +195,26 @@ def _route_section(market:str,daily:dict,daily_state:str=READY)->dict:
             source="market_route_projection",
             required=True,
         )
-    if market=="US":
-        report=daily.get("us_return_max")
-        return _section(
-            READY if report else WAITING,
-            report,
-            reason=None if report else "NO_FROZEN_US_RETURN_MAX_DECISION",
-            source="us_return_max_ledger",
-            as_of=((report or {}).get("latest_decision") or {}).get("market_as_of"),
-            required=True,
-        )
-    if market=="HK":
-        report=daily.get("hk_return_max")
-        return _section(
-            READY if report else WAITING,
-            report,
-            reason=None if report else "NO_FROZEN_HK_RETURN_MAX_DECISION",
-            source="hk_return_max_ledger",
-            as_of=((report or {}).get("latest_decision") or {}).get("market_as_of"),
-            required=True,
-        )
-    report={
-        "recovery_wave":daily.get("recovery_wave"),
-        "prospective_experiment":daily.get("prospective_experiment"),
-        "prospective_experiment_status":daily.get("prospective_experiment_status"),
-    }
-    ready=bool(report["recovery_wave"])
+    spec=market_interface(market).route
+    payload=spec.build_payload(daily)
+    primary=spec.primary_payload(payload)
+    ready=bool(primary)
+    latest=(primary.get("latest_decision") or {}) if isinstance(primary,dict) else {}
+    as_of=(
+        latest.get("market_as_of")
+        or primary.get("market_as_of")
+        or primary.get("as_of")
+        if isinstance(primary,dict)
+        else None
+    )
     return _section(
         READY if ready else WAITING,
-        report,
-        reason=None if ready else "NO_CURRENT_CN_RECOVERY_WAVE_DECISION",
-        source="cn_return_max_projection",
-        as_of=((report["recovery_wave"] or {}).get("latest_decision") or {}).get("market_as_of"),
+        payload,
+        reason=None if ready else spec.missing_reason,
+        source=spec.source,
+        as_of=as_of,
         required=True,
     )
-
 
 def _posterior_section(market:str,route:dict,runs_section:dict,curves_section:dict)->dict:
     if route.get("state") not in {READY,WAITING}:
@@ -238,9 +224,12 @@ def _posterior_section(market:str,route:dict,runs_section:dict,curves_section:di
             reason="POSTERIOR_WAITING_FOR_ROUTE_DEPENDENCY",
             source="realized_posterior",
         )
-    if market in {"US","HK"}:
+
+    route_spec=market_interface(market).route
+    if route_spec.posterior_kind=="ROUTE_REVIEW":
         report=route.get("data") or {}
-        review=report.get("previous_decision_review") or report.get("latest_decision_review") or {}
+        primary=route_spec.primary_payload(report)
+        review=primary.get("previous_decision_review") or primary.get("latest_decision_review") or {}
         days=int(review.get("observation_days") or 0)
         if days>0:
             path=review.get("daily_path") or []
@@ -285,7 +274,6 @@ def _posterior_section(market:str,route:dict,runs_section:dict,curves_section:di
         reason="WAITING_FOR_FIRST_REALIZED_POSTERIOR",
         source="primary_route_run_evaluation",
     )
-
 
 def _live_sections(automation,scheduler,market:str)->dict:
     try:
@@ -536,71 +524,57 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
         if malformed_strategy_rows:
             errors.append("strategies:NUMERIC_FIELDS_INCOMPLETE")
 
+    profile=market_interface(market)
+    route_spec=profile.route
     route=(sections.get("route") or {}).get("data") or {}
-    if market=="US" and (sections.get("route") or {}).get("state")==READY:
-        latest=route.get("latest_decision") or {}
-        if not latest.get("decision_id"):
-            errors.append("route:US_DECISION_ID_MISSING")
-        if not latest.get("frozen_at"):
-            errors.append("route:US_FROZEN_AT_MISSING")
+    if (sections.get("route") or {}).get("state")==READY:
+        primary=route_spec.primary_payload(route)
+        latest=primary.get("latest_decision") or {}
+        contract=route_spec.contract
+        prefix=f"route:{market}"
 
-        strategy_weights=latest.get("target_strategy_weights")
-        generic_weights=latest.get("generic_core_control_weights")
-        if not isinstance(strategy_weights,dict) or not strategy_weights:
-            errors.append("route:US_STRATEGY_WEIGHTS_MISSING")
-        elif any(not _finite(v) for v in strategy_weights.values()):
-            errors.append("route:US_STRATEGY_WEIGHTS_NON_NUMERIC")
-        if not isinstance(generic_weights,dict) or not generic_weights:
-            errors.append("route:US_GENERIC_CORE_WEIGHTS_MISSING")
-        elif any(not _finite(v) for v in generic_weights.values()):
-            errors.append("route:US_GENERIC_CORE_WEIGHTS_NON_NUMERIC")
+        if contract.require_decision_id and not latest.get("decision_id"):
+            errors.append(f"{prefix}_DECISION_ID_MISSING")
+        if contract.require_frozen_at and not latest.get("frozen_at"):
+            errors.append(f"{prefix}_FROZEN_AT_MISSING")
 
-        asset_weights=latest.get("target_asset_weights")
-        if not isinstance(asset_weights,dict) or len(asset_weights)<5:
-            errors.append("route:US_ASSET_WEIGHTS_INCOMPLETE")
-        elif any(not _finite(v) for v in asset_weights.values()):
-            errors.append("route:US_ASSET_WEIGHTS_NON_NUMERIC")
+        if contract.strategy_weights_field:
+            weights=latest.get(contract.strategy_weights_field)
+            if not isinstance(weights,dict) or not weights:
+                errors.append(f"{prefix}_{contract.strategy_weights_field.upper()}_MISSING")
+            elif any(not _finite(v) for v in weights.values()):
+                errors.append(f"{prefix}_{contract.strategy_weights_field.upper()}_NON_NUMERIC")
 
-        for field in (
-            "projected_annualized_expected_net_return",
-            "generic_core_projected_annualized_expected_net_return",
-            "buy_hold_projected_annualized_expected_net_return",
-            "cash_residual_weight",
-        ):
+        for field in contract.extra_weight_fields:
+            weights=latest.get(field)
+            if not isinstance(weights,dict) or not weights:
+                errors.append(f"{prefix}_{field.upper()}_MISSING")
+            elif any(not _finite(v) for v in weights.values()):
+                errors.append(f"{prefix}_{field.upper()}_NON_NUMERIC")
+
+        if contract.min_asset_weights:
+            asset_weights=latest.get("target_asset_weights")
+            if not isinstance(asset_weights,dict) or len(asset_weights)<contract.min_asset_weights:
+                errors.append(f"{prefix}_ASSET_WEIGHTS_INCOMPLETE")
+            elif any(not _finite(v) for v in asset_weights.values()):
+                errors.append(f"{prefix}_ASSET_WEIGHTS_NON_NUMERIC")
+
+        for field in contract.decision_numeric_fields:
             if not _finite(latest.get(field)):
-                errors.append(f"route:US_{field.upper()}_MISSING")
+                errors.append(f"{prefix}_{field.upper()}_MISSING")
 
         cap=latest.get("capital_capacity") or {}
-        for field in ("max_participation_adv","base_cost_bps","impact_coefficient_bps"):
+        for field in contract.capital_numeric_fields:
             if not _finite(cap.get(field)):
-                errors.append(f"route:US_CAPITAL_{field.upper()}_MISSING")
-        sleeves=cap.get("sleeves") or []
-        if len(sleeves)!=4:
-            errors.append("route:US_FOUR_CAPITAL_SLEEVES_REQUIRED")
-        sleeve_fields=(
-            "starting_capital_usd",
-            "target_invested_notional_usd",
-            "max_one_day_participation_adv",
-            "minimum_execution_days",
-            "estimated_round_trip_cost_proxy_usd",
-        )
-        for index,sleeve in enumerate(sleeves):
-            for field in sleeve_fields:
-                if not _finite(sleeve.get(field)):
-                    errors.append(f"route:US_SLEEVE_{index}_{field.upper()}_MISSING")
+                errors.append(f"{prefix}_CAPITAL_{field.upper()}_MISSING")
 
-    if market=="HK" and (sections.get("route") or {}).get("state")==READY:
-        latest=route.get("latest_decision") or {}
-        if not latest.get("decision_id"):
-            errors.append("route:HK_DECISION_ID_MISSING")
-        if not latest.get("target_strategy_weights"):
-            errors.append("route:HK_STRATEGY_WEIGHTS_MISSING")
-        asset_weights=latest.get("target_asset_weights")
-        if not isinstance(asset_weights,dict) or len(asset_weights)<4:
-            errors.append("route:HK_ASSET_WEIGHTS_INCOMPLETE")
-        sleeves=((latest.get("capital_capacity") or {}).get("sleeves") or [])
-        if len(sleeves)!=4:
-            errors.append("route:HK_FOUR_CAPITAL_SLEEVES_REQUIRED")
+        sleeves=cap.get("sleeves") or []
+        if contract.capital_sleeves is not None and len(sleeves)!=contract.capital_sleeves:
+            errors.append(f"{prefix}_{contract.capital_sleeves}_CAPITAL_SLEEVES_REQUIRED")
+        for index,sleeve in enumerate(sleeves):
+            for field in contract.sleeve_numeric_fields:
+                if not _finite(sleeve.get(field)):
+                    errors.append(f"{prefix}_SLEEVE_{index}_{field.upper()}_MISSING")
 
     live_section=sections.get("live") or {}
     if live_section.get("state")==READY:
@@ -633,31 +607,20 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
                 warnings.append(message)
 
     posterior=sections.get("posterior") or {}
-    if posterior.get("state")==READY and market=="US":
+    contract=route_spec.contract
+    if posterior.get("state")==READY:
         review=posterior.get("data") or {}
         realized=((review.get("capital_sleeves") or {}).get("sleeves") or [])
-        realized_fields=(
-            "starting_capital_usd",
-            "fill_ratio",
-            "current_equity_usd",
-            "current_net_pnl_usd",
-            "current_net_return",
-            "total_execution_cost_usd",
-        )
         for index,row in enumerate(realized):
-            for field in realized_fields:
+            for field in contract.posterior_sleeve_numeric_fields:
                 if not _finite(row.get(field)):
-                    errors.append(f"posterior:US_SLEEVE_{index}_{field.upper()}_MISSING")
+                    errors.append(f"posterior:{market}_SLEEVE_{index}_{field.upper()}_MISSING")
         for index,row in enumerate(review.get("daily_path") or []):
-            if not row.get("as_of"):
-                errors.append(f"posterior:US_PATH_{index}_AS_OF_MISSING")
-            for field in (
-                "return_max_cumulative_return",
-                "generic_core_cumulative_return",
-                "spy_buy_hold_cumulative_return",
-            ):
+            if contract.posterior_path_numeric_fields and not row.get("as_of"):
+                errors.append(f"posterior:{market}_PATH_{index}_AS_OF_MISSING")
+            for field in contract.posterior_path_numeric_fields:
                 if not _finite(row.get(field)):
-                    errors.append(f"posterior:US_PATH_{index}_{field.upper()}_MISSING")
+                    errors.append(f"posterior:{market}_PATH_{index}_{field.upper()}_MISSING")
 
     if unexplained:
         errors.append(
@@ -678,9 +641,8 @@ def _validate_projection(market:str,sections:dict,strict_live:bool=False)->dict:
         "unexplained_non_ready_sections":unexplained,
         "unexplained_empty_count":len(unexplained),
         "frontend_safe":not dedup_errors,
-        "rule":"NO_UNEXPLAINED_EMPTY_SURFACES; FRONTEND_CONSUMES_ONE_MARKET_PAGE_CONTRACT; READY_SECTIONS_MUST_SATISFY_NUMERIC_CONTRACTS; ACTIVE_SESSION_LIVE_AND_BASELINE_DATA_ARE_REQUIRED",
+        "rule":"NO_UNEXPLAINED_EMPTY_SURFACES; FRONTEND_CONSUMES_ONE_MARKET_PAGE_CONTRACT; READY_SECTIONS_MUST_SATISFY_REGISTERED_ROUTE_CONTRACT; ACTIVE_SESSION_LIVE_AND_BASELINE_DATA_ARE_REQUIRED",
     }
-
 
 class MarketPageProjection:
     version=VERSION
