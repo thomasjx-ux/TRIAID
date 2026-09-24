@@ -1,0 +1,17 @@
+TRIAID FIN structural market-page projection v1.2 final release
+date: 2026-09-24
+validated_parent: 0045627f15b73721e9de27cea3cb78bd2bbc3595
+scope:
+- one server-side market page projection contract for US/CN/HK
+- frontend core page state no longer joins daily/strategy/run/live/scheduler APIs
+- explicit READY/WAITING/STALE/NOT_APPLICABLE/ERROR semantics
+- no unexplained blank surface permitted
+- render-complete numeric contracts for US Return-Max and four USD sleeves
+- formal posterior separated from intraday state
+- full page survives transient live degradation without erasing frozen evidence
+- strict live contract blocks stale/incomplete active-session data
+- closed markets explicitly return NOT_APPLICABLE rather than data failure
+- deployment source identity bound to Railway Git SHA
+- release audit validates build and runtime projection contracts
+validation:
+- GitHub full audit 78/78 on validated parent
