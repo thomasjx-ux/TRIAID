@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 from statistics import mean, pstdev
+from threading import RLock
 
-from .market_lab import fetch_panel
+from .market_data import MODE_CONFIGS, get_market_data_hub
 from .market_registry import MARKETS, normalize_market_id
 
 
-VERSION="volatility-forecast@0.1.0"
+VERSION="volatility-forecast@0.2.0"
 MODEL="EWMA94_MULTI_WINDOW_REALIZED_VOL"
 SQRT_2_OVER_PI=math.sqrt(2.0/math.pi)
+CACHE_TTL_SECONDS=300.0
+_CACHE_LOCK=RLock()
+_CACHE_AT=0.0
+_CACHE_PAYLOAD:dict|None=None
 
 
 def _log_returns(prices:list[float])->list[float]:
@@ -131,13 +139,47 @@ def _quality(coverage_68:float|None,ratio:float|None,n:int)->str:
     return "POORLY_CALIBRATED"
 
 
+def _benchmark_history(market:str)->dict:
+    benchmark=MARKETS[market].benchmark
+    hub=get_market_data_hub()
+    cfg=MODE_CONFIGS["DAILY"]
+    errors=[]
+    for provider in hub.registry.providers_for(f"{market}:DAILY"):
+        if not bool(getattr(provider,"configured",True)):
+            continue
+        try:
+            series=provider.fetch_series(
+                benchmark,
+                range_=cfg.range_,
+                interval=cfg.interval,
+                include_prepost=cfg.include_prepost,
+                min_points=cfg.min_points,
+            )
+            prices=[float(x) for x in series.close if float(x)>0.0]
+            if len(prices)<90:
+                raise ValueError(f"insufficient_daily_history:{market}:{len(prices)}")
+            return {
+                "benchmark":benchmark,
+                "prices":prices,
+                "source_latest_ts":int(series.ts[-1]),
+                "provider":getattr(provider,"version",type(provider).__name__),
+                "quality":cfg.quality,
+            }
+        except Exception as exc:
+            errors.append(
+                f"{getattr(provider,'version',type(provider).__name__)}:"
+                f"{type(exc).__name__}:{exc}"
+            )
+    raise RuntimeError(
+        f"benchmark_history_unavailable:{market}:{' | '.join(errors)}"
+    )
+
+
 def volatility_forecast(market_id:str)->dict:
     market=normalize_market_id(market_id)
-    panel=fetch_panel(market,"DAILY",force=False)
-    benchmark=MARKETS[market].benchmark
-    prices=[float(x) for x in (panel.close.get(benchmark) or []) if float(x)>0.0]
-    if len(prices)<90:
-        raise ValueError(f"insufficient_daily_history:{market}:{len(prices)}")
+    history=_benchmark_history(market)
+    benchmark=str(history["benchmark"])
+    prices=list(history["prices"])
     returns=_log_returns(prices)
     model=_sigma_from_returns(returns)
     sigma=float(model["sigma"])
@@ -151,9 +193,9 @@ def volatility_forecast(market_id:str)->dict:
         "model":MODEL,
         "market_id":market,
         "benchmark":benchmark,
-        "as_of_source_ts":int(panel.ts[-1]),
-        "provider":panel.provider,
-        "data_quality":panel.quality,
+        "as_of_source_ts":int(history["source_latest_ts"]),
+        "provider":history["provider"],
+        "data_quality":history["quality"],
         "research_only":True,
         "horizon":"NEXT_TRADING_DAY_CLOSE_TO_CLOSE",
         "forecast_sigma":sigma,
@@ -193,18 +235,40 @@ def volatility_forecast(market_id:str)->dict:
     }
 
 
-def all_market_volatility_forecasts()->dict:
+def all_market_volatility_forecasts(force_refresh:bool=False)->dict:
+    global _CACHE_AT,_CACHE_PAYLOAD
+    now=time.monotonic()
+    with _CACHE_LOCK:
+        if (
+            not force_refresh
+            and _CACHE_PAYLOAD is not None
+            and now-_CACHE_AT<=CACHE_TTL_SECONDS
+        ):
+            payload=deepcopy(_CACHE_PAYLOAD)
+            payload["cache_hit"]=True
+            return payload
+
     rows={}
     errors={}
-    for market in ("US","CN","HK"):
-        try:
-            rows[market]=volatility_forecast(market)
-        except Exception as exc:
-            errors[market]=f"{type(exc).__name__}:{exc}"
-    return {
+    markets=("US","CN","HK")
+    with ThreadPoolExecutor(max_workers=len(markets),thread_name_prefix="triaid-vol") as pool:
+        futures={pool.submit(volatility_forecast,market):market for market in markets}
+        for future in as_completed(futures):
+            market=futures[future]
+            try:
+                rows[market]=future.result()
+            except Exception as exc:
+                errors[market]=f"{type(exc).__name__}:{exc}"
+
+    payload={
         "version":VERSION,
         "model":MODEL,
-        "markets":rows,
-        "errors":errors,
+        "markets":{m:rows[m] for m in markets if m in rows},
+        "errors":{m:errors[m] for m in markets if m in errors},
         "research_only":True,
+        "cache_hit":False,
     }
+    with _CACHE_LOCK:
+        _CACHE_PAYLOAD=deepcopy(payload)
+        _CACHE_AT=time.monotonic()
+    return payload
