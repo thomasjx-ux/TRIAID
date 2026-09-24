@@ -20,6 +20,7 @@ class RuntimeJobContext:
     timeout_seconds: int
     state: dict
     errors: dict
+    now_utc: datetime | None = None
 
     @property
     def market(self)->str:
@@ -28,6 +29,11 @@ class RuntimeJobContext:
     @property
     def local_now(self)->datetime:
         tz=ZoneInfo(MARKET_REGISTRY.get(self.market).timezone)
+        if self.now_utc is not None:
+            now=self.now_utc
+            if now.tzinfo is None:
+                now=now.replace(tzinfo=ZoneInfo("UTC"))
+            return now.astimezone(tz)
         return datetime.now(tz)
 
     @property
