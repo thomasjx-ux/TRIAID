@@ -1546,23 +1546,52 @@ tbody tr:hover td{background:#f8fbff}
   <div class="prospective-panel" id="hkRoutePanel">
     <div class="prospective-head">
       <div>
-        <b id="hkRouteTitle">港股独立 Return-Max 路线</b>
+        <b id="hkRouteTitle">港股 Return-Max 路线</b>
         <div class="prospective-meta" id="hkRouteMeta">-</div>
       </div>
       <span class="tag" id="hkRouteStatus">-</span>
     </div>
     <div class="summary prospective-kpis">
-      <div class="item"><span class="label" id="hkSelectedLabel">当前入选策略</span><b id="hkSelected">-</b></div>
-      <div class="item"><span class="label" id="hkChangedLabel">发生权重调整</span><b id="hkChanged">-</b></div>
-      <div class="item"><span class="label" id="hkPosteriorLabel">最近路线后验差</span><b id="hkPosterior">-</b></div>
-      <div class="item"><span class="label" id="hkCapacityLabel">独立容量证据</span><b id="hkCapacity">待建立专属账本</b></div>
+      <div class="item"><span class="label" id="hkExpectedLabel">TRIAID 多周期年化状态估计</span><b id="hkExpected">-</b></div>
+      <div class="item"><span class="label" id="hkBaselineLabel">冻结基线多周期年化状态估计</span><b id="hkBaseline">-</b></div>
+      <div class="item"><span class="label" id="hkBenchmarkLabel">2800.HK 多周期年化状态估计</span><b id="hkBenchmark">-</b></div>
+      <div class="item"><span class="label" id="hkRiskLabel">目标风险仓位</span><b id="hkRisk">-</b></div>
     </div>
-    <div class="prospective-note" id="hkRouteNote">港股只使用港股冻结基线与真实后验。当前没有可替代的 US/CN 容量结果；港股专属容量账本未形成前，页面明确保留这一证据缺口。</div>
-    <h3 id="hkAssetTitle">港股主路线资产角色</h3>
+    <div class="prospective-note" id="hkRouteNote">-</div>
+    <h3 id="hkStrategyTitle">当前冻结策略权重</h3>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkStrategyHeader">策略</th><th id="hkTriaidWeightHeader">TRIAID 权重</th><th id="hkBaseWeightHeader">冻结基线权重</th></tr></thead>
+        <tbody id="hkStrategyRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkAssetTitle">底层港股 ETF 目标敞口</h3>
     <div class="tablewrap" style="max-height:280px">
       <table>
-        <thead><tr><th id="hkAssetSymbolHeader">ETF</th><th id="hkAssetRoleHeader">角色</th></tr></thead>
+        <thead><tr><th id="hkAssetSymbolHeader">ETF</th><th id="hkAssetWeightHeader">目标权重</th></tr></thead>
         <tbody id="hkAssetRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkCapitalTitle">四档港币资金规模容量实验</h3>
+    <div class="prospective-meta" id="hkCapitalMeta">-</div>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkCapCapital">起始资金</th><th id="hkCapInvested">目标投入</th><th id="hkCapParticipation">最大目标仓位/ADV</th><th id="hkCapDays">最少成交天数</th><th id="hkCapCost">模型往返成本代理</th></tr></thead>
+        <tbody id="hkCapitalRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkRealizedTitle">上一轮真实市场后验与模拟执行容量回顾</h3>
+    <div class="tablewrap" style="max-height:360px">
+      <table>
+        <thead><tr><th id="hkRealCapital">起始资金</th><th id="hkRealFill">模拟成交比例</th><th id="hkRealEquity">模拟当前净值</th><th id="hkRealPnl">模拟净损益</th><th id="hkRealReturn">模拟净收益率</th><th id="hkRealCost">模型执行成本</th></tr></thead>
+        <tbody id="hkRealizedRows"></tbody>
+      </table>
+    </div>
+    <h3 id="hkDailyTitle">上一轮冻结配置理论持仓后验路径</h3>
+    <div class="tablewrap" style="max-height:330px">
+      <table>
+        <thead><tr><th id="hkDailyDate">结果日</th><th id="hkDailyTriaid">TRIAID 累计</th><th id="hkDailyBase">冻结基线累计</th><th id="hkDailyBenchmark">2800.HK 累计</th></tr></thead>
+        <tbody id="hkDailyRows"></tbody>
       </table>
     </div>
   </div>
@@ -2253,6 +2282,1681 @@ function applyTableHeaderTooltips(root=document){
 function fmtPct(x){return x===null||x===undefined?'-':(100*x).toFixed(2)+'%'}
 function fmtMoney(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return '¥'+v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function fmtUsd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return "$"+v.toLocaleString(undefined,{maximumFractionDigits:0})}
+function fmtHkd(x){if(x===null||x===undefined)return '-';const v=Number(x);if(!Number.isFinite(v))return '-';return 'HKfunction signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return Number.isFinite(v)?((v>0?'+':'')+v.toFixed(2)+'%'):'-'}
+function fmtRiskWithUnit(x,unit,digits=4){const n=Number(x);return Number.isFinite(n)?n.toFixed(digits)+(unit||''):'—'}
+function fmtMultiplier(x){const n=Number(x);return Number.isFinite(n)?n.toFixed(2)+'×':'—'}
+function fmtPp(x,digits=2){const n=Number(x);return Number.isFinite(n)?((n>0?'+':'')+(n*100).toFixed(digits)+'pp'):'—'}
+function macroValueText(key,value){
+ const n=Number(value);if(!Number.isFinite(n))return '—';
+ const pctKeys=new Set(['US_TREASURY_2Y_LEVEL','US_TREASURY_10Y_LEVEL','US_TREASURY_30Y_LEVEL','US_REAL_YIELD_10Y_LEVEL','FED_POLICY_RATE_LEVEL','FED_FUNDS_FUTURES_IMPLIED_RATE','HY_CREDIT_SPREAD_LEVEL']);
+ const ppKeys=new Set(['US_TREASURY_2Y_RISE_90D','US_TREASURY_10Y_RISE_90D','US_REAL_YIELD_10Y_RISE_90D','FED_FUNDS_FUTURES_REPRICING_ABS_30D','YIELD_CURVE_INVERSION','YIELD_CURVE_10Y3M_INVERSION']);
+ if(pctKeys.has(key))return n.toFixed(4)+'%';
+ if(ppKeys.has(key))return n.toFixed(4)+'pp';
+ if(key==='MOVE_LEVEL'||key==='MOVE_RISE_30D'||key==='MOVE_RISE_90D')return n.toFixed(2);
+ return n.toFixed(4);
+}
+function tableEmptyRow(colspan,zh,en){return '<tr class="table-empty"><td class="table-empty-cell" colspan="'+colspan+'">'+esc(lang==='zh'?zh:en)+'</td></tr>'}
+function lifecycleLabel(status){
+ const s=String(status||'').toUpperCase();
+ const zh={ACTIVE:'正式',SHADOW:'Shadow验证',REDUCED:'降权',FROZEN:'冻结',CANDIDATE:'候选',RESEARCH:'研究',RETIRED:'退出',PREVIEW_READY:'预览'};
+ const en={ACTIVE:'Active',SHADOW:'Shadow',REDUCED:'Reduced',FROZEN:'Frozen',CANDIDATE:'Candidate',RESEARCH:'Research',RETIRED:'Retired',PREVIEW_READY:'Preview'};
+ return (lang==='zh'?zh:en)[s]||s||'—';
+}
+function riskStageLabel(stage){
+ const s=String(stage||'').toUpperCase();
+ const zh={WATCH_ONLY:'观察',NORMAL_OBSERVATION:'常规观察',SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧',SHADOW_DEFENSIVE_BIAS:'Shadow防御',DATA_UNAVAILABLE:'数据不足'};
+ const en={WATCH_ONLY:'Watch only',NORMAL_OBSERVATION:'Normal',SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow tighten',SHADOW_DEFENSIVE_BIAS:'Shadow defensive',DATA_UNAVAILABLE:'Data unavailable'};
+ return (lang==='zh'?zh:en)[s]||s||'—';
+}
+function chainStateLabel(state){
+ const s=String(state||'').toUpperCase();
+ const zh={ACTIVE:'已激活',ELEVATED:'升高',STRESSED:'承压',DETERIORATING:'恶化',NOT_CONFIRMED:'未确认',PARTIAL:'部分确认',HIGH_STRETCH_EVIDENCE:'高拉伸证据',NORMAL:'正常',INACTIVE:'未激活'};
+ const en={ACTIVE:'Active',ELEVATED:'Elevated',STRESSED:'Stressed',DETERIORATING:'Deteriorating',NOT_CONFIRMED:'Not confirmed',PARTIAL:'Partial',HIGH_STRETCH_EVIDENCE:'High-stretch evidence',NORMAL:'Normal',INACTIVE:'Inactive'};
+ return (lang==='zh'?zh:en)[s]||s.replaceAll('_',' ')||'—';
+}
+function cls(x){return x>1e-12?'good':x<-1e-12?'bad':''}
+function esc(x){return String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmtPrice(x,currency){
+ const v=Number(x);if(!Number.isFinite(v))return '-';
+ const digits=v>=100?2:v>=10?3:4;
+ let prefix='';
+ if(currency==='USD')prefix=String.fromCharCode(36);
+ else if(currency==='CNY')prefix=String.fromCharCode(165);
+ else if(currency==='HKD')prefix='HK'+String.fromCharCode(36);
+ return prefix+v.toFixed(digits);
+}
+function strategyLabelHtml(name,strategyId){
+ const n=name||strategyId||'-',sid=strategyId||'';
+ return '<span class="strategy-name strategy-hover" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'">'+esc(n)+'</span>'+
+  '<span class="market-tip-icon" data-strategy-id="'+esc(sid)+'" data-strategy-name="'+esc(n)+'" aria-label="'+(lang==='zh'?'查看最新可用价格':'View latest available price')+'">i</span>';
+}
+function strategyMarketTip(strategyId,name){
+ const m=el('market').value;
+ const ctx=strategyMarketContext[m];
+ const title=(name||strategyId||'-')+(strategyId&&name!==strategyId?' · '+strategyId:'');
+ if(!ctx)return title+'\\n'+(lang==='zh'?'正在读取最新市场价格…':'Loading latest market prices…');
+ const row=(ctx.strategies||{})[strategyId];
+ if(!row)return title+'\\n'+(lang==='zh'?'当前策略暂无可用的底层资产价格映射。':'No current underlying-price mapping is available for this strategy.');
+ const lines=[title];
+ const assets=row.assets||[];
+ if(!assets.length){
+  lines.push(lang==='zh'?'当前底层：现金，无市场价格':'Current underlying: cash, no market price');
+ }else{
+  assets.forEach(a=>{
+   const assetName=a.name||a.symbol;
+   const px=fmtPrice(a.latest_price,ctx.currency);
+   const chg=signedPct(a.last_trading_day_change);
+   lines.push(
+    lang==='zh'
+     ? assetName+' '+a.symbol+' · 目标敞口 '+fmtPct(a.weight)+' · 最新可用 '+px+' · 最近交易日 '+chg
+     : assetName+' '+a.symbol+' · target exposure '+fmtPct(a.weight)+' · latest available '+px+' · last trading day '+chg
+   );
+  });
+ }
+ if(Number(row.cash_weight||0)>1e-6)lines.push((lang==='zh'?'现金 ':'Cash ')+fmtPct(row.cash_weight));
+ lines.push(
+  (lang==='zh'?'价格源 ':'Price source ')+(ctx.provider||'-')+' · '+(ctx.price_mode||'-')+
+  ' · '+(lang==='zh'?'最近交易日 ':'Last trading day ')+(ctx.last_trading_day||'-')
+ );
+ lines.push(
+  lang==='zh'
+   ? '用途：判断这个策略当前实际暴露到哪些资产、最新价格和最近交易日变化是否与目标权重相符。下一步：价格缺失、过旧或异常时先检查数据源；不要仅凭单日涨跌直接改策略权重。'
+   : 'Use: verify which assets the strategy is actually exposed to and whether latest prices / last-session moves are consistent with the target weights. Next: if prices are missing, stale or anomalous, check the data source first; do not reweight from one day’s move alone.'
+ );
+ return lines.join('\\n');
+}
+function applyFlowLabels(){
+ const zh=lang==='zh';
+ const m=el('market')?.value||'US';
+ const meta=MARKET_UI[m]||MARKET_UI.US;
+ const labels={
+  stageMarket:[zh?'当前市场与状态':'Market and current state',zh?'先确认市场、交易阶段、数据日期与当前状态，再读任何策略结论。':'Confirm market, session, data date and current state before interpreting strategy conclusions.'],
+  stageDecision:[zh?meta.decisionZh:meta.decisionEn,zh?meta.decisionDescZh:meta.decisionDescEn],
+  stageValidation:[zh?meta.validationZh:meta.validationEn,zh?meta.validationDescZh:meta.validationDescEn],
+  stageRoute:[zh?meta.routeStageZh:meta.routeStageEn,zh?meta.routeStageDescZh:meta.routeStageDescEn],
+  stageRisk:[zh?'三市场联动风险':'Three-market linked risk',zh?'从单市场决策切到 US/A股/港股联合风险层：先看风险结论和主要驱动，再按需展开深层证据。':'Move from single-market decisions to the joint US/CN/HK risk layer: read the conclusion and main drivers first, then open deep evidence as needed.'],
+  stageEvolution:[zh?'Core 进化':'Core evolution',zh?'只有已经完成的真实后验与审计证据，才能推动 Candidate 与 Core 变化。':'Only completed realized posterior and audit evidence can change a Candidate or Core.']
+ };
+ Object.entries(labels).forEach(([id,v])=>{
+  if(el(id+'Title'))el(id+'Title').textContent=v[0];
+  if(el(id+'Desc'))el(id+'Desc').textContent=v[1];
+ });
+ if(el('systemOpsTitle'))el('systemOpsTitle').textContent=zh?'系统运行明细':'System operations';
+ if(el('systemOpsSummary'))el('systemOpsSummary').textContent=zh?' · 后台调度、刷新和事件日志':' · scheduler, refresh and event logs';
+ if(el('riskDeepEvidenceTitle'))el('riskDeepEvidenceTitle').textContent=zh
+  ?'展开深层风险证据：传导、利率曲线、历史回溯与 Shadow 风控实验'
+  :'Open deep risk evidence: transmission, rate curves, historical replay and shadow risk-control experiments';
+ const routeLabels={
+  marketRouteModeLabel:[zh?'主实验模式':'Primary experiment mode'],
+  marketRouteBaselineLabel:[zh?'验证基线':'Validation control'],
+  marketRoutePosteriorLabel:[zh?'该路线最近后验':'Latest route posterior'],
+  marketRouteRealizabilityLabel:[zh?'可实现性证据':'Realizability evidence'],
+  hkSelectedLabel:[zh?'当前入选策略':'Selected strategies'],
+  hkChangedLabel:[zh?'发生权重调整':'Reweighted strategies'],
+  hkPosteriorLabel:[zh?'最近路线后验差':'Latest route posterior gap'],
+  hkCapacityLabel:[zh?'独立容量证据':'HK capacity evidence'],
+  hkAssetTitle:[zh?'港股主路线资产角色':'HK primary-route asset roles'],
+  hkAssetSymbolHeader:[zh?'ETF':'ETF'],
+  hkAssetRoleHeader:[zh?'角色':'Role']
+ };
+ Object.entries(routeLabels).forEach(([id,v])=>{if(el(id))el(id).textContent=v[0]});
+}
+function applyText(){
+ const t=T[lang];
+ const map={title:'title',subtitle:'subtitle',resultTitle:'result',baseReturnLabel:'baseReturn',triaidReturnLabel:'triaidReturn',gainLabel:'gain',
+ liveTitle:'live',indexWindowTitle:'indexWindow',activityWindowTitle:'activityWindow',
+ baseReturnSub:'baseSub',triaidReturnSub:'triaidSub',gainSub:'gainSub',overviewTitle:'overview',dateLabel:'date',coreLabel:'core',
+ selectedLabel:'selected',cumLabel:'cum',curveTitle:'curve',legendBase:'legendBase',legendTriaid:'legendTriaid',dailyTitle:'daily',
+ candidatePoolTitle:'candidatePool',
+ usReturnMaxTitle:'usReturnMax',usrmExpectedLabel:'usrmExpected',usrmGenericLabel:'usrmGeneric',usrmSpyLabel:'usrmSpy',usrmRiskLabel:'usrmRisk',usrmStrategyTitle:'usrmStrategy',usrmAssetTitle:'usrmAsset',usrmCapitalTitle:'usrmCapital',usrmRealizedTitle:'usrmRealized',usrmControlTitle:'usrmControl',
+ regimeLabel:'regime',runStateLabel:'runState',selectedNamesLabel:'selectedNames',dailyAnalysisLabel:'analysis',
+ prospectiveTitle:'prospective',prospectiveDaysLabel:'prospectiveDays',prospectiveHoldLabel:'prospectiveHold',prospectiveTriaidLabel:'prospectiveTriaid',prospectiveGapLabel:'prospectiveGap',
+ prospectiveStrategyTitle:'prospectiveStrategy',prospectiveDailyTitle:'prospectiveDaily',
+ pthStrategy:'strategy',pthPredRank:'predRank',pthBaseWeight:'before',pthTriaidWeight:'after',pthDailyReturn:'dailyReturn',pthCumReturn:'cumReturn',pthRealRank:'realRank',pthReason:'detReason',
+ recoveryWaveTitle:'recoveryWave',recoveryCashLabel:'recoveryCash',recoveryPrevDaysLabel:'recoveryPrevDays',recoveryPrevReturnLabel:'recoveryPrevReturn',recoveryPrevGapLabel:'recoveryPrevGap',
+ recoveryOpinionTitle:'recoveryOpinion',recoveryReviewTitle:'recoveryReview',rwthProduct:'product',rwthAction:'action',rwthTarget:'target',rwthChange:'change',rwthDrawdown:'drawdown',rwthDirection:'direction',rwthHorizon:'horizon',rwthSpeed:'speed',rwthHitEdge:'hitEdge',rwthExpected:'expected',rwthSamples:'samples',
+ capitalSleeveTitle:'capitalSleeve',capitalRealizedTitle:'capitalRealized',csthCapital:'capital',csthInvested:'invested',csthParticipation:'participation',csthDays:'days',csthCost:'cost',csthPnl:'pnl',csthReturn:'netReturn',crthCapital:'capital',crthFill:'fill',crthEquity:'equity',crthPnl:'realizedPnl',crthReturn:'realizedReturn',crthCost:'executionCost',crthRemaining:'remaining',
+ rvrDate:'resultDate',rvrPortfolio:'portfolioDay',rvrEqual:'equalDay',rvrCum:'portfolioCum',rvrGap:'gapCum',strategyTitle:'strategies',
+ thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+ evolutionTitle:'evolution',evoObservedLabel:'observed',evoNegLabel:'negative',evoCandidateLabel:'next',evoNote:'evoNote',
+ proposeBtn:'propose',runBtn:'run',runAllBtn:'runAll'};
+ Object.entries(map).forEach(([id,key])=>el(id).textContent=t[key]);
+ const tips=TIP[lang];
+ const headerTips={
+  thStrategy:'strategy',thState:'state',thExp:'exp',thRisk:'risk',thBase:'before',thTriaid:'after',thDelta:'delta',thWhy:'why',
+  cthStrategy:'strategy',cthState:'state',cthExp:'exp',cthRisk:'risk',cthWhy:'candidateWhy'
+ };
+ Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
+ applyTableHeaderTooltips();
+ applyUiTooltips();
+ applyFlowLabels();
+ if(el('selectedMarketKicker'))el('selectedMarketKicker').textContent=lang==='zh'?'当前市场':'Selected market';
+ if(el('marketSectionNote'))el('marketSectionNote').textContent=lang==='zh'
+  ?'下面按一条主线阅读：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属路线与可实现性 → 三市场风险 → Core进化。'
+  :'Read the page as one chain: market/state → TRIAID decision → realized validation → market-specific realizability → three-market risk → Core evolution.';
+ if(el('crossMarketRiskNote'))el('crossMarketRiskNote').textContent=lang==='zh'
+  ?'从这里开始切换到三市场联合风险层：它始终同时分析 US、A股、港股，不随上方单市场选择器切换。'
+  :'From here the page switches to the joint three-market risk layer. It always analyzes US, CN and HK together and does not follow the single-market selector.';
+}
+function statusActionGuide(status){
+ const key=String(status||'').toLowerCase();
+ const zh=lang==='zh';
+ const mapZh={
+  active:'怎么用：该策略可以进入当前正式策略群。重点看Δ权重、风险/容量和后续EVALUATED相对收益；若多次完成后验持续落后对应基线，或容量/风险约束失效，就进入降级复核。',
+  shadow:'怎么用：只允许积累前瞻证据，不给正式配置权重。先看完整交易日样本、稳定性和对照结果；未达到准入门槛前，单次高收益不改变状态。',
+  reduced:'怎么用：当前影响已被压低。核对触发降级的具体证据是否恢复；未恢复则继续减弱或冻结，恢复后也要重新通过准入检查。',
+  frozen:'怎么用：当前不得参与正式配置。先查冻结原因；只有新的可复现证据重新通过准入链后才能恢复，不因短期反弹自动解冻。',
+  candidate:'怎么用：仍是候选。逐项看 replay、holdout、shadow、前瞻、容量和audit 是否通过；缺一项都不能晋级。',
+  research:'怎么用：只用于研发。先完成复现、压力测试、对照和前瞻样本，再决定是否进入Candidate。',
+  retired:'怎么用：已退出当前策略体系。除非出现新的、可复现且足以重新打开准入链的证据，否则不再投入正式配置资源。',
+  preview_ready:'怎么用：只检查页面与即时计算结果。不得写入正式后验、累计曲线或生命周期晋级证据。'
+ };
+ const mapEn={
+  active:'How to use: eligible for the active strategy group. Inspect weight delta, risk/capacity and subsequent EVALUATED relative return; repeated completed underperformance or failed constraints triggers downgrade review.',
+  shadow:'How to use: prospective evidence only, with no live allocation. Inspect complete trading-day samples, stability and control results; one strong result does not change status before admission gates pass.',
+  reduced:'How to use: influence is already constrained. Recheck the evidence that caused downgrade; if it has not recovered, continue reducing or freeze. Recovery still requires re-admission checks.',
+  frozen:'How to use: excluded from active allocation. Inspect the freeze reason; restore only after new reproducible evidence passes admission again, not because of a short-term rebound.',
+  candidate:'How to use: still a candidate. Check replay, holdout, shadow, prospective, capacity and audit one by one; any missing gate blocks promotion.',
+  research:'How to use: R&D only. Complete reproduction, stress tests, controls and prospective samples before Candidate admission.',
+  retired:'How to use: outside the current strategy system. Do not allocate formal resources unless new reproducible evidence is strong enough to reopen admission.',
+  preview_ready:'How to use: display/immediate-computation check only. Do not write it into formal posterior evidence, cumulative curves or lifecycle promotion.'
+ };
+ return (zh?mapZh:mapEn)[key]||(zh
+  ? '状态缺少专用动作说明；先查状态定义和准入规则，不要仅凭收益数字行动。'
+  : 'This state lacks dedicated action guidance; inspect its definition and admission rules before acting on return numbers.');
+}
+function statusTip(status){
+ const key=String(status||'').toLowerCase();
+ return (TIP[lang][key]||TIP[lang].state)+'\\n'+statusActionGuide(status);
+}
+async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
+const uiFetchCache=new Map();
+let refreshSeq=0,liveSeq=0,marketSwitchSeq=0;
+async function jsonCached(url,ttlMs=12000){
+ const now=Date.now(),hit=uiFetchCache.get(url);
+ if(hit&&hit.data!==undefined&&now-hit.at<ttlMs)return hit.data;
+ if(hit&&hit.promise)return hit.promise;
+ const prior=hit&&hit.data!==undefined?hit.data:undefined;
+ const priorAt=hit?.at||0;
+ const promise=json(url).then(data=>{
+   uiFetchCache.set(url,{data,at:Date.now(),promise:null});
+   return data;
+ }).catch(e=>{
+   if(prior!==undefined)uiFetchCache.set(url,{data:prior,at:priorAt,promise:null});
+   else uiFetchCache.delete(url);
+   throw e;
+ });
+ uiFetchCache.set(url,{data:prior,at:priorAt,promise});
+ return promise;
+}
+async function jsonCachedStale(url,ttlMs=12000){
+ const now=Date.now(),hit=uiFetchCache.get(url);
+ if(hit&&hit.data!==undefined){
+   if(now-hit.at>=ttlMs&&!hit.promise)jsonCached(url,ttlMs).catch(()=>null);
+   return hit.data;
+ }
+ return jsonCached(url,ttlMs);
+}
+async function jsonOrNullCached(url,ttlMs=12000){try{return await jsonCached(url,ttlMs)}catch(e){return null}}
+function clearMarketCache(m){
+ for(const key of [...uiFetchCache.keys()]){
+   if(key.includes('market_id='+m)||key.includes('/'+m)||key==='/api/status'||key==='/api/evolution'||key.includes('/api/risk-'))uiFetchCache.delete(key);
+ }
+}
+function warmMarketCache(m){
+ const urls=[
+   '/api/daily?compact=true&market_id='+m,
+   '/api/strategies?market_id='+m+'&lang='+lang,
+   '/api/curves?market_id='+m,
+   '/api/runs?market_id='+m+'&limit=100'
+ ];
+ urls.forEach(url=>jsonCached(url,30000).catch(()=>null));
+}
+function warmAllMarkets(){
+ const selected=el('market').value;
+ const queue=['US','CN','HK'].filter(m=>m!==selected);
+ queue.forEach((m,i)=>setTimeout(()=>warmMarketCache(m),1200+(i*1400)));
+}
+const MARKET_UI={
+ US:{
+  zh:'美股 / US',en:'US Equities',timezone:'America/New_York',routeMode:'US_RETURN_MAX_CAPACITY',
+  routeZh:'Return-Max 主路线，纳入容量与模型执行成本；风险资产 SPY / QQQ / IWM，防御资产 TLT / GLD。',
+  routeEn:'Return-Max primary route with capacity and modeled execution cost; SPY / QQQ / IWM are risk assets and TLT / GLD are defensive assets.',
+  scopeZh:'美股页面分两层：第02–03阶段展示通用 Core 对照决策与后验；第04阶段单独展示 Return-Max 主路线、容量和执行成本。两条证据链不混用。',
+  scopeEn:'The US page has two layers: stages 02–03 show the generic-Core control decision/posterior, while stage 04 shows the Return-Max primary route with capacity and execution costs. The evidence chains are not mixed.',
+  decisionZh:'美股通用 Core 对照决策',decisionEn:'US Generic-Core Control Decision',
+  decisionDescZh:'先看通用 Core 选了哪些策略和如何调权；它是对照层，不代表 Return-Max 主路线本身。',
+  decisionDescEn:'Inspect the generic-Core selection and reweighting first; this is the control layer, not the Return-Max route itself.',
+  validationZh:'美股通用 Core 后验验证',validationEn:'US Generic-Core Posterior Validation',
+  validationDescZh:'只把同一冻结时点的通用 Core 基线与 TRIAID 配置比较；Return-Max 的后验留在第04阶段。',
+  validationDescEn:'Compare only the generic-Core baseline and TRIAID frozen at the same time; Return-Max posterior evidence stays in stage 04.',
+  routeStageZh:'美股 Return-Max 主路线与可实现性',routeStageEn:'US Return-Max Route & Realizability',
+  routeStageDescZh:'检查 Return-Max 冻结排序、底层ETF、四档美元容量、模型成本和真实后验，不与通用 Core 对照层混写。',
+  routeStageDescEn:'Inspect the Return-Max frozen ranking, underlying ETFs, four USD capacity sleeves, modeled costs and realized posterior without mixing them with the generic-Core control.',
+  baselineZh:'Return-Max vs 通用 Core / SPY',baselineEn:'Return-Max vs Generic Core / SPY',
+  riskAssets:['SPY','QQQ','IWM'],defensiveAssets:['TLT','GLD']
+ },
+ CN:{
+  zh:'A股 / CN',en:'China A-shares',timezone:'Asia/Shanghai',routeMode:'CN_RETURN_MAX_CAPACITY',
+  routeZh:'A股收益最大化主路线，使用 510300 / 510500 / 创业板ETF / 中证1000ETF，并以国债ETF作为防御资产。',
+  routeEn:'CN return-max primary route using CSI 300 / CSI 500 / ChiNext / CSI 1000 ETFs with a government-bond ETF as the defensive sleeve.',
+  scopeZh:'A股页面以 CN_RETURN_MAX_CAPACITY 为主路线。策略群、冻结基线、恢复波段和容量结果只与A股自身数据比较；旧 CN_WORST_POOL_RESCUE 前瞻协议单独显示状态，不混入当前主路线。',
+  scopeEn:'The CN page uses CN_RETURN_MAX_CAPACITY as its primary route. Strategy groups, frozen controls, recovery-wave research and capacity results are CN-only; the legacy CN_WORST_POOL_RESCUE prospective protocol is shown separately and is not mixed into the current primary route.',
+  decisionZh:'A股收益优先决策',decisionEn:'CN Return-First Decision',
+  decisionDescZh:'先看A股收益优先策略群与 TRIAID 动态权重，再看候选池为什么没有入选。',
+  decisionDescEn:'Inspect the CN return-first strategy group and TRIAID dynamic weights, then see why candidates were excluded.',
+  validationZh:'A股真实后验验证',validationEn:'CN Realized Posterior Validation',
+  validationDescZh:'用同一冻结时点的收益优先基线与 TRIAID 比较，并检查累计路径是否持续。',
+  validationDescEn:'Compare the return-first baseline and TRIAID frozen at the same time, then test persistence on the cumulative path.',
+  routeStageZh:'A股恢复波段、容量与前瞻证据状态',routeStageEn:'CN Recovery-Wave, Capacity & Prospective Evidence Status',
+  routeStageDescZh:'当前主路线是 CN_RETURN_MAX_CAPACITY；这里集中检查恢复波段、人民币容量，以及旧前瞻协议当前是否仍有可用证据。',
+  routeStageDescEn:'The primary route is CN_RETURN_MAX_CAPACITY. This stage checks recovery-wave evidence, CNY capacity, and whether the legacy prospective protocol currently contributes usable evidence.',
+  baselineZh:'收益优先冻结基线',baselineEn:'Frozen return-first baseline',
+  riskAssets:['510300.SS','510500.SS','159915.SZ','512100.SS'],defensiveAssets:['511010.SS']
+ },
+ HK:{
+  zh:'港股 / HK',en:'Hong Kong Equities',timezone:'Asia/Hong_Kong',routeMode:'HK_RETURN_MAX_CAPACITY',
+  routeZh:'港股独立收益最大化路线；2800 / 2828 / 3033 为风险资产，2819 为防御资产，策略权重与后验独立记录。',
+  routeEn:'Independent HK return-max route; 2800 / 2828 / 3033 are risk assets and 2819 is the defensive sleeve, with independent weights and posterior evidence.',
+  scopeZh:'港股使用独立 HK_RETURN_MAX_CAPACITY 路线。策略、冻结基线和后验只与港股自身比较；不能借用美股/A股权重、容量或结果补齐港股结论。',
+  scopeEn:'HK uses an independent HK_RETURN_MAX_CAPACITY route. Strategies, frozen controls and posterior evidence are HK-only; US/CN weights, capacity or outcomes cannot substitute for HK evidence.',
+  decisionZh:'港股收益优先决策',decisionEn:'HK Return-First Decision',
+  decisionDescZh:'先看港股自己的策略群、权重变化和选择原因；所有比较都锁定港股自身基线。',
+  decisionDescEn:'Inspect HK-only strategy selection, weight changes and rationale; all comparisons remain anchored to the HK control.',
+  validationZh:'港股真实后验验证',validationEn:'HK Realized Posterior Validation',
+  validationDescZh:'只比较 HK_RETURN_MAX_CAPACITY 同一冻结时点的基线与 TRIAID，避免被其他市场结果污染。',
+  validationDescEn:'Compare baseline and TRIAID only within the same HK_RETURN_MAX_CAPACITY freeze; do not contaminate it with other markets.',
+  routeStageZh:'港股独立路线与可实现性',routeStageEn:'HK Independent Route & Realizability',
+  routeStageDescZh:'检查港股独立资产角色、当前后验证据和专属容量缺口；没有港股独立容量账本时明确标记，不借用其他市场。',
+  routeStageDescEn:'Inspect HK-specific asset roles, current posterior evidence and any capacity gap; if an HK capacity ledger is not yet available, mark it explicitly rather than borrowing another market.',
+  baselineZh:'港股独立冻结基线',baselineEn:'Frozen HK-only baseline',
+  riskAssets:['2800.HK','2828.HK','3033.HK'],defensiveAssets:['2819.HK']
+ }
+};
+let marketClockState={};
+let homeSummaryState={
+ selectedCount:null,
+ changedCount:null,
+ selectedNames:[],
+ evaluated:null,
+ preview:false,
+ latestStatus:null,
+ riskScore:null,
+ riskBand:null
+};
+let volatilityForecastState={markets:{},errors:{},model:null,version:null};
+
+function volatilityBandLabel(value){
+ const v=String(value||'UNKNOWN').toUpperCase();
+ const zh={LOW:'低',NORMAL:'正常',ELEVATED:'偏高',HIGH:'高',UNKNOWN:'未知'};
+ const en={LOW:'LOW',NORMAL:'NORMAL',ELEVATED:'ELEVATED',HIGH:'HIGH',UNKNOWN:'UNKNOWN'};
+ return (lang==='zh'?zh:en)[v]||v;
+}
+function volatilityBandClass(value){
+ const v=String(value||'UNKNOWN').toUpperCase();
+ return v==='LOW'?'low':v==='ELEVATED'?'elevated':v==='HIGH'?'high':'normal';
+}
+function volatilityCalibrationLabel(value){
+ const v=String(value||'INSUFFICIENT').toUpperCase();
+ const zh={WELL_CALIBRATED:'校准良好',USABLE:'可用',POORLY_CALIBRATED:'需校准',INSUFFICIENT:'样本不足'};
+ const en={WELL_CALIBRATED:'Well calibrated',USABLE:'Usable',POORLY_CALIBRATED:'Needs calibration',INSUFFICIENT:'Insufficient sample'};
+ return (lang==='zh'?zh:en)[v]||v;
+}
+function volatilityPrice(value){
+ const n=Number(value);
+ if(!Number.isFinite(n))return '-';
+ return Math.abs(n)<20?n.toFixed(3):n.toFixed(2);
+}
+function volatilityInterpretation(band,coverage,ratio,n,zh){
+ const bandKey=String(band||'UNKNOWN').toUpperCase();
+ const bandText=zh
+  ? ({LOW:'当前预测波动处于历史低位',NORMAL:'当前预测波动处于历史常态',ELEVATED:'当前预测波动高于常态',HIGH:'当前预测波动处于历史高位',UNKNOWN:'当前波动档位尚不可判定'}[bandKey]||'当前波动档位尚不可判定')
+  : ({LOW:'Forecast volatility is historically low',NORMAL:'Forecast volatility is near its historical norm',ELEVATED:'Forecast volatility is above normal',HIGH:'Forecast volatility is historically high',UNKNOWN:'Volatility band is not yet available'}[bandKey]||'Volatility band is not yet available');
+ let calibration='';
+ if(n<60||!Number.isFinite(coverage)||!Number.isFinite(ratio)){
+  calibration=zh
+   ? '历史样本不足，先把这个数字当作观察值，不用于提高自动化风险动作。'
+   : 'Historical sample is insufficient; treat this as an observation only and do not promote it into automated risk actions.';
+ }else if(ratio>1.15||coverage<0.60){
+  calibration=zh
+   ? '历史真实波动高于模型估计，当前模型有低估风险，使用时应提高异常波动警戒并等待进一步校准。'
+   : 'Realized volatility has exceeded model estimates; the model is underestimating risk, so abnormal-move monitoring should be tightened pending recalibration.';
+ }else if(ratio<0.85||coverage>0.78){
+  calibration=zh
+   ? '历史预测区间偏宽，模型较保守；不要把较大的预测幅度误读成方向性风险已经发生。'
+   : 'Historical intervals are relatively wide and conservative; do not read the larger forecast magnitude as evidence that directional risk has already materialized.';
+ }else{
+  calibration=zh
+   ? '历史覆盖率和波动量级基本匹配，可作为监控频率、异常阈值和风险实验的辅助输入。'
+   : 'Historical coverage and volatility scale are broadly aligned; the forecast is usable as an auxiliary input for monitoring cadence, anomaly thresholds and risk experiments.';
+ }
+ return (zh?'怎么用：':'How to use: ')+bandText+'。'+calibration;
+}
+function renderVolatilityForecast(){
+ const payload=volatilityForecastState||{},markets=payload.markets||{};
+ const zh=lang==='zh';
+ el('homeVolatilityTitle').childNodes[0].nodeValue=zh?'下一交易日波动预测 ':'Next-session volatility forecast ';
+ el('homeVolatilitySub').textContent=zh
+  ? '预测的是收盘到收盘的波动幅度，不预测涨跌方向。用途是判断明天“可能动多大”，从而决定监控频率、风险阈值和是否需要提高异常波动警戒。'
+  : 'Forecasts close-to-close move magnitude, not direction. Its purpose is to estimate how much the market may move so monitoring cadence, risk thresholds and abnormal-move alerts can be adjusted.';
+ el('homeVolatilityModel').textContent=(payload.model||'EWMA94_MULTI_WINDOW_REALIZED_VOL')+' · '+(payload.version||'-');
+ el('homeVolatilityNote').textContent=zh
+  ? '68%区间是模型区间而不是保证；历史校准采用逐日 walk-forward，只使用每个预测时点之前的数据。任何“样本不足/需校准”状态都不应被解释为高置信度预测。'
+  : 'The 68% range is a model interval, not a guarantee. Historical calibration is daily walk-forward using only information available before each forecast. Any insufficient-sample or needs-calibration state must not be treated as a high-confidence forecast.';
+
+ el('volExplainMoveTitle').textContent=zh?'预计 ±X%':'Forecast ±X%';
+ el('volExplainMoveText').textContent=zh?'下一交易日1σ波动幅度。不是“涨X%或跌X%”的方向预测。':'Next-session 1σ move magnitude. It is not a directional call of up X% or down X%.';
+ el('volExplainRangeTitle').textContent=zh?'68%预测区间':'68% forecast range';
+ el('volExplainRangeText').textContent=zh?'若模型校准正常，长期约68%的实际收盘应落在区间内；越界代表实际波动超出模型常态。':'If calibrated, roughly 68% of realized closes should fall inside over time; a breach means realized movement exceeded the model norm.';
+ el('volExplainCoverageTitle').textContent=zh?'历史1σ命中率':'Historical 1σ coverage';
+ el('volExplainCoverageText').textContent=zh?'参考目标约68%。明显高于68%常表示区间偏宽，明显低于68%表示模型低估波动。':'Reference target is about 68%. Much higher often means intervals are too wide; much lower means volatility is being underestimated.';
+ el('volExplainRatioTitle').textContent=zh?'校准比':'Calibration ratio';
+ el('volExplainRatioText').textContent=zh?'真实RMS波动 ÷ 预测RMS波动。接近1最好；大于1表示低估波动，小于1表示预测偏保守。':'Realized RMS volatility ÷ forecast RMS volatility. Near 1 is best; above 1 means underestimation, below 1 means a conservative forecast.';
+
+ const tipMap={
+  volatilityTitleTip:zh?'这是“幅度预测”而不是涨跌方向预测。用途是回答下一交易日市场可能波动多大，并决定监控和风险实验需要多敏感。':'This forecasts move magnitude, not direction. It answers how much the market may move next session and helps set monitoring and risk-experiment sensitivity.',
+  volExplainMoveTip:zh?'±X%表示1个标准差量级的下一交易日收盘到收盘波动。它不是收益目标，也不是买卖信号。':'±X% is a one-standard-deviation estimate of next-session close-to-close movement. It is not a return target or trade signal.',
+  volExplainRangeTip:zh?'68%区间由当前参考收盘和预测波动生成。校准良好时，长期约68%的下一日收盘应落在区间内。':'The 68% range is derived from the reference close and forecast volatility. When calibrated, roughly 68% of next closes should fall inside over time.',
+  volExplainCoverageTip:zh?'历史1σ命中率=过去walk-forward预测中，真实下一日波动落在±1σ内的比例。参考值约68%，不是越高越好。':'Historical 1σ coverage is the share of walk-forward forecasts where the next realized move stayed within ±1σ. The reference is about 68%; higher is not automatically better.',
+  volExplainRatioTip:zh?'校准比=真实RMS波动/预测RMS波动。1附近最好；>1说明模型普遍低估波动；<1说明模型普遍高估波动。':'Calibration ratio = realized RMS volatility / forecast RMS volatility. Near 1 is best; >1 means systematic underestimation, <1 means systematic overestimation.'
+ };
+ for(const [id,tip] of Object.entries(tipMap)) el(id).dataset.tip=tip;
+
+ const marketNames=zh?{US:'美股 / US',CN:'A股 / CN',HK:'港股 / HK'}:{US:'US',CN:'China A-shares / CN',HK:'Hong Kong / HK'};
+ for(const m of ['US','CN','HK']){
+  el('volMarket'+m).textContent=marketNames[m];
+  el('volMoveLabel'+m).textContent=zh?'预计波动':'Forecast move';
+  el('volRangeLabel'+m).textContent=zh?'68%区间 / 典型绝对波动':'68% range / typical absolute move';
+  el('volAccuracyLabel'+m).textContent=zh?'历史校准':'Historical calibration';
+  el('volBandTip'+m).dataset.tip=zh
+   ? '波动档位来自当前预测波动在近期历史预测分布中的位置：低、正常、偏高、高。它描述幅度状态，不代表涨跌方向。'
+   : 'The volatility band is the percentile of the current forecast within recent historical forecasts: low, normal, elevated or high. It describes magnitude, not direction.';
+  el('volMoveTip'+m).dataset.tip=zh
+   ? '预计波动回答“下一交易日可能动多大”。数值越大，表示模型认为正常波动范围越宽；不能据此判断上涨还是下跌。'
+   : 'Forecast move answers how much the market may move next session. A larger number means a wider normal movement range; it does not predict up versus down.';
+  el('volRangeTip'+m).dataset.tip=zh
+   ? '68%区间用于识别异常：若下一日收盘落在区间外，说明实际波动超出模型的1σ常态。典型绝对波动是更直观的日常幅度参考。'
+   : 'The 68% range is an anomaly reference: a close outside it means realized movement exceeded the model 1σ norm. Typical absolute move is the more intuitive day-to-day magnitude reference.';
+  el('volAccuracyTip'+m).dataset.tip=zh
+   ? '历史校准不是“预测涨跌正确率”。命中率看区间覆盖是否接近68%；校准比看预测波动与真实波动量级是否接近1；N是walk-forward样本数。'
+   : 'Historical calibration is not directional hit rate. Coverage checks whether the interval is near 68%; the calibration ratio checks whether forecast and realized volatility scale are near 1; N is the walk-forward sample size.';
+
+  const row=markets[m];
+  if(!row){
+   el('volMove'+m).textContent=zh?'暂不可用':'Unavailable';
+   el('volBand'+m).textContent='-';
+   el('volBand'+m).className='home-volatility-band normal';
+   el('volRange'+m).textContent=(payload.errors||{})[m]|| (zh?'等待完整日线数据':'Awaiting complete daily data');
+   el('volAccuracy'+m).textContent=zh?'暂无可验证校准结果':'No verifiable calibration result';
+   el('volMeaning'+m).textContent=zh?'怎么用：当前数据不足，不应据此调整监控或风险阈值。':'How to use: data is insufficient; do not adjust monitoring or risk thresholds from this card.';
+   continue;
+  }
+  const move=Number(row.forecast_move_pct);
+  const expectedAbs=Number(row.expected_abs_move_pct);
+  const range=row.range_68||{},wf=row.walk_forward||{};
+  const coverage=Number(wf.coverage_68),ratio=Number(wf.rms_calibration_ratio),n=Number(wf.sample_count||0);
+  const band=String(row.volatility_band||'UNKNOWN');
+  el('volMove'+m).textContent=Number.isFinite(move)?('±'+move.toFixed(2)+'%'):'-';
+  el('volBand'+m).textContent=volatilityBandLabel(band);
+  el('volBand'+m).className='home-volatility-band '+volatilityBandClass(band);
+  el('volRange'+m).textContent=(row.benchmark||m)+' · '+(zh?'68%区间 ':'68% range ')+volatilityPrice(range.lower)+' – '+volatilityPrice(range.upper)
+   +(Number.isFinite(expectedAbs)?(' · '+(zh?'典型绝对波动 ':'typical absolute move ')+expectedAbs.toFixed(2)+'%'):'');
+  const coverageText=Number.isFinite(coverage)?(coverage*100).toFixed(1)+'%':'-';
+  const ratioText=Number.isFinite(ratio)?ratio.toFixed(2):'-';
+  el('volAccuracy'+m).textContent=(zh?'历史1σ命中 ':'Historical 1σ coverage ')+coverageText
+   +' · '+(zh?'校准比 ':'calibration ratio ')+ratioText
+   +' · N='+n+' · '+volatilityCalibrationLabel(wf.calibration_quality);
+  el('volMeaning'+m).textContent=volatilityInterpretation(band,coverage,ratio,n,zh);
+ }
+}
+async function refreshVolatilityForecast(){
+ try{
+  const payload=await jsonCachedStale('/api/volatility-forecast',60000);
+  volatilityForecastState=payload||{markets:{},errors:{}};
+ }catch(e){
+  volatilityForecastState={markets:{},errors:{ALL:String(e)},model:'EWMA94_MULTI_WINDOW_REALIZED_VOL',version:null};
+ }
+ renderVolatilityForecast();
+}
+function renderHomeSummary(){
+ const m=el('market').value;
+ const meta=MARKET_UI[m]||{};
+ const clock=marketClockState[m]||{};
+ const zh=lang==='zh';
+ const marketName=zh?(meta.zh||m):(meta.en||m);
+ const phase=phaseText(clock.session_phase||'-');
+ el('homeSummaryKicker').textContent=zh?'START HERE':'START HERE';
+ el('homeSummaryTitle').textContent=zh?'第一次看 TRIAID FIN？先看这里':'New to TRIAID FIN? Start here';
+ el('homeSummaryPurpose').textContent=zh
+  ? 'TRIAID FIN 用真实市场数据动态选择和调整策略权重，再等待真实后验结果验证这些调整是否真正提高了可实现净收益。重点不是预测某一天涨跌，而是把“选择—调整—验证—进化”做成可回溯的长期实验。'
+  : 'TRIAID FIN uses real market data to select and dynamically reweight strategies, then waits for realized outcomes to test whether those changes actually improve realizable net return. The goal is not a one-day price call; it is a traceable select → adjust → validate → evolve research loop.';
+ el('homeSummaryMode').textContent=zh?'研究 / Shadow · 不连接券商 · 不自动交易':'Research / Shadow · no broker connection · no auto-trading';
+ el('homeSummaryMarketLabel').textContent=zh?'当前查看':'Current market';
+ el('homeSummaryDecisionLabel').textContent=zh?'TRIAID 当前在做什么':'What TRIAID is doing';
+ el('homeSummaryValidationLabel').textContent=zh?'最近一次真实验证':'Latest realized validation';
+ el('homeSummaryRiskLabel').textContent=zh?'三市场联动风险':'Three-market risk';
+ el('homeSummaryMarket').textContent=marketName+' · '+phase;
+ el('homeSummaryMarket').className='home-summary-value '+(clock.is_open?'open':'closed');
+ el('homeSummaryMarketDetail').textContent=zh
+  ? ((clock.is_open?'绿色表示官方交易时段':'灰色表示当前非官方交易时段')+' · '+(clock.benchmark?'基准 '+clock.benchmark:'等待市场元数据'))
+  : ((clock.is_open?'Green means the official session is open':'Gray means the official session is closed')+' · '+(clock.benchmark?'benchmark '+clock.benchmark:'awaiting market metadata'));
+
+ const count=homeSummaryState.selectedCount;
+ const changed=homeSummaryState.changedCount;
+ const names=homeSummaryState.selectedNames||[];
+ el('homeSummaryDecision').textContent=count==null
+  ? (zh?'等待策略数据':'Awaiting strategy data')
+  : (zh?(count+' 个策略入选 · '+changed+' 个权重调整'):(count+' selected · '+changed+' reweighted'));
+ el('homeSummaryDecisionDetail').textContent=names.length
+  ? (zh?'主要入选：':'Leading selections: ')+names.slice(0,3).join(zh?'、':' · ')
+  : (zh?'读取当前策略群与动态权重':'Reading current strategy group and dynamic weights');
+
+ const ev=homeSummaryState.evaluated;
+ if(homeSummaryState.preview){
+  el('homeSummaryValidation').textContent=zh?'当前为即时预览':'Manual preview active';
+  el('homeSummaryValidation').className='home-summary-value';
+  el('homeSummaryValidationDetail').textContent=zh?'预览不进入正式证据链，摘要仍等待真实后验。':'Preview results do not enter the formal evidence chain; the summary still waits for realized evidence.';
+ }else if(ev&&ev.evaluation){
+  const e=ev.evaluation,g=Number(e.excess_return);
+  el('homeSummaryValidation').textContent=Number.isFinite(g)
+   ? ((zh?'相对基线 ':'Vs baseline ')+signedPct(g))
+   : (zh?'已有真实后验':'Realized outcome available');
+  el('homeSummaryValidation').className='home-summary-value '+(Number.isFinite(g)?cls(g):'');
+  el('homeSummaryValidationDetail').textContent=(Number.isFinite(Number(e.triaid_return))&&Number.isFinite(Number(e.baseline_return)))
+   ? ((zh?'TRIAID ':'TRIAID ')+fmtPct(e.triaid_return)+' · '+(zh?'基线 ':'baseline ')+fmtPct(e.baseline_return))
+   : (zh?'真实结果已登记，详细比较见下方。':'Realized evidence is recorded; see the detailed comparison below.');
+ }else{
+  el('homeSummaryValidation').textContent=zh?'等待真实后验':'Awaiting realized outcome';
+  el('homeSummaryValidation').className='home-summary-value';
+  el('homeSummaryValidationDetail').textContent=zh
+   ? '只有已经发生并满足证据口径的市场结果才算验证。'
+   : 'Only realized market outcomes that meet the evidence rules count as validation.';
+ }
+
+ const hasRisk=homeSummaryState.riskScore!==null&&homeSummaryState.riskScore!==undefined&&Number.isFinite(Number(homeSummaryState.riskScore));
+ if(hasRisk){
+  const score=Number(homeSummaryState.riskScore),band=riskBandFromScore(score);
+  el('homeSummaryRisk').textContent=score.toFixed(1)+'/100 · '+riskBandText(score);
+  el('homeSummaryRisk').className='home-summary-value home-summary-risk risk-number '+band+' has-tip';
+  el('homeSummaryRisk').dataset.tip=riskScaleTip(score,zh?'三市场联动综合风险':'Three-market aggregate risk');
+ }else{
+  el('homeSummaryRisk').textContent=zh?'读取中':'Loading';
+  el('homeSummaryRisk').className='home-summary-value';
+  delete el('homeSummaryRisk').dataset.tip;
+ }
+ el('homeSummaryRiskDetail').textContent=zh
+  ? 'US / A股 / 港股联合风险层 · 用于决定是否加密监控或启动Shadow收紧对照 · 不直接改权重'
+  : 'US / CN / HK joint risk layer · used to decide whether to tighten monitoring or launch shadow constraints · does not directly change weights';
+
+ const validationPhrase=homeSummaryState.preview
+  ? (zh?'当前有即时预览，但它不进入正式证据链':'a manual preview is active but does not enter the formal evidence chain')
+  : ev&&ev.evaluation
+    ? (zh?'最近真实后验已经可比较':'the latest realized posterior is available for comparison')
+    : (zh?'仍在等待满足口径的真实后验':'the system is still waiting for an eligible realized posterior');
+ const riskPhrase=hasRisk
+  ? (zh?('三市场风险为 '+Number(homeSummaryState.riskScore).toFixed(1)+'/100（'+riskBandText(homeSummaryState.riskScore)+'）'):('three-market risk is '+Number(homeSummaryState.riskScore).toFixed(1)+'/100 ('+riskBandText(homeSummaryState.riskScore)+')'))
+  : (zh?'三市场风险正在读取':'three-market risk is loading');
+ el('homeSummaryStory').textContent=zh
+  ? ('现在你看到的是 '+marketName+'；TRIAID 当前从策略池中选入 '+(count==null?'若干':count)+' 个策略，'+(changed==null?'并根据证据调整权重':('其中 '+changed+' 个发生权重调整'))+'；'+validationPhrase+'；'+riskPhrase+'。')
+  : ('You are viewing '+marketName+'. TRIAID currently selected '+(count==null?'a set of':count)+' strategies, '+(changed==null?'with evidence-based reweighting':changed+' of them reweighted')+'; '+validationPhrase+'; '+riskPhrase+'.');
+ el('homeSummaryGuide').textContent=zh
+  ? '阅读顺序：当前市场与状态 → TRIAID决策 → 真实结果验证 → 市场专属可实现性 → 三市场风险 → Core进化。深层证据和系统日志默认放在后面或折叠区。'
+  : 'Read in this order: market/state → TRIAID decision → realized validation → market-specific realizability → three-market risk → Core evolution. Deep evidence and system logs are moved later or collapsed.';
+}
+function phaseText(phase){
+ const p=String(phase||'');
+ const zh={OPEN:'交易中',PREOPEN:'盘前',BREAK:'午间休市',POSTCLOSE:'盘后',CLOSED:'休市',CALENDAR_UNAVAILABLE:'日历不可用'};
+ const en={OPEN:'OPEN',PREOPEN:'PREOPEN',BREAK:'BREAK',POSTCLOSE:'POSTCLOSE',CLOSED:'CLOSED',CALENDAR_UNAVAILABLE:'CALENDAR N/A'};
+ return (lang==='zh'?zh:en)[p]||p||'-';
+}
+function selectMarket(m){
+ if(!['US','CN','HK'].includes(m))return;
+ el('market').value=m;
+ onMarketChange();
+}
+function tickMarketClocks(){
+ const now=new Date();
+ ['US','CN','HK'].forEach(m=>{
+  const meta=MARKET_UI[m];
+  const tz=marketClockState[m]?.timezone||meta.timezone;
+  try{
+   el('clockTime'+m).textContent=new Intl.DateTimeFormat([],{
+    timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+   }).format(now);
+   el('clockDate'+m).textContent=new Intl.DateTimeFormat(lang==='zh'?'zh-CN':'en-US',{
+    timeZone:tz,month:'2-digit',day:'2-digit',weekday:'short'
+   }).format(now)+' · '+tz;
+  }catch(e){}
+ });
+}
+function renderMarketIdentity(){
+ const m=el('market').value;
+ const meta=MARKET_UI[m];
+ const state=marketClockState[m]||{};
+ document.querySelectorAll('[data-clock-market]').forEach(node=>{
+  const key=node.dataset.clockMarket;
+  node.classList.toggle('selected',key===m);
+  node.classList.toggle('open',!!marketClockState[key]?.is_open);
+ });
+ el('selectedMarketName').textContent=lang==='zh'?meta.zh:meta.en;
+ el('selectedMarketRoute').textContent=lang==='zh'?meta.routeZh:meta.routeEn;
+ const phase=state.session_phase||'-';
+ el('selectedMarketSession').textContent=phaseText(phase);
+ el('selectedMarketSession').className='market-session-badge'+(state.is_open?' open':'');
+ const bench=state.benchmark||'-',mode=state.primary_experiment_mode||'-',currency=state.currency||'-';
+ el('selectedMarketMeta').textContent=(lang==='zh'
+  ? '基准 '+bench+' · 主路线 '+mode+' · 计价 '+currency
+  : 'Benchmark '+bench+' · primary route '+mode+' · currency '+currency);
+ ['US','CN','HK'].forEach(key=>{
+  const s=marketClockState[key]||{};
+  el('clockPhase'+key).textContent=phaseText(s.session_phase);
+ });
+ applyFlowLabels();
+ renderHomeSummary();
+}
+async function refreshMarketClocks(){
+ const hadClock=Object.keys(marketClockState).length>0;
+ try{
+  const payload=await jsonCached('/api/ui/market-clocks',15000);
+  marketClockState=Object.fromEntries((payload.markets||[]).map(x=>[x.market_id,x]));
+  renderMarketIdentity();
+  tickMarketClocks();
+  if(!hadClock)refreshAll(true).catch(()=>null);
+ }catch(e){
+  renderMarketIdentity();
+ }
+}
+function localClockFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function localDateTimeFromEpoch(ts){
+ if(ts===null||ts===undefined)return '-';
+ try{return new Date(Number(ts)*1000).toLocaleString();}catch(e){return '-'}
+}
+function localClockFromIso(x){
+ if(!x)return '-';
+ try{return new Date(x).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '-'}
+}
+function setPulse(id,on,warn=false){
+ const node=el(id);node.className='pulse'+(on?' on':warn?' warn':'');
+}
+async function refreshLiveWindows(){
+ const m=el('market').value;
+ const seq=++liveSeq;
+ const idxPromise=jsonCached('/api/market-data/live-indicators/'+m,2000);
+ const actPromise=jsonCached('/api/market-data/activity/'+m+'?limit=80',2500);
+
+ try{
+  const idx=await idxPromise;
+  if(seq!==liveSeq||el('market').value!==m)return;
+  const fresh=idx.available&&Number(idx.freshness_seconds||999999)<180;
+  setPulse('marketPulse',fresh,idx.available&&!fresh);
+  el('indexPhase').textContent=(idx.session_phase||'-')+' · '+(idx.available?localClockFromEpoch(idx.source_latest_ts):'-');
+  el('indexMeta').textContent=idx.available
+   ? ((lang==='zh'?'数据源 ':'Provider ')+(idx.provider||'-')+' · '+(lang==='zh'?'延迟 ':'age ')+Math.round(Number(idx.freshness_seconds||0))+'s')
+   : (lang==='zh'?'暂无可用市场数据':'No market data available');
+  el('indexRows').innerHTML=(idx.instruments||[]).map(x=>{
+   const p=Number(x.change_pct);
+   const pText=Number.isFinite(p)?signedPct(p):'-';
+   const px=Number(x.close);
+   return '<div class="indexitem">'+
+    '<div class="small muted">'+esc(x.name||x.symbol)+'</div>'+
+    '<div class="px">'+(Number.isFinite(px)?px.toFixed(px>=100?2:3):'-')+'</div>'+
+    '<div class="chg '+(Number.isFinite(p)?cls(p):'')+'">'+pText+'</div></div>';
+  }).join('');
+ }catch(e){
+  if(seq===liveSeq&&el('market').value===m){
+   setPulse('marketPulse',false,true);
+   el('indexMeta').textContent='Live data error: '+e.message;
+  }
+ }
+
+ try{
+  const act=await actPromise;
+  if(seq!==liveSeq||el('market').value!==m)return;
+  const events=act.events||[];
+  const last=events.length?events[events.length-1]:null;
+  const recent=last&&((Date.now()-new Date(last.at).getTime())<180000);
+  setPulse('activityPulse',!!recent,events.length>0&&!recent);
+  el('activityPhase').textContent=act.session_phase||'-';
+  el('scheduleMeta').textContent=(lang==='zh'?'当前调度: ':'Schedule: ')+(act.schedule_text||'-');
+  el('commandLog').innerHTML=[...events].reverse().map(e=>{
+   return '<div class="cmd"><span class="cmdtime">'+esc(localClockFromIso(e.at))+'</span> '+
+    '<span class="cmdkind">'+esc(e.kind||'EVENT')+'</span> '+
+    '<span class="cmdmode">'+esc(e.mode||'')+'</span> '+
+    esc(e.message||'')+'</div>';
+  }).join('') || '<div class="cmd">'+(lang==='zh'?'暂无后台事件':'No backend events')+'</div>';
+ }catch(e){
+  if(seq===liveSeq&&el('market').value===m){
+   setPulse('activityPulse',false,true);
+   el('scheduleMeta').textContent='Activity error: '+e.message;
+  }
+ }
+
+ jsonCached('/api/market-data/strategy-context/'+m,60000)
+   .then(ctx=>{strategyMarketContext[m]=ctx;})
+   .catch(()=>{});
+}
+function applyMarketScope(){
+ const m=el('market').value;
+ const meta=MARKET_UI[m]||MARKET_UI.US;
+ el('runBtn').disabled=false;
+ el('marketScopeStatus').style.display='block';
+ el('marketScopeStatus').textContent=lang==='zh'?meta.scopeZh:meta.scopeEn;
+ applyFlowLabels();
+}
+function onMarketChange(){
+ const seq=++marketSwitchSeq;
+ applyMarketScope();
+ renderMarketIdentity();
+ requestAnimationFrame(()=>{
+   if(seq!==marketSwitchSeq)return;
+   refreshAll(true);
+   refreshLiveWindows();
+ });
+}
+async function runNow(){
+ const m=el('market').value;
+ const x=await json('/api/live/run/'+m,{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.run_id;pollRun(x.run_id,m);
+}
+async function runAll(){
+ const x=await json('/api/live/run-all',{method:'POST'});
+ el('runStatus').textContent=T[lang].running+' '+x.runs.map(r=>r.run_id).join(' | ');
+ x.runs.forEach(r=>pollRun(r.run_id,r.market_id));
+}
+async function pollRun(id,market){
+ for(let i=0;i<60;i++){
+  await new Promise(r=>setTimeout(r,1000));
+  try{
+   const x=await json('/api/runs/'+id);el('runStatus').textContent=id+' · '+x.status;
+   if(!['CREATED','FETCHING_DATA'].includes(x.status)){
+    if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
+    clearMarketCache(market);
+    await refreshAll();
+    return;
+   }
+  }catch(e){}
+ }
+}
+function drawCurve(points){
+ const c=el('curve'),plot=el('curvePlotWrap'),empty=el('curveEmptyState');
+ const hasPoints=Array.isArray(points)&&points.length>0;
+ if(empty)empty.style.display=hasPoints?'none':'flex';
+ if(plot)plot.style.display=hasPoints?'block':'none';
+ if(!hasPoints){
+  if(el('curveEmptyTitle'))el('curveEmptyTitle').textContent=lang==='zh'?'等待首个真实后验':'Awaiting first realized posterior';
+  if(el('curveEmptyText'))el('curveEmptyText').textContent=lang==='zh'
+   ?'当前还没有可用于连续回顾的已完成后验。首个真实结果产生后，这里会自动展开基线与 TRIAID 的累计路径。'
+   :'There is no completed posterior available for continuous review yet. After the first realized outcome, this area will automatically expand to show the baseline and TRIAID cumulative paths.';
+  return;
+ }
+ const g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+ const vals=points.flatMap(p=>[p.baseline_equity,p.triaid_equity]);
+ let lo=Math.min(...vals),hi=Math.max(...vals);if(hi-lo<1e-8){hi+=.01;lo-=.01}
+ const X=i=>45+(c.width-70)*i/Math.max(1,points.length-1);const Y=v=>25+(c.height-55)*(hi-v)/(hi-lo);
+ g.strokeStyle='#e1e6ec';g.lineWidth=1;for(let j=0;j<4;j++){const y=25+(c.height-55)*j/3;g.beginPath();g.moveTo(45,y);g.lineTo(c.width-20,y);g.stroke()}
+ [['baseline_equity','#6f7782'],['triaid_equity','#1769e0']].forEach(([key,color])=>{
+  g.strokeStyle=color;g.lineWidth=3;g.beginPath();points.forEach((p,i)=>{const x=X(i),y=Y(p[key]);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();
+ });
+}
+function riskBandFromScore(score){
+ const n=Number(score);
+ if(!Number.isFinite(n))return '';
+ if(n>=80)return 'critical';
+ if(n>=65)return 'severe';
+ if(n>=45)return 'high';
+ if(n>=25)return 'elevated';
+ return 'low';
+}
+function riskBandText(score){
+ const band=riskBandFromScore(score);
+ const zh={low:'低',elevated:'升高',high:'高',severe:'严重',critical:'临界'};
+ const en={low:'LOW',elevated:'ELEVATED',high:'HIGH',severe:'SEVERE',critical:'CRITICAL'};
+ return (lang==='zh'?zh:en)[band]||'-';
+}
+function riskScaleTip(score,label){
+ const n=Number(score);
+ if(!Number.isFinite(n))return label||'Risk';
+ const lines=[
+  (label|| (lang==='zh'?'风险压力':'Risk pressure'))+' '+n.toFixed(1)+'/100 · '+riskBandText(n),
+  lang==='zh'
+   ? '怎么用：把这个数当作当前这一项的异常/压力程度，只和同一口径的历史或同列对象比较；越高表示越值得继续追查原因。'
+   : 'How to use: treat this as the abnormality/pressure level for this specific metric and compare only within the same definition or column; higher values deserve deeper investigation.',
+  lang==='zh'
+   ? '边界：单个指标不直接触发风控动作，必须和驱动证据、跨市场确认及真实后验一起判断。'
+   : 'Boundary: one metric alone does not trigger risk action; combine it with driver evidence, cross-market confirmation and realized posterior outcomes.'
+ ];
+ return lines.join(String.fromCharCode(10));
+}
+function riskDriverSummary(d){
+ if(!d||typeof d!=='object')return '';
+ const name=lang==='zh'?(d.label_zh||d.id||'-'):(d.id||d.label_zh||'-');
+ const bits=[];
+ if(d.triggered!==undefined)bits.push((lang==='zh'?'触发 ':'triggered ')+(d.triggered?'YES':'NO'));
+ if(d.historically_statistically_supported!==undefined)bits.push((lang==='zh'?'历史支持 ':'historical support ')+(d.historically_statistically_supported?'YES':'NO'));
+ if(d.state)bits.push((lang==='zh'?'状态 ':'state ')+d.state);
+ if(d.score!==undefined&&d.score!==null&&Number.isFinite(Number(d.score)))bits.push((lang==='zh'?'强度 ':'score ')+(Number(d.score)*100).toFixed(0)+'/100');
+ if(d.percentile!==undefined&&d.percentile!==null&&Number.isFinite(Number(d.percentile)))bits.push((lang==='zh'?'历史分位 ':'hist pct ')+(Number(d.percentile)*100).toFixed(0)+'%');
+ if(d.value!==undefined&&d.value!==null&&Number.isFinite(Number(d.value)))bits.push((lang==='zh'?'当前值 ':'value ')+Number(d.value).toFixed(Math.abs(Number(d.value))<1?4:2));
+ if(d.alert_count!==undefined&&d.alert_count!==null)bits.push((lang==='zh'?'命中 ':'hits ')+d.alert_count+'/'+(d.min_hits??'-'));
+ if(d.count!==undefined&&d.count!==null)bits.push((lang==='zh'?'数量 ':'count ')+d.count);
+ if(d.usable!==undefined)bits.push((lang==='zh'?'可用 ':'usable ')+(d.usable?'YES':'NO'));
+ return name+(bits.length?' · '+bits.join(' · '):'');
+}
+function riskSubscoreTip(key,score,report){
+ const labels={
+  structural:lang==='zh'?'长期结构脆弱':'Structural vulnerability',
+  rates_policy:lang==='zh'?'利率/政策压力':'Rates / policy pressure',
+  transmission:lang==='zh'?'跨市场传导':'Cross-market transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'Credit / liquidity',
+  market_deterioration:lang==='zh'?'价格结构恶化':'Market deterioration'
+ };
+ const impacts={
+  structural:lang==='zh'?'影响：主要抬高120日和250日中长期风险，用来判断当前高收益/高估值环境是否缺少长期安全垫。':'Impact: mainly raises 120d/250d risk and tests whether the current high-return/high-valuation regime lacks a long-run cushion.',
+  rates_policy:lang==='zh'?'影响：这是利率与政策预期重新定价压力；高位时重点影响久期、估值和高杠杆资产，是当前是否需要加强Shadow防御测试的重要输入。':'Impact: captures rates/policy repricing pressure; high readings matter most for duration, valuation and levered assets and determine whether shadow defensive tests should be strengthened.',
+  transmission:lang==='zh'?'影响：判断压力是否已经从单一市场扩散成三市场联动。单市场风险高但传导低，和系统性扩散是两种完全不同的状态。':'Impact: tests whether stress has spread from one market into a three-market transmission state. High single-market stress with low transmission is materially different from systemic spread.',
+  credit_liquidity:lang==='zh'?'影响：判断风险是否开始进入融资、信用利差和市场流动性层。这个维度上升时，纸面可交易策略更容易出现容量和成交折损。':'Impact: tests whether stress has reached funding, credit spreads and market liquidity. Rising readings increase the chance that paper strategies lose capacity or execution quality.',
+  market_deterioration:lang==='zh'?'影响：反映三市场价格本身是否已经出现回撤、负动量和波动恶化，是“宏观风险是否已经落到价格上”的确认层。':'Impact: reflects whether drawdown, negative momentum and volatility deterioration are already visible in prices; it is the confirmation layer for whether macro stress has reached markets.'
+ };
+ const next={
+  structural:lang==='zh'?'下一步：看长期拉伸是否持续，以及多年下行确认是否开始增强；只有两者持续改善，才视为结构风险真正下降。':'Next: watch whether long-run stretch persists and whether secular-downturn confirmation strengthens; structural risk only truly eases when both improve.',
+  rates_policy:lang==='zh'?'下一步：重点盯2Y美债90日变化、Fed Funds期货30日重定价、MOVE和政策重定价联合状态。若这些同步回落，风险可降级；若继续高位并叠加跨市场传导/信用压力，则升级。':'Next: watch 2Y 90d moves, 30d Fed Funds futures repricing, MOVE and the policy-repricing composite. Synchronous normalization supports de-escalation; persistence plus transmission/credit stress supports escalation.',
+  transmission:lang==='zh'?'下一步：看跨市场相关性、压力市场占比和港股桥梁效应是否继续增强。若相关性回落且压力不扩散，可降级；若多市场同步恶化，则升级。':'Next: watch cross-market correlation, stressed-market share and the HK bridge. Falling correlation without spread supports de-escalation; synchronized deterioration supports escalation.',
+  credit_liquidity:lang==='zh'?'下一步：看信用利差、金融条件和流动性指标是否从“未确认”转为同步恶化。没有信用/流动性确认时，不把宏观压力直接等同于系统性风险。':'Next: watch whether credit spreads, financial conditions and liquidity shift from unconfirmed to synchronized deterioration. Without credit/liquidity confirmation, do not equate macro pressure with systemic risk.',
+  market_deterioration:lang==='zh'?'下一步：看US/CN/HK的回撤、63日动量和波动是否从局部变成一致恶化。价格层若改善，即使宏观压力仍高，也说明传导尚未完全落地。':'Next: watch whether US/CN/HK drawdown, 63d momentum and volatility move from local to synchronized deterioration. Price improvement despite macro stress means transmission is not fully realized.'
+ };
+ const detail=((report||{}).detail||{})[key]||[];
+ const evidence=Array.isArray(detail)?detail.map(riskDriverSummary).filter(Boolean).slice(0,5):[];
+ const lines=[
+  (labels[key]||key)+' '+Number(score).toFixed(1)+'/100 · '+riskBandText(score),
+  (lang==='zh'?'为什么：':'Why: ')+(evidence.length?evidence.join('；'):(lang==='zh'?'当前没有可展示的分项证据。':'No component evidence is available.')),
+  impacts[key]||'',
+  next[key]||'',
+  lang==='zh'?'边界：这是风险证据层，不是亏损概率；不会单独触发自动交易或直接修改生产权重。':'Boundary: this is an evidence-pressure layer, not loss probability; it cannot independently trigger trading or production-weight changes.'
+ ].filter(Boolean);
+ return lines.join(String.fromCharCode(10));
+}
+function riskOverallTip(score,report){
+ const drivers=(report?.main_drivers||[]).map(x=>{
+  const name=lang==='zh'?(x.label_zh||x.id):x.id;
+  const sev=x.severity==null?'':(' '+Math.round(Number(x.severity)*100)+'/100');
+  return name+sev;
+ }).slice(0,4);
+ const blockers=(report?.missing_confirmations||[]).map(x=>lang==='zh'?(x.label_zh||x.id):x.id).slice(0,3);
+ const de=(report?.deescalation_conditions||[]).map(x=>lang==='zh'?(x.meaning_zh||x.condition):x.condition).slice(0,3);
+ const lines=[
+  (lang==='zh'?'综合风险 ':'Overall risk ')+Number(score).toFixed(1)+'/100 · '+riskBandText(score),
+  (lang==='zh'?'主要推高因素：':'Main drivers: ')+(drivers.length?drivers.join('；'):'-'),
+  (lang==='zh'?'尚未确认：':'Still unconfirmed: ')+(blockers.length?blockers.join('；'):'-'),
+  (lang==='zh'?'怎么用：看“推高因素”是否继续扩散，同时看“尚未确认项”会不会转为确认；只有两边同时恶化，系统性风险证据才真正增强。':'How to use: watch whether drivers broaden and whether currently unconfirmed dimensions become confirmed; systemic evidence strengthens only when both happen.'),
+  (lang==='zh'?'解除看什么：':'De-escalation: ')+(de.length?de.join('；'):'-'),
+  lang==='zh'?'边界：不自动改生产权重，也不是股灾概率。':'Boundary: does not automatically change production weights and is not crash probability.'
+ ];
+ return lines.join(String.fromCharCode(10));
+}
+function riskHorizonTip(h,entry,report){
+ const n=Number(entry?.risk_pressure_index);
+ const weights=entry?.weights||{};
+ const ss=report?.subscores||{};
+ const names={
+  structural:lang==='zh'?'结构':'structural',
+  rates_policy:lang==='zh'?'利率/政策':'rates/policy',
+  transmission:lang==='zh'?'传导':'transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'credit/liquidity',
+  market_deterioration:lang==='zh'?'价格恶化':'market deterioration'
+ };
+ const contributions=Object.keys(weights).map(k=>{
+  const w=Number(weights[k]||0),s=Number((ss[k]||{}).score_0_100||0);
+  return {k,c:w*s,w,s};
+ }).sort((a,b)=>b.c-a.c).slice(0,3);
+ const lines=[
+  (lang==='zh'?h+'日风险 ':h+'d risk ')+n.toFixed(1)+'/100 · '+riskBandText(n),
+  (lang==='zh'?'这段风险主要由：':'Main contributors: ')+contributions.map(x=>(names[x.k]||x.k)+' '+x.s.toFixed(1)+'/100 × '+Math.round(x.w*100)+'%').join('；'),
+  lang==='zh'?'怎么用：不同期限权重不同，所以不要拿20日和250日直接横向比较高低；要看哪个风险源在该期限占主导，再决定追踪短期价格、政策重定价还是长期结构。':'How to use: horizon weights differ, so do not compare 20d and 250d mechanically; identify which source dominates that horizon and monitor short-term price stress, policy repricing or long-run structure accordingly.'
+ ];
+ return lines.join(String.fromCharCode(10));
+}
+function setRiskScoreNode(id,score,suffix,label,baseClass=''){
+ const node=el(id),n=Number(score);
+ if(!node)return;
+ const band=riskBandFromScore(n);
+ node.textContent=Number.isFinite(n)?n.toFixed(1)+(suffix||''):'-';
+ node.className=(baseClass?baseClass+' ':'')+'risk-number '+band+' has-tip';
+ node.dataset.tip=riskScaleTip(n,label);
+}
+function riskCellHtml(text,score,label){
+ const n=Number(score),band=riskBandFromScore(n);
+ if(!Number.isFinite(n))return esc(text);
+ return '<span class="risk-cell-number '+band+' has-tip" data-tip="'+esc(riskScaleTip(n,label))+'">'+esc(text)+'</span>';
+}
+function riskStageTip(stage){
+ const s=String(stage||'-');
+ const zh={
+  WATCH_ONLY:'观察阶段：风险证据值得关注，但不改变生产权重。用途：持续盯驱动项和后验；如果风险继续上升或跨市场同步增强，再进入Shadow收紧测试。',
+  NORMAL_OBSERVATION:'常规观察：当前没有需要额外风控动作的证据。用途：继续正常验证收益路线，只有风险驱动明显变化时才升级。',
+  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow收紧候选：实验性测试更低风险敞口。用途：比较收紧后是否减少尾部损失、是否牺牲过多收益；通过前瞻验证前不作用生产权重。',
+  SHADOW_DEFENSIVE_BIAS:'Shadow防御偏置候选：实验性提高防御配置。用途：验证防御偏置是否在真实后验中改善风险收益；未验证前不作用生产权重。',
+  DATA_UNAVAILABLE:'数据不足：当前无法形成完整风险状态。用途：先修复/补齐数据，不应把缺数据解释成低风险，也不应据此调整权重。'
+ };
+ const en={
+  WATCH_ONLY:'Watch-only: evidence deserves attention but does not change production weights. Use: monitor drivers/posterior evidence and move to shadow tightening only if risk or cross-market synchronization strengthens.',
+  NORMAL_OBSERVATION:'Normal observation: no evidence currently calls for extra risk action. Use: keep validating the return route and escalate only when drivers change materially.',
+  SHADOW_TIGHTEN_RISK_CONSTRAINTS:'Shadow tightening candidate: test lower risky exposure. Use: compare whether tightening reduces tail loss without excessive return sacrifice; never affect production weights before prospective validation.',
+  SHADOW_DEFENSIVE_BIAS:'Shadow defensive-bias candidate: test more defensive exposure. Use: validate whether the bias improves realized risk-adjusted outcomes before any production use.',
+  DATA_UNAVAILABLE:'Data unavailable: a complete risk state cannot be formed. Use: repair/fill data first; missing data is neither low risk nor a reason to change weights.'
+ };
+ return (lang==='zh'?zh:en)[s]||((lang==='zh'?'风控实验阶段：':'Risk-control experiment stage: ')+s);
+}
+function riskStageClass(stage){
+ const s=String(stage||'');
+ if(s.includes('DEFENSIVE'))return 'risk-stage defensive';
+ if(s.includes('TIGHTEN'))return 'risk-stage tighten';
+ if(s.includes('WATCH'))return 'risk-stage watch';
+ return 'risk-stage';
+}
+function fmtRiskNumber(x,digits=2){
+ const n=Number(x);return Number.isFinite(n)?n.toFixed(digits):'-';
+}
+function renderRiskControl(report){
+ if(!report)return;
+ el('riskCenterScope').textContent=lang==='zh'
+  ? '独立于下方美股 / A股 / 港股单市场页面：这里始终联合分析三个市场，并把结果送入风控 shadow 实验；它不是第四个市场，也不会自动改变生产权重。'
+  : 'Independent of the US/CN/HK market selector below: this center always analyzes all three markets and feeds a shadow risk-control experiment. It is not a fourth market and cannot change production weights automatically.';
+ const names={US:lang==='zh'?'美股 / US':'US',CN:lang==='zh'?'A股 / CN':'CN',HK:lang==='zh'?'港股 / HK':'HK'};
+ el('riskThreeMarketTitle').textContent=lang==='zh'?'三市场联动状态':'Three-market linked state';
+ el('riskThreeMarketRows').innerHTML=(report.three_market_state||[]).map(x=>{
+   const ddScore=x.drawdown_stress_252==null?null:Math.min(100,Math.max(0,Number(x.drawdown_stress_252)*500));
+   const momPct=x.negative_momentum_percentile==null?null:Math.min(100,Math.max(0,Number(x.negative_momentum_percentile)*100));
+   const volPct=x.volatility_percentile==null?null:Math.min(100,Math.max(0,Number(x.volatility_percentile)*100));
+   const stage=String(x.risk_control_stage||'-');
+   return '<tr><td><b>'+esc(names[x.market]||x.market)+'</b></td>'+
+    '<td>'+riskCellHtml(fmtPct(x.drawdown_stress_252),ddScore,lang==='zh'?'252日回撤压力（20%回撤映射为100分）':'252d drawdown pressure (20% drawdown maps to 100)')+'</td>'+
+    '<td>'+riskCellHtml(fmtPct(x.negative_momentum_63),momPct,lang==='zh'?'63日负向动量异常程度':'63d negative-momentum abnormality')+'</td>'+
+    '<td>'+riskCellHtml((x.negative_momentum_percentile==null?'-':fmtPct(x.negative_momentum_percentile)),momPct,lang==='zh'?'动量异常历史分位':'Momentum abnormality percentile')+'</td>'+
+    '<td>'+riskCellHtml(fmtPct(x.volatility_63),volPct,lang==='zh'?'63日波动历史分位':'63d volatility percentile')+'</td>'+
+    '<td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'" title="'+esc(stage)+'">'+esc(riskStageLabel(stage))+'</td></tr>';
+ }).join('') || tableEmptyRow(6,'当前没有可用的三市场联动状态。','No three-market linked state is currently available.');
+ el('riskDynamicsTitle').textContent=lang==='zh'?'动力链 / 传导路径':'Dynamics / transmission chain';
+ el('riskDynamicsRows').innerHTML=(report.dynamics_chain||[]).map(x=>{
+   const state=String(x.state||'-');
+   const clsState=(state.includes('ACTIVE')||state.includes('STRESSED')||state.includes('DETERIORATING'))?'chain-active':(state.includes('NOT_CONFIRMED')||state.includes('PARTIAL'))?'chain-pending':'chain-normal';
+   const score=Number(x.score);
+   const normalized=Number.isFinite(score)?(score<=1?score*100:score):null;
+   const shown=Number.isFinite(normalized)?normalized.toFixed(1)+'/100':'—';
+   return '<tr><td>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</td><td class="'+clsState+'" title="'+esc(state)+'">'+esc(chainStateLabel(state))+'</td><td>'+riskCellHtml(shown,normalized,lang==='zh'?'动力链节点风险强度':'Dynamics-node risk intensity')+'</td><td>'+esc((x.evidence||[]).join(' · ')||(lang==='zh'?'暂无补充证据':'No additional evidence'))+'</td></tr>';
+ }).join('') || tableEmptyRow(4,'当前没有可展示的动力链节点。','No dynamics-chain node is currently available.');
+ el('riskMacroTitle').textContent=lang==='zh'?'利率、政策、信用与流动性':'Rates, policy, credit and liquidity';
+ const macro=report.rates_policy_credit_snapshot||{};
+ const macroLabels=lang==='zh'?{
+  US_TREASURY_2Y_LEVEL:'2年期美债收益率',US_TREASURY_10Y_LEVEL:'10年期美债收益率',US_TREASURY_30Y_LEVEL:'30年期美债收益率',
+  US_REAL_YIELD_10Y_LEVEL:'10年期实际利率',US_TREASURY_2Y_RISE_90D:'2年期美债 90日变化',US_TREASURY_10Y_RISE_90D:'10年期美债 90日变化',
+  US_REAL_YIELD_10Y_RISE_90D:'10年期实际利率 90日变化',FED_POLICY_RATE_LEVEL:'联邦基金政策利率',FED_FUNDS_FUTURES_IMPLIED_RATE:'Fed Funds期货隐含利率',
+  FED_FUNDS_FUTURES_REPRICING_ABS_30D:'Fed Funds期货 30日重定价',MOVE_LEVEL:'MOVE债券波动指数',MOVE_RISE_30D:'MOVE 30日变化',MOVE_RISE_90D:'MOVE 90日变化',
+  YIELD_CURVE_INVERSION:'10Y−2Y倒挂压力',YIELD_CURVE_10Y3M_INVERSION:'10Y−3M倒挂压力',
+  FINANCIAL_CONDITIONS_NFCI:'NFCI金融条件',HY_CREDIT_SPREAD_LEVEL:'高收益债信用利差'
+ }:{
+  US_TREASURY_2Y_LEVEL:'2Y Treasury',US_TREASURY_10Y_LEVEL:'10Y Treasury',US_TREASURY_30Y_LEVEL:'30Y Treasury',
+  US_REAL_YIELD_10Y_LEVEL:'10Y Real Yield',US_TREASURY_2Y_RISE_90D:'2Y Δ90d',US_TREASURY_10Y_RISE_90D:'10Y Δ90d',
+  US_REAL_YIELD_10Y_RISE_90D:'10Y Real Δ90d',FED_POLICY_RATE_LEVEL:'Fed Funds',FED_FUNDS_FUTURES_IMPLIED_RATE:'Fed Funds Futures',
+  FED_FUNDS_FUTURES_REPRICING_ABS_30D:'Fed Futures |Δ30d|',MOVE_LEVEL:'MOVE',MOVE_RISE_30D:'MOVE Δ30d',MOVE_RISE_90D:'MOVE Δ90d',
+  YIELD_CURVE_INVERSION:'10Y−2Y inversion stress',YIELD_CURVE_10Y3M_INVERSION:'10Y−3M inversion stress',
+  FINANCIAL_CONDITIONS_NFCI:'NFCI',HY_CREDIT_SPREAD_LEVEL:'HY OAS'
+ };
+ el('riskMacroRows').innerHTML=Object.entries(macro).filter(([k])=>!k.endsWith('_LONG_CYCLE')).map(([k,v])=>{
+   const pct=v.point_in_time_percentile==null?null:Number(v.point_in_time_percentile)*100;
+   return '<tr><td>'+esc(macroLabels[k]||k)+'</td><td class="num">'+macroValueText(k,v.value)+'</td><td>'+riskCellHtml((v.point_in_time_percentile==null?'—':fmtPct(v.point_in_time_percentile)),pct,lang==='zh'?'该风险因子的历史状态分位':'Historical state percentile for this risk factor')+'</td></tr>';
+ }).join('') || tableEmptyRow(3,'当前没有可用的利率/政策/信用/流动性快照。','No rates/policy/credit/liquidity snapshot is currently available.');
+ el('riskTermTitle').textContent=lang==='zh'?'Fed Funds / SOFR 期限曲线':'Fed Funds / SOFR term curves';
+ const tc=report.term_curve||{}, metrics=tc.metrics||{};
+ const curveNames={fed_funds:'Fed Funds',sofr_1m:'SOFR 1M',sofr_3m:'SOFR 3M'};
+ el('riskTermRows').innerHTML=Object.entries(curveNames).map(([k,label])=>{
+  const x=metrics[k]||{};
+  return '<tr><td>'+label+'</td><td>'+esc(x.contracts??'—')+'</td><td>'+fmtRiskWithUnit(x.front_implied_rate,'%',4)+'</td><td>'+fmtRiskWithUnit(x.back_implied_rate,'%',4)+'</td><td>'+fmtRiskWithUnit(x.front_to_back_change,'pp',4)+'</td></tr>';
+ }).join('');
+ el('riskCurveDetailTitle').textContent=lang==='zh'?'展开期限合约明细':'Show contract-level term curve';
+ const curveRows=[];
+ Object.entries(curveNames).forEach(([k,label])=>(tc[k]||[]).forEach(x=>curveRows.push({label,...x})));
+ el('riskCurveContractRows').innerHTML=curveRows.map(x=>'<tr><td>'+esc(x.label)+'</td><td>'+esc(x.contract_month||'—')+'</td><td>'+esc(x.symbol||'—')+'</td><td>'+fmtRiskNumber(x.price,4)+'</td><td>'+fmtRiskWithUnit(x.implied_rate,'%',4)+'</td></tr>').join('') || tableEmptyRow(5,'当前没有可展示的期限合约点。','No contract-level term-curve points are currently available.');
+ el('riskHistoryTableTitle').textContent=lang==='zh'?'历史危机回溯与统计支持':'Historical crash recurrence and statistical support';
+ const hv=report.historical_validation||{};
+ const supported=hv.statistically_supported_composites||[];
+ el('riskHistoryRows').innerHTML=supported.map(x=>'<tr><td>'+esc(x.composite||'—')+'</td><td>'+esc(x.lead_trading_days??'—')+(x.lead_trading_days==null?'':'d')+'</td><td>'+fmtPct(x.event_hit_rate)+'</td><td>'+fmtPct(x.control_false_positive_rate)+'</td><td>'+fmtPp(x.hit_rate_lift)+'</td><td>'+fmtRiskNumber(x.fisher_p_value,4)+'</td><td>'+fmtRiskNumber(x.bh_q_value,4)+'</td><td>'+fmtPct(x.leave_one_event_out_min_hit_rate)+'</td></tr>').join('') || tableEmptyRow(8,'当前没有达到统计支持门槛的联合状态；候选信号仍保留在研究层，不应显示成“已验证”。','No composite state currently meets the statistical-support threshold; candidate signals remain research-only.');
+ el('riskDataQualityTitle').textContent=lang==='zh'?'数据完整性与降级状态':'Data completeness and degradation';
+ const dq=report.data_quality||{}, cov=dq.risk_evidence_coverage||{}, gaps=cov.known_gaps||[];
+ el('riskDataQuality').textContent=(lang==='zh'?'历史证据覆盖等级 ':'Evidence coverage ')+(cov.coverage_grade||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(cov.term_curve_usable?'OK':'NOT READY')+' · '+(lang==='zh'?'港股高频 ':'HK high-frequency ')+(dq.hk_high_frequency_degraded?'DEGRADED':'OK')+' · '+(lang==='zh'?'正式日线证据受影响 ':'daily evidence affected ')+(dq.evidence_critical_daily_data_affected?'YES':'NO');
+ const liveGapEntries=Object.entries(dq.hk_high_frequency_errors||{}).map(([k,v])=>({source:k,error:(v&&v.errors)?v.errors.join(' | '):String(v)}));
+ const degradedPanelEntries=Object.entries(dq.hk_high_frequency_degraded_panels||{}).map(([k,v])=>({source:k,error:(v||[]).join(' | ')}));
+ const allGaps=[...gaps,...liveGapEntries,...degradedPanelEntries];
+ el('riskDataGaps').innerHTML=allGaps.length?allGaps.map(x=>'<li><b>'+esc(x.source||'-')+'</b> · '+esc(x.error||'-')+'</li>').join(''):'<li>'+(lang==='zh'?'当前未记录已知缺口':'No known gap recorded')+'</li>';
+ el('riskControlTitle').textContent=lang==='zh'?'三市场风控 Shadow 实验':'Three-market risk-control shadow experiment';
+ const rc=report.risk_control_experiment||{};
+ el('riskControlMeta').textContent=(lang==='zh'?'当前阶段 ':'Stage ')+(rc.stage||'-')+' · '+(lang==='zh'?'生产动作 ':'Production action ')+(rc.production_action||'NONE')+' · '+(lang==='zh'?'目标纪律：风险只作为可执行约束/证据层，最大化可实现净收益仍是唯一优化目标。':rc.objective_guard||'');
+ el('riskControlRows').innerHTML=(report.three_market_state||[]).map(x=>{
+  const q=x.shadow_candidate_constraints||{},stage=String(x.risk_control_stage||'-');
+  const stageScore=stage==='SHADOW_DEFENSIVE_BIAS'?80:stage==='SHADOW_TIGHTEN_RISK_CONSTRAINTS'?65:stage==='WATCH_ONLY'?45:stage==='NORMAL_OBSERVATION'?0:null;
+  return '<tr><td>'+esc(names[x.market]||x.market)+'</td><td class="'+riskStageClass(stage)+' has-tip" data-tip="'+esc(riskStageTip(stage))+'" title="'+esc(stage)+'">'+esc(riskStageLabel(stage))+'</td><td>'+riskCellHtml(fmtMultiplier(q.risky_exposure_multiplier),stageScore,lang==='zh'?'该阶段的Shadow风险资产敞口倍率候选':'Shadow risky-exposure multiplier for this stage')+'</td><td>'+riskCellHtml(fmtPct(q.defensive_exposure_floor),stageScore,lang==='zh'?'该阶段的Shadow防御敞口底线候选':'Shadow defensive-floor candidate for this stage')+'</td><td>'+(x.applied_to_production?(lang==='zh'?'是':'YES'):(lang==='zh'?'否':'NO'))+'</td></tr>';
+ }).join('') || tableEmptyRow(5,'当前没有可用的三市场 Shadow 风控实验状态。','No three-market shadow risk-control state is currently available.');
+ const pv=report.prospective_validation||{};
+ el('riskLedgerDetail').textContent=(lang==='zh'?'风控实验账本 ':'Risk-control ledger ')+(pv.ledger_id||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-');
+ applyTableHeaderTooltips();
+}
+function renderRiskWarning(report){
+ const panel=el('riskWarningPanel');
+ if(!report){
+  panel.style.display='none';
+  homeSummaryState.riskScore=null;
+  homeSummaryState.riskBand=null;
+  renderHomeSummary();
+  return;
+ }
+ panel.style.display='block';
+ const o=report.overall||{}, hs=report.horizon_estimates||{}, ss=report.subscores||{};
+ const score=Number(o.risk_pressure_index);
+ homeSummaryState.riskScore=Number.isFinite(score)?score:null;
+ homeSummaryState.riskBand=String(o.risk_band||'');
+ renderHomeSummary();
+ const band=String(o.risk_band||'-');
+ const bandText=lang==='zh'?(o.risk_band_zh||band):band;
+ const bandClass=band.toLowerCase();
+ el('riskWarningTitle').textContent=lang==='zh'?'TRIAID 风险预警':'TRIAID Risk Warning';
+ el('riskColorLegend').innerHTML=lang==='zh'
+  ? '<span>颜色阈值：</span><span class="risk-band low">低 0–24.9</span><span class="risk-band elevated">升高 25–44.9</span><span class="risk-band high">高 45–64.9</span><span class="risk-band severe">严重 65–79.9</span><span class="risk-band critical">临界 80–100</span>'
+  : '<span>Color scale:</span><span class="risk-band low">LOW 0–24.9</span><span class="risk-band elevated">ELEVATED 25–44.9</span><span class="risk-band high">HIGH 45–64.9</span><span class="risk-band severe">SEVERE 65–79.9</span><span class="risk-band critical">CRITICAL 80–100</span>';
+ el('riskWarningMeta').textContent=(lang==='zh'?'状态日期 ':'As of ')+(report.as_of||'-')+' · '+(lang==='zh'?'预警ID ':'Warning ')+(report.warning_id||'-');
+ setRiskScoreNode('riskOverallScore',score,'',lang==='zh'?'当前综合风险':'Current overall risk','risk-score');
+ const overallTip=riskOverallTip(score,report);
+ el('riskOverallScore').dataset.tip=overallTip;
+ el('riskOverallBand').textContent=bandText;
+ el('riskOverallBand').className='risk-band '+bandClass+' has-tip';
+ el('riskOverallBand').dataset.tip=overallTip;
+ setRiskScoreNode('riskOverallMini',score,' / 100',lang==='zh'?'当前综合风险':'Current overall risk','rv');
+ el('riskOverallMini').dataset.tip=overallTip;
+ const conf=report.confidence||{};
+ el('riskConfidence').textContent=(lang==='zh'?'证据置信度 ':'Evidence confidence ')+(conf.level||'-')+' · '+(lang==='zh'?'历史危机样本 ':'historical crises ')+(conf.historical_crisis_samples_tested??'-')+' · q='+(conf.best_supported_q_value==null?'-':Number(conf.best_supported_q_value).toFixed(4))+' · '+(lang==='zh'?'前瞻 ':'prospective ')+(conf.prospective_maturity||'-');
+ ['20','60','120','250'].forEach(h=>{
+   const x=hs[h]||{};
+   const n=Number(x.risk_pressure_index);
+   setRiskScoreNode('risk'+h,n,'/100',(lang==='zh'?h+'日风险压力':h+'d risk pressure'),'rv');
+   el('risk'+h).dataset.tip=riskHorizonTip(h,x,report);
+   const hBand=String(x.risk_band||riskBandText(n)).toLowerCase();
+   el('risk'+h+'Band').textContent=lang==='zh'?(x.risk_band_zh||x.risk_band||riskBandText(n)):(x.risk_band||riskBandText(n));
+   el('risk'+h+'Band').className='small risk-band-inline '+hBand;
+ });
+ const subMap={structural:'riskStructural',rates_policy:'riskRates',transmission:'riskTransmission',credit_liquidity:'riskCredit',market_deterioration:'riskMarket'};
+ const subLabels={
+  structural:lang==='zh'?'长期结构脆弱':'Structural vulnerability',
+  rates_policy:lang==='zh'?'利率/政策压力':'Rates / policy pressure',
+  transmission:lang==='zh'?'跨市场传导':'Cross-market transmission',
+  credit_liquidity:lang==='zh'?'信用/流动性':'Credit / liquidity',
+  market_deterioration:lang==='zh'?'价格结构恶化':'Market deterioration'
+ };
+ Object.entries(subMap).forEach(([k,id])=>{
+   const n=Number((ss[k]||{}).score_0_100);
+   setRiskScoreNode(id,n,'/100',subLabels[k],'');
+   el(id).dataset.tip=riskSubscoreTip(k,n,report);
+ });
+ el('riskOverallLabel').textContent=lang==='zh'?'当前综合风险':'Current overall risk';
+ el('riskStructuralLabel').textContent=lang==='zh'?'长期结构脆弱':'Structural vulnerability';
+ el('riskRatesLabel').textContent=lang==='zh'?'利率/政策压力':'Rates / policy pressure';
+ el('riskTransmissionLabel').textContent=lang==='zh'?'跨市场传导':'Cross-market transmission';
+ el('riskCreditLabel').textContent=lang==='zh'?'信用/流动性':'Credit / liquidity';
+ el('riskMarketLabel').textContent=lang==='zh'?'价格结构恶化':'Market deterioration';
+ el('riskDriversTitle').textContent=lang==='zh'?'主要风险驱动':'Main risk drivers';
+ el('riskBlockersTitle').textContent=lang==='zh'?'尚未确认 / 风险阻断项':'Missing confirmations / blockers';
+ el('riskDetailsTitle').textContent=lang==='zh'?'展开完整证据与验证状态':'Show full evidence and validation';
+ el('riskHistoricalTitle').textContent=lang==='zh'?'历史支持':'Historical support';
+ el('riskProspectiveTitle').textContent=lang==='zh'?'前瞻验证':'Prospective validation';
+ el('riskEscalationTitle').textContent=lang==='zh'?'升级条件':'Escalation conditions';
+ el('riskDeescalationTitle').textContent=lang==='zh'?'降级条件':'De-escalation conditions';
+ const drivers=report.main_drivers||[];
+ el('riskDrivers').innerHTML=drivers.length?drivers.map(x=>'<li>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+' · '+(x.severity==null?'':Math.round(Number(x.severity)*100)+'/100')+'</li>').join(''):'<li>'+(lang==='zh'?'当前没有达到主驱动阈值的项目':'No driver currently exceeds the primary threshold')+'</li>';
+ const blockers=report.missing_confirmations||[];
+ el('riskBlockers').innerHTML=blockers.length?blockers.map(x=>'<li>'+esc(lang==='zh'?(x.label_zh||x.id):x.id)+'</li>').join(''):'<li>'+(lang==='zh'?'无明显阻断项':'No material blocker')+'</li>';
+ const hist=report.historical_support||{}, best=hist.policy_repricing_best||{};
+ el('riskHistorical').textContent=(lang==='zh'?'危机簇 ':'Crash clusters ')+(hist.historical_event_count??'-')+' · '+(lang==='zh'?'正常对照 ':'controls ')+(hist.normal_control_count??'-')+' · POLICY_REPRICING_STRESS '+(best.lead_trading_days==null?'':best.lead_trading_days+'d')+' hit '+(best.event_hit_rate==null?'-':fmtPct(best.event_hit_rate))+' / false+ '+(best.control_false_positive_rate==null?'-':fmtPct(best.control_false_positive_rate))+' / q '+(best.bh_q_value==null?'-':Number(best.bh_q_value).toFixed(4));
+ const pv=report.prospective_validation||{};
+ el('riskProspective').textContent=(lang==='zh'?'成熟度 ':'Maturity ')+(pv.maturity||'-')+' · '+(lang==='zh'?'已结算 ':'resolved ')+((pv.resolved_horizons||[]).join('/')||'0')+' · '+(lang==='zh'?'待结算 ':'pending ')+((pv.pending_horizons||[]).join('/')||'-')+' · '+(lang==='zh'?'证据有效 ':'eligible ')+(pv.evidence_eligible===false?'NO':'YES');
+ el('riskEscalation').innerHTML=(report.escalation_conditions||[]).map(x=>'<li>'+esc(lang==='zh'?(x.meaning_zh||x.condition):x.condition)+'</li>').join('');
+ el('riskDeescalation').innerHTML=(report.deescalation_conditions||[]).map(x=>'<li>'+esc(lang==='zh'?(x.meaning_zh||x.condition):x.condition)+'</li>').join('');
+ const src=report.source_status||{};
+ el('riskSourceStatus').textContent=(lang==='zh'?'数据时点：':'Source dates: ')+'Long '+(src.long_cycle_as_of||'-')+' · Hazard '+(src.latent_hazard_as_of||'-')+' · US/CN/HK '+(src.cross_market_as_of||'-')+' · Curve '+(src.policy_curve_as_of||'-')+' · Shadow '+(src.prospective_as_of||'-')+' · '+(lang==='zh'?'期限曲线 ':'term curve ')+(src.term_curve_usable?'OK':'NOT READY');
+ el('riskSemantics').textContent=lang==='zh'
+  ? '读法：先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日哪一段被什么分项推高。只有驱动继续扩散且阻断项转为确认，风险证据才升级；驱动回落并满足降级条件时才解除。该层只提供Shadow风控证据，不直接修改生产权重。'
+  : 'Read it in order: main drivers → missing confirmations → which components dominate 20/60/120/250d horizons. Evidence escalates only when drivers broaden and blockers become confirmed; it de-escalates when drivers normalize and de-escalation conditions are met. This layer supplies shadow risk evidence and does not directly change production weights.';
+ applyTableHeaderTooltips();
+}
+function renderComparison(evaluated){
+ const t=T[lang];
+ if(!evaluated){
+  el('baseReturn').textContent=t.noEval;el('triaidReturn').textContent=t.noEval;el('gain').textContent=t.noEval;
+  el('gain').className='value';el('gainCard').style.background='#fff';return;
+ }
+ const e=evaluated.evaluation, gain=Number(e.excess_return||0);
+ el('baseReturn').textContent=fmtPct(e.baseline_return);el('triaidReturn').textContent=fmtPct(e.triaid_return);
+ el('gain').textContent=signedPct(gain);el('gain').className='value '+cls(gain);
+ el('gainCard').style.background=gain>0?'#edf8f1':gain<0?'#fff1ef':'#fff';
+}
+function renderMarketRouteOverview(m,latest,routeEvaluated,selected,d){
+ const meta=MARKET_UI[m]||MARKET_UI.US;
+ const zh=lang==='zh';
+ const clock=marketClockState[m]||{};
+ const routeMode=clock.primary_experiment_mode||meta.routeMode||'-';
+ el('marketRouteTitle').textContent=(zh?meta.zh:meta.en)+' · '+(zh?'主路线摘要':'Primary-route summary');
+ el('marketRouteMode').textContent=routeMode;
+ el('marketRouteBaseline').textContent=zh?meta.baselineZh:meta.baselineEn;
+ el('marketRouteNote').textContent=zh?meta.routeZh:meta.routeEn;
+ let posteriorText=zh?'等待该路线真实后验':'Awaiting route posterior';
+ let posteriorClass='';
+ if(m==='US'){
+  const review=d?.us_return_max?.previous_decision_review||d?.us_return_max?.latest_decision_review||null;
+  if(review&&Number(review.observation_days||0)>0){
+   const gap=Number(review.current_return_max_theoretical_return||0)-Number(review.current_generic_core_theoretical_return||0);
+   posteriorText=(zh?'Return-Max 相对通用 Core ':'Return-Max vs Generic Core ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }
+ }else if(m==='CN'){
+  const p=d?.prospective_experiment?.current_portfolio_cumulative_returns||null;
+  if(p&&Number.isFinite(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL))){
+   const gap=Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);
+   posteriorText=(zh?'前瞻累计相对对照 ':'Prospective gap vs control ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }else if(routeEvaluated){
+   const gap=Number(routeEvaluated.evaluation?.excess_return||0);
+   posteriorText=(zh?'路线后验相对基线 ':'Route posterior vs baseline ')+signedPct(gap);
+   posteriorClass=cls(gap);
+  }
+ }else if(routeEvaluated){
+  const gap=Number(routeEvaluated.evaluation?.excess_return||0);
+  posteriorText=(zh?'港股路线后验相对基线 ':'HK route posterior vs baseline ')+signedPct(gap);
+  posteriorClass=cls(gap);
+ }
+ el('marketRoutePosterior').textContent=posteriorText;
+ el('marketRoutePosterior').className=posteriorClass;
+ const real={
+  US:zh?'四档USD容量 + 模型成本 + 模拟成交后验已接入':'4 USD capacity sleeves + modeled costs + simulated-execution posterior connected',
+  CN:zh?'人民币容量袖套 + 恢复波段已接入；前瞻协议按当前状态单独标记':'CNY capacity sleeves + recovery-wave evidence connected; prospective protocol is shown separately by current status',
+  HK:zh?'四档HKD容量 + 模型成本 + 模拟成交后验已接入':'4 HKD capacity sleeves + modeled costs + simulated-execution posterior connected'
+ };
+ el('marketRouteRealizability').textContent=real[m]||'-';
+ el('marketRouteStatus').textContent=(routeEvaluated?.evaluation?.status)||(latest?.status)||(zh?'等待数据':'WAITING');
+}
+function renderHKRoutePanel(m,report){
+ const panel=el('hkRoutePanel');
+ if(m!=='HK'){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ if(!report){
+  el('hkRouteStatus').textContent=lang==='zh'?'等待首个正式冻结决策':'Awaiting first formal frozen decision';
+  el('hkRouteMeta').textContent='HK_RETURN_MAX_CAPACITY';
+  el('hkRouteNote').textContent=lang==='zh'
+   ? '港股实时行情与策略候选可以盘中更新，但主路线、四档港币容量和正式后验只在完整日线冻结后进入证据链。'
+   : 'HK live data and candidate strategies may update intraday, but the primary route, four HKD capacity sleeves and formal posterior evidence enter the ledger only after a complete daily freeze.';
+  for(const id of ['hkExpected','hkBaseline','hkBenchmark','hkRisk'])el(id).textContent='-';
+  el('hkStrategyRows').innerHTML=tableEmptyRow(3,'等待首个正式港股冻结策略群。','Awaiting the first formal HK frozen strategy group.');
+  el('hkAssetRows').innerHTML=tableEmptyRow(2,'等待港股冻结ETF敞口。','Awaiting frozen HK ETF exposure.');
+  el('hkCapitalRows').innerHTML=tableEmptyRow(5,'等待首个四档港币容量决策。','Awaiting the first four-sleeve HKD capacity decision.');
+  el('hkRealizedRows').innerHTML=tableEmptyRow(6,'尚无上一轮港股容量后验。','No prior HK capacity posterior is available yet.');
+  el('hkDailyRows').innerHTML=tableEmptyRow(4,'尚无上一轮港股真实后验路径。','No prior HK realized posterior path is available yet.');
+  return;
+ }
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ el('hkRouteTitle').textContent=lang==='zh'?'港股 Return-Max 路线':'HK Return-Max Route';
+ el('hkRouteStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('hkRouteMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · HK_RETURN_MAX_CAPACITY';
+ el('hkExpectedLabel').textContent=lang==='zh'?'TRIAID 多周期年化状态估计':'TRIAID multi-window annualized state estimate';
+ el('hkBaselineLabel').textContent=lang==='zh'?'冻结基线多周期年化状态估计':'Frozen-baseline multi-window annualized state estimate';
+ el('hkBenchmarkLabel').textContent=lang==='zh'?'2800.HK 多周期年化状态估计':'2800.HK multi-window annualized state estimate';
+ el('hkRiskLabel').textContent=lang==='zh'?'目标风险仓位':'Target risk exposure';
+ el('hkExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
+ el('hkBaseline').textContent=fmtPct(d.baseline_projected_annualized_expected_net_return);
+ el('hkBenchmark').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
+ el('hkRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
+ el('hkRouteNote').textContent=lang==='zh'
+  ? '港股现在与美股/A股处于同一级主路线：独立冻结策略、港股ETF敞口、四档HKD资金容量、模型执行成本和未来真实后验全部使用港股自身数据。状态收益估计只用于冻结排序，不是未来收益保证；模拟成交不是券商真实成交。'
+  : 'HK now has the same primary-route evidence level as US/CN: HK-only frozen strategies, ETF exposures, four HKD capacity sleeves, modeled execution costs and future realized posterior evidence. State-return estimates are ranking inputs rather than guaranteed future returns, and simulated fills are not broker executions.';
+
+ const tw=d.target_strategy_weights||{},bw=d.baseline_strategy_weights||{};
+ const sids=Array.from(new Set([...Object.keys(tw),...Object.keys(bw)])).sort((a,b)=>Number(tw[b]||0)-Number(tw[a]||0)||a.localeCompare(b));
+ el('hkStrategyRows').innerHTML=sids.map(sid=>'<tr><td>'+strategyLabelHtml(strategyNameIndex.HK[sid]||sid,sid)+'</td><td class="num triaid">'+fmtPct(tw[sid]||0)+'</td><td class="num">'+fmtPct(bw[sid]||0)+'</td></tr>').join('') ||
+  tableEmptyRow(3,'等待冻结策略权重。','Awaiting frozen strategy weights.');
+
+ const aw=d.target_asset_weights||{};
+ el('hkAssetRows').innerHTML=Object.entries(aw).filter(([_,w])=>Number(w)>1e-12).sort((a,b)=>Number(b[1])-Number(a[1])).map(([a,w])=>'<tr><td>'+esc(a)+'</td><td class="num">'+fmtPct(w)+'</td></tr>').join('') ||
+  tableEmptyRow(2,'当前无风险ETF敞口。','No current risky ETF exposure.');
+
+ const cap=d.capital_capacity||{};
+ el('hkCapitalMeta').textContent=(lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+'ADV20 · '+fmtPct(cap.max_participation_adv)+' cap · '+(cap.base_cost_bps??'-')+'bps base · '+(cap.impact_coefficient_bps??'-')+'bps×√participation';
+ el('hkCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtHkd(x.starting_capital_hkd)+'</td><td class="num">'+fmtHkd(x.target_invested_notional_hkd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtHkd(x.estimated_round_trip_cost_proxy_hkd)+'</td></tr>').join('') ||
+  tableEmptyRow(5,'等待资金容量决策。','Awaiting HKD capacity decision.');
+
+ const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('hkRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtHkd(x.starting_capital_hkd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtHkd(x.current_equity_hkd)+'</td><td class="num '+cls(Number(x.current_net_pnl_hkd||0))+'">'+fmtHkd(x.current_net_pnl_hkd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtHkd(x.total_execution_cost_hkd)+'</td></tr>').join('') ||
+  tableEmptyRow(6,'上一轮尚无可用的后验模拟执行结果。','No eligible posterior simulated-execution result for the prior HK decision yet.');
+
+ const path=(review&&review.daily_path)||[];
+ el('hkDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.triaid_cumulative_return||0))+'">'+fmtPct(x.triaid_cumulative_return)+'</td><td class="num '+cls(Number(x.baseline_cumulative_return||0))+'">'+fmtPct(x.baseline_cumulative_return)+'</td><td class="num '+cls(Number(x.benchmark_cumulative_return||0))+'">'+fmtPct(x.benchmark_cumulative_return)+'</td></tr>').join('') ||
+  tableEmptyRow(4,'等待下一完整港股交易日结果。','Awaiting the next complete HK trading-day outcome.');
+
+ const labels={
+  hkStrategyTitle:lang==='zh'?'当前冻结策略权重':'Current frozen strategy weights',
+  hkStrategyHeader:lang==='zh'?'策略':'Strategy',
+  hkTriaidWeightHeader:lang==='zh'?'TRIAID 权重':'TRIAID weight',
+  hkBaseWeightHeader:lang==='zh'?'冻结基线权重':'Frozen baseline weight',
+  hkAssetTitle:lang==='zh'?'底层港股 ETF 目标敞口':'Underlying HK ETF target exposure',
+  hkAssetSymbolHeader:'ETF',
+  hkAssetWeightHeader:lang==='zh'?'目标权重':'Target weight',
+  hkCapitalTitle:lang==='zh'?'四档港币资金规模容量实验':'Four HKD capital-sleeve capacity experiment',
+  hkCapCapital:lang==='zh'?'起始资金':'Starting capital',
+  hkCapInvested:lang==='zh'?'目标投入':'Target invested',
+  hkCapParticipation:lang==='zh'?'最大目标仓位/ADV':'Max target/ADV',
+  hkCapDays:lang==='zh'?'最少成交天数':'Minimum execution days',
+  hkCapCost:lang==='zh'?'模型往返成本代理':'Modeled round-trip cost proxy',
+  hkRealizedTitle:lang==='zh'?'上一轮真实市场后验与模拟执行容量回顾':'Prior realized market posterior and simulated capacity review',
+  hkRealCapital:lang==='zh'?'起始资金':'Starting capital',
+  hkRealFill:lang==='zh'?'模拟成交比例':'Simulated fill ratio',
+  hkRealEquity:lang==='zh'?'模拟当前净值':'Simulated current equity',
+  hkRealPnl:lang==='zh'?'模拟净损益':'Simulated net P&L',
+  hkRealReturn:lang==='zh'?'模拟净收益率':'Simulated net return',
+  hkRealCost:lang==='zh'?'模型执行成本':'Modeled execution cost',
+  hkDailyTitle:lang==='zh'?'上一轮冻结配置理论持仓后验路径':'Prior frozen-allocation theoretical posterior path',
+  hkDailyDate:lang==='zh'?'结果日':'Outcome date',
+  hkDailyTriaid:lang==='zh'?'TRIAID 累计':'TRIAID cumulative',
+  hkDailyBase:lang==='zh'?'冻结基线累计':'Frozen baseline cumulative',
+  hkDailyBenchmark:lang==='zh'?'2800.HK 累计':'2800.HK cumulative'
+ };
+ for(const [id,value] of Object.entries(labels))if(el(id))el(id).textContent=value;
+}
+function renderUSReturnMax(report){
+ const panel=el('usReturnMaxPanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ el('usReturnMaxStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'排序信号：多周期年化状态收益估计':'Ranking signal: multi-window annualized state-return estimate');
+ el('usrmExpected').textContent=fmtPct(d.projected_annualized_expected_net_return);
+ el('usrmGeneric').textContent=fmtPct(d.generic_core_projected_annualized_expected_net_return);
+ el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
+ el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
+ el('usReturnMaxNote').textContent=lang==='zh'
+  ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
+  : 'The US route follows the same TRIAID FIN constitution as every supported market: maximize realizable net return as the only optimization objective. Liquidity, capacity, concentration and risk are feasibility constraints, while switching and execution costs are deducted as real costs. The return signal uses realized 21/63/126/252-day strategy net returns under frozen weights and is not an underlying-price forecast. Exact net-score ties use lower execution cost and deterministic strategy ID only. Four USD capital tiers apply the same objective with capital-specific capacity and impact checks, and no broker orders are sent.';
+ const rw=d.target_strategy_weights||{};
+ const gw=d.generic_core_control_weights||{};
+ const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
+ el('usrmStrategyRows').innerHTML=sids.map(sid=>'<tr><td>'+strategyLabelHtml(strategyNameIndex.US[sid]||sid,sid)+'</td><td class="num triaid">'+fmtPct(rw[sid]||0)+'</td><td class="num">'+fmtPct(gw[sid]||0)+'</td></tr>').join('') ||
+  '<tr><td colspan="3">'+(lang==='zh'?'等待冻结策略':'Awaiting frozen strategy mix')+'</td></tr>';
+ const aw=d.target_asset_weights||{};
+ el('usrmAssetRows').innerHTML=Object.entries(aw).filter(([_,w])=>Number(w)>1e-12).sort((a,b)=>Number(b[1])-Number(a[1])).map(([a,w])=>'<tr><td>'+esc(a)+'</td><td class="num">'+fmtPct(w)+'</td></tr>').join('') ||
+  '<tr><td colspan="2">'+(lang==='zh'?'当前无风险ETF敞口':'No current risky ETF exposure')+'</td></tr>';
+ const cap=d.capital_capacity||{};
+ el('usrmCapitalMeta').textContent=(lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+'ADV20 · '+fmtPct(cap.max_participation_adv)+' cap · '+(cap.base_cost_bps??'-')+'bps base · '+(cap.impact_coefficient_bps??'-')+'bps×√participation';
+ el('usrmCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtUsd(x.target_invested_notional_usd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtUsd(x.estimated_round_trip_cost_proxy_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
+ const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('') ||
+  '<tr><td colspan="6">'+(lang==='zh'?'上一轮尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior decision yet')+'</td></tr>';
+ const path=(review&&review.daily_path)||[];
+ el('usrmDailyRows').innerHTML=path.map(x=>'<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td><td class="num '+cls(Number(x.return_max_cumulative_return||0))+'">'+fmtPct(x.return_max_cumulative_return)+'</td><td class="num '+cls(Number(x.generic_core_cumulative_return||0))+'">'+fmtPct(x.generic_core_cumulative_return)+'</td><td class="num '+cls(Number(x.spy_buy_hold_cumulative_return||0))+'">'+fmtPct(x.spy_buy_hold_cumulative_return)+'</td></tr>').join('') ||
+  '<tr><td colspan="4">'+(lang==='zh'?'等待下一完整美股交易日结果':'Awaiting the next complete US trading-day outcome')+'</td></tr>';
+}
+function renderProspective(report,status){
+ const panel=el('prospectivePanel');
+ if(!report){
+  if(el('market').value!=='CN'){panel.className='prospective-panel';return;}
+  const s=status||{};
+  panel.className='prospective-panel show unavailable';
+  el('prospectiveTitle').textContent=lang==='zh'?'A股辅助前瞻协议 · 当前未激活':'CN Auxiliary Prospective Protocol · Inactive';
+  el('prospectiveStatus').textContent=lang==='zh'?'非当前主路线证据':'Not current-route evidence';
+  el('prospectiveMeta').textContent=(s.version||'cn-prospective-controls@0.3.0')+' · '+
+    (lang==='zh'?'当前协议实验 ':'current-protocol experiments ')+(s.current_protocol_count??0)+' · '+
+    (lang==='zh'?'旧协议失效 ':'invalidated legacy ')+(s.invalidated_legacy_count??0);
+  el('prospectiveNote').textContent=lang==='zh'
+    ? '当前A股主路线是 CN_RETURN_MAX_CAPACITY，而这套前瞻协议只在 CN_WORST_POOL_RESCUE 下登记。当前没有同协议实验，因此不展示空表，也不把旧协议结果混入主路线后验。若未来重新启用该协议，必须重新登记并从登记后的真实交易日开始积累证据。'
+    : 'The current CN primary route is CN_RETURN_MAX_CAPACITY, while this prospective protocol registers only under CN_WORST_POOL_RESCUE. No current-protocol experiment exists, so empty tables are suppressed and legacy results are not mixed into primary-route posterior evidence. Re-activation would require fresh registration and prospective outcomes after registration.';
+  return;
+ }
+ panel.className='prospective-panel show';
+ const t=T[lang];
+ el('prospectiveStatus').textContent=report.status||'-';
+ el('prospectiveDays').textContent=String(report.observation_days??0)+' / '+((report.horizons_trading_days||[]).join('/')||'-');
+ const p=report.current_portfolio_cumulative_returns||{};
+ el('prospectiveHold').textContent=fmtPct(p.HOLD_EQUAL);el('prospectiveHold').className=cls(Number(p.HOLD_EQUAL||0));
+ el('prospectiveTriaid').textContent=fmtPct(p.TRIAID_STATIC_ALLOCATION);el('prospectiveTriaid').className=cls(Number(p.TRIAID_STATIC_ALLOCATION||0));
+ el('prospectiveGap').textContent=signedPct(p.TRIAID_STATIC_MINUS_HOLD_EQUAL);el('prospectiveGap').className=cls(Number(p.TRIAID_STATIC_MINUS_HOLD_EQUAL||0));
+ el('prospectiveMeta').textContent=(report.experiment_id||'-')+' · '+(lang==='zh'?'登记日 ':'Registered ')+(report.market_as_of||'-')+' · '+(lang==='zh'?'待完成窗口 ':'Pending horizons ')+((report.pending_horizons||[]).join('/')||'none');
+ el('prospectiveNote').textContent=lang==='zh'
+   ? '策略池与TRIAID综合排序在登记时冻结，禁止事后换成员或调参。累计收益来自后续真实策略收益；全现金只作为防守对照，不作为恢复排序能力的主要证据。'
+   : 'Pool membership and the TRIAID composite ranking are frozen at registration with no post-result retuning. Cumulative returns use subsequent realized strategy returns; cash is a defense control, not the primary evidence of recovery-ranking skill.';
+ const rows=report.strategy_determination||[];
+ el('prospectiveStrategyRows').innerHTML=rows.map(x=>{
+   const name=(x.name&&x.name[lang])||x.strategy_id;
+   const reason=(x.selection_reason&&x.selection_reason[lang])||'';
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td class="num">'+(x.triaid_predicted_rank??'-')+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.latest_daily_return||0))+'">'+fmtPct(x.latest_daily_return)+'</td>'+
+    '<td class="num '+cls(Number(x.realized_cumulative_return||0))+'">'+fmtPct(x.realized_cumulative_return)+'</td>'+
+    '<td class="num">'+(x.realized_rank_so_far??'-')+'</td>'+
+    '<td class="reason">'+esc(reason)+'</td></tr>';
+ }).join('') || tableEmptyRow(8,'当前前瞻实验还没有冻结策略排序。','The current prospective experiment does not yet have a frozen strategy ranking.');
+ const pool=rows.map(x=>x.strategy_id);
+ el('prospectiveDailyHead').innerHTML='<tr><th>'+(lang==='zh'?'交易日':'Trading day')+'</th>'+
+   pool.map(sid=>'<th>'+strategyLabelHtml(strategyNameIndex.CN[sid]||sid,sid)+'</th>').join('')+
+   '<th>'+(lang==='zh'?'最差池':'Worst pool')+'</th><th>TRIAID</th><th>'+(lang==='zh'?'差值':'Gap')+'</th></tr>';
+ const daily=report.daily_fluctuation||[];
+ el('prospectiveDailyRows').innerHTML=daily.map(day=>{
+   const cr=day.portfolio_cumulative_returns||{};
+   return '<tr><td class="nowrap">'+esc(day.as_of||'-')+'</td>'+
+    pool.map(sid=>'<td class="num '+cls(Number((day.strategy_returns||{})[sid]||0))+'">'+signedPct((day.strategy_returns||{})[sid])+'</td>').join('')+
+    '<td class="num '+cls(Number(cr.HOLD_EQUAL||0))+'">'+fmtPct(cr.HOLD_EQUAL)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_ALLOCATION||0))+'">'+fmtPct(cr.TRIAID_STATIC_ALLOCATION)+'</td>'+
+    '<td class="num '+cls(Number(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL||0))+'">'+signedPct(cr.TRIAID_STATIC_MINUS_HOLD_EQUAL)+'</td></tr>';
+ }).join('') || '<tr><td colspan="'+(pool.length+4)+'">'+(lang==='zh'?'等待首个后续真实交易日结果':'Awaiting the first subsequent realized trading-day result')+'</td></tr>';
+}
+function renderRecoveryWave(report){
+ const panel=el('recoveryWavePanel');
+ if(!report){panel.className='prospective-panel';return;}
+ panel.className='prospective-panel show';
+ const d=report.latest_decision||{};
+ const review=report.previous_decision_review||null;
+ const integrity=report.integrity||{};
+ const labels={
+  '510300.SS':'沪深300ETF · 510300',
+  '510500.SS':'中证500ETF · 510500',
+  '159915.SZ':'创业板ETF · 159915',
+  '512100.SS':'中证1000ETF · 512100'
+ };
+ el('recoveryWaveStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
+ el('recoveryWaveMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'源数据时间 ':'Source data time ')+localDateTimeFromEpoch(d.source_latest_ts);
+ el('recoveryCash').textContent=fmtPct(d.cash_residual_weight);
+ el('recoveryPrevDays').textContent=review?String(review.observation_days??0):'-';
+ el('recoveryPrevReturn').textContent=review?fmtPct(review.current_portfolio_cumulative_return):'-';
+ el('recoveryPrevReturn').className=review?cls(Number(review.current_portfolio_cumulative_return||0)):'';
+ el('recoveryPrevGap').textContent=review?signedPct(review.current_excess_vs_equal_weight):'-';
+ el('recoveryPrevGap').className=review?cls(Number(review.current_excess_vs_equal_weight||0)):'';
+ const scope=d.data_scope||{};
+ el('recoveryWaveNote').textContent=lang==='zh'
+  ? '这是 Shadow Core 的冻结研究配置，不生成券商订单。T 时点决策只能从下一完整可交易 bar 起计算后验；当前微观层仅使用 ETF/指数基金自身真实价格与成交量，成分股级微观数据尚未接入。四档资金袖套从同一决策、全现金起步，唯一变量是资金规模；所谓填单是依据后续真实成交量与冻结参与率进行的模拟成交，不代表券商真实成交，模拟成交后从下一完整 bar 才开始计收益。历史配置与参数均冻结，不能事后改写。'
+  : 'These are frozen Shadow Core research allocations and generate no broker orders. A decision at T is evaluated only from the next complete tradable bar. The four capital sleeves start from cash under the same frozen decision; capital size is the only experimental variable. Fills are simulated from subsequently observed real volume under the frozen participation rule and become return-active on the following complete bar; they are not broker fills. Frozen allocations and parameters cannot be rewritten after outcomes.';
+ const opinions=d.trade_opinions||[];
+ el('recoveryOpinionRows').innerHTML=opinions.map(x=>{
+   const horizon=x.expected_reversal_horizon_days==null?'-':(x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'));
+   const hit=x.historical_recovery_edge==null?'-':signedPct(x.historical_recovery_edge);
+   const exp=x.expected_forward_return==null?'-':signedPct(x.expected_forward_return);
+   const rationale=lang==='zh'?x.rationale_zh:x.rationale_en;
+   return '<tr>'+
+    '<td><span class="strategy-name">'+esc(labels[x.symbol]||x.symbol)+'</span><br><span class="small muted">'+esc(x.symbol)+'</span></td>'+
+    '<td><span class="tag" title="'+esc(x.action||'')+'">'+esc(lang==='zh'?({INCREASE:'加仓',HOLD:'维持',REDUCE:'减仓',AVOID:'回避'}[String(x.action||'').toUpperCase()]||x.action||'—'):(x.action||'—'))+'</span></td>'+
+    '<td class="num triaid">'+fmtPct(x.target_weight)+'</td>'+
+    '<td class="num '+cls(Number(x.suggested_weight_change||0))+'">'+signedPct(x.suggested_weight_change)+'</td>'+
+    '<td class="num '+cls(Number(x.drawdown_252||0))+'">'+fmtPct(x.drawdown_252)+'</td>'+
+    '<td>'+esc(x.state_direction||'-')+'</td>'+
+    '<td class="num">'+horizon+'</td>'+
+    '<td class="num '+cls(Number(x.expected_recovery_velocity_per_day||0))+'">'+(x.expected_recovery_velocity_per_day==null?'-':signedPct(x.expected_recovery_velocity_per_day))+'</td>'+
+    '<td class="num '+cls(Number(x.historical_recovery_edge||0))+'">'+hit+'</td>'+
+    '<td class="num '+cls(Number(x.expected_forward_return||0))+'">'+exp+'</td>'+
+    '<td class="num has-tip" data-tip="'+esc((rationale||'')+'\\n'+(lang==='zh'?'怎么用：先看相似样本数，再看这些样本是否跨多个时期、方向是否一致。样本稀疏或只由单一历史情形支撑时，把 expected forward return 视为未充分支持，并保持冻结权重不变，直到新增前瞻样本或稳健性证据补足。':'Use: the sample count and rationale show whether historical analogues are strong enough to support the current research opinion. Next: with sparse samples or one-scenario support, keep observing rather than scaling from a high return proxy alone.'))+'">'+esc(x.analog_samples??'-')+'</td></tr>';
+ }).join('') || '<tr><td colspan="11">'+(lang==='zh'?'暂无冻结研究配置意见':'No frozen research allocation opinion')+'</td></tr>';
+ const capacity=d.capital_capacity||{};
+ const capModel=capacity.model||{};
+ const capRows=capacity.sleeves||[];
+ el('capitalSleeveMeta').textContent=capacity.enabled
+   ? ((lang==='zh'?'冻结执行参数：':'Frozen execution parameters: ')+
+      'ADV20 · '+fmtPct(capModel.max_participation_adv)+' cap · '+
+      (capModel.base_cost_bps??'-')+'bps base · '+
+      (capModel.impact_coefficient_bps??'-')+'bps×√participation · '+
+      (lang==='zh'?'不含券商个性化费率':'broker-specific fees excluded'))
+   : (lang==='zh'?'当前没有启用人民币资金袖套':'CNY capital sleeves not enabled');
+ el('capitalSleeveRows').innerHTML=capRows.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.target_invested_notional_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td>'+
+    '<td class="num">'+esc(x.minimum_execution_days??'-')+'</td>'+
+    '<td class="num">'+fmtMoney(x.estimated_round_trip_cost_proxy_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_pnl_before_timing_delay_cny||0))+'">'+fmtMoney(x.expected_wave_net_pnl_before_timing_delay_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.expected_wave_net_return_before_timing_delay||0))+'">'+signedPct(x.expected_wave_net_return_before_timing_delay)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'等待当前资金容量决策':'Awaiting capital-capacity decision')+'</td></tr>';
+ const realizedSleeves=((review&&review.capital_sleeves)||{}).sleeves||[];
+ el('capitalRealizedRows').innerHTML=realizedSleeves.map(x=>{
+   return '<tr>'+
+    '<td class="num">'+fmtMoney(x.starting_capital_cny)+'</td>'+
+    '<td class="num">'+fmtPct(x.fill_ratio)+'</td>'+
+    '<td class="num">'+fmtMoney(x.current_equity_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_pnl_cny||0))+'">'+fmtMoney(x.current_net_pnl_cny)+'</td>'+
+    '<td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td>'+
+    '<td class="num">'+fmtMoney(x.total_execution_cost_cny)+'</td>'+
+    '<td class="num">'+fmtMoney(x.remaining_target_notional_cny)+'</td></tr>';
+ }).join('') || '<tr><td colspan="7">'+(lang==='zh'?'上一轮资金袖套尚无可用的后验模拟执行结果':'No eligible posterior simulated-execution result for the prior sleeves yet')+'</td></tr>';
+ if(review){
+   const prior=review.trade_opinions||[];
+   el('recoveryPreviousMeta').textContent=(lang==='zh'?'上一轮 '+(review.decision_id||'-')+'：':'Prior '+(review.decision_id||'-')+': ')+
+     prior.map(x=>(labels[x.symbol]||x.symbol)+' '+(x.action||'-')+' '+fmtPct(x.target_weight)+' · '+(x.expected_reversal_horizon_days==null?'-':x.expected_reversal_horizon_days+(lang==='zh'?'日':'d'))).join(' | ');
+ }else{
+   el('recoveryPreviousMeta').textContent=lang==='zh'?'暂无上一轮冻结决策':'No prior frozen decision';
+ }
+ const path=(review&&review.daily_path)||[];
+ el('recoveryReviewRows').innerHTML=path.map(x=>{
+   return '<tr><td class="nowrap">'+esc(x.as_of||'-')+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_return||0))+'">'+signedPct(x.portfolio_return)+'</td>'+
+    '<td class="num '+cls(Number(x.equal_weight_return||0))+'">'+signedPct(x.equal_weight_return)+'</td>'+
+    '<td class="num '+cls(Number(x.portfolio_cumulative_return||0))+'">'+fmtPct(x.portfolio_cumulative_return)+'</td>'+
+    '<td class="num '+cls(Number(x.excess_vs_equal_weight||0))+'">'+signedPct(x.excess_vs_equal_weight)+'</td></tr>';
+ }).join('') || '<tr><td colspan="5">'+(lang==='zh'?'上一轮尚未产生可用的下一完整交易日结果':'The prior decision has no eligible next-complete-bar outcome yet')+'</td></tr>';
+}
+function humanRunState(status){
+ const s=String(status||'').trim();
+ const zh=lang==='zh';
+ const map={
+  NO_NEW_DATA:zh?'暂无新数据':'No new data',
+  EVALUATED:zh?'已完成后验':'Posterior evaluated',
+  DECIDED:zh?'决策已生成':'Decision generated',
+  PREVIEW_READY:zh?'即时预览':'Preview ready',
+  READY:zh?'就绪':'Ready',
+  RUNNING:zh?'运行中':'Running',
+  FAILED:zh?'运行失败':'Run failed'
+ };
+ return map[s]||s.replaceAll('_',' ')||(zh?'尚无正式运行状态':'No formal run state yet');
+}
+function humanRegime(regime){
+ const s=String(regime||'').trim();
+ const zh=lang==='zh';
+ const map={
+  risk_on_trend:zh?'风险偏好 · 趋势':'Risk-on · trend',
+  risk_off:zh?'防御 · 风险收缩':'Risk-off',
+  neutral:zh?'中性':'Neutral',
+  recovery:zh?'恢复':'Recovery',
+  transition:zh?'过渡':'Transition'
+ };
+ return map[s]||s.replaceAll('_',' ')||(zh?'策略环境未冻结':'Regime not frozen');
+}
+function humanCoreVersion(version){
+ const s=String(version||'').trim();
+ if(!s)return lang==='zh'?'等待版本':'Awaiting version';
+ return s.replace(/^triaid-core-/i,'TRIAID Core · ');
+}
+function setStatusNote(id,zh,en){if(el(id))el(id).textContent=lang==='zh'?zh:en}
+async function refreshAll(preferStale=false){
+ const m=el('market').value;
+ const seq=++refreshSeq;
+ const previewId=previewRunIds[m];
+ try{
+  const cardsUrl='/api/strategies?market_id='+m+'&lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const marketGet=preferStale?jsonCachedStale:jsonCached;
+  const [s,d,cards,curves,evo,runs,previewRun]=await Promise.all([
+   jsonCachedStale('/api/ui/core',60000),marketGet('/api/daily?compact=true&market_id='+m,30000),marketGet(cardsUrl,30000),
+   marketGet('/api/curves?market_id='+m,30000),jsonCachedStale('/api/evolution',30000),marketGet('/api/runs?market_id='+m+'&limit=100',30000),
+   previewId?json('/api/runs/'+encodeURIComponent(previewId)):Promise.resolve(null)
+  ]);
+  if(seq!==refreshSeq||el('market').value!==m)return;
+  const isCN=m==='CN';
+  const isHK=m==='HK';
+  const routeMode=(MARKET_UI[m]||{}).routeMode||null;
+  const primaryMode=isCN?'CN_RETURN_MAX_CAPACITY':isHK?'HK_RETURN_MAX_CAPACITY':null;
+  const evaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!primaryMode||x.experiment_mode===primaryMode)
+  )||null;
+  if(isCN){
+   el('resultTitle').textContent=lang==='zh'?'A股收益最大化主路线':'CN Return-Max Primary Route';
+   el('baseReturnLabel').textContent=lang==='zh'?'收益优先策略群后验收益':'Return-first portfolio posterior return';
+   el('baseReturnSub').textContent=lang==='zh'?'决策时冻结的全策略竞争基线':'Full-universe return-first baseline frozen at decision time';
+   el('gainLabel').textContent=lang==='zh'?'TRIAID 相对基线收益差':'TRIAID return gap vs baseline';
+   el('gainSub').textContent=lang==='zh'?'TRIAID 动态权重后验收益 − 收益优先基线':'TRIAID dynamic-allocation posterior return − return-first baseline';
+   el('strategyTitle').textContent=lang==='zh'?'A股收益优先策略群与动态权重':'CN Return-First Strategy Group and Dynamic Weights';
+  }else{
+   el('resultTitle').textContent=T[lang].result;
+   el('baseReturnLabel').textContent=T[lang].baseReturn;
+   el('baseReturnSub').textContent=T[lang].baseSub;
+   el('gainLabel').textContent=T[lang].gain;
+   el('gainSub').textContent=T[lang].gainSub;
+   el('strategyTitle').textContent=m==='US'
+    ? (lang==='zh'?'通用 Core 对照策略群（非 Return-Max 主路线）':'Generic Core Control Group (not the Return-Max primary route)')
+    : m==='HK'
+      ? (lang==='zh'?'港股收益优先策略群与 TRIAID 动态权重':'HK Return-First Strategy Group and TRIAID Dynamic Weights')
+      : T[lang].strategies;
+  }
+  strategyNameIndex[m]=Object.fromEntries(cards.map(x=>[x.strategy_id,x.name]));
+  const selected=cards.filter(x=>x.selected);
+  const detailRuns=d.runs_detail||[];
+  const officialLatest=primaryMode
+    ? ([...detailRuns].reverse().find(x=>x.experiment_mode===primaryMode)||null)
+    : (detailRuns.length?detailRuns[detailRuns.length-1]:null);
+  const latest=previewRun||officialLatest;
+  const routeEvaluated=[...runs].reverse().find(x=>
+   x.evaluation&&x.evaluation.status==='EVALUATED'&&(!routeMode||x.experiment_mode===routeMode)
+  )||null;
+  const lastCurve=curves.length?curves[curves.length-1]:null;
+  homeSummaryState.selectedCount=selected.length;
+  homeSummaryState.changedCount=selected.filter(x=>Math.abs(Number(x.triaid_weight||0)-Number(x.baseline_weight||0))>1e-8).length;
+  homeSummaryState.selectedNames=selected.slice().sort((a,b)=>Number(b.triaid_weight||0)-Number(a.triaid_weight||0)).map(x=>x.name||x.strategy_id);
+  homeSummaryState.evaluated=evaluated;
+  homeSummaryState.preview=!!previewRun;
+  homeSummaryState.latestStatus=latest?.status||null;
+  renderHomeSummary();
+  renderMarketRouteOverview(m,latest,routeEvaluated,selected,d);
+  renderComparison(evaluated);
+  const marketDate=(previewRun?.market?.as_of)||d.date||null;
+  el('date').textContent=marketDate||(lang==='zh'?'等待数据':'Awaiting data');
+  setStatusNote('dateNote',marketDate?'当前市场最近可用交易日':'尚未取得当前市场数据日',marketDate?'Latest available trading day for the selected market':'No market date is available yet');
+
+  const coreVersion=(previewRun?.triaid_decision?.core_version)||s.version||null;
+  el('core').textContent=humanCoreVersion(coreVersion);
+  el('core').title=coreVersion||'';
+  setStatusNote('coreNote','当前运行的 Core 版本','Currently active Core version');
+
+  el('selectedCount').textContent=String(selected.length);
+  setStatusNote('selectedCountNote',selected.length?'与当前冻结入选名单一致':'当前冻结策略群为 0',selected.length?'Matches the current frozen selection':'Current frozen strategy group contains 0 strategies');
+
+  const cum=lastCurve?lastCurve.cumulative_excess_return:null;
+  if(cum===null||cum===undefined||!Number.isFinite(Number(cum))){
+   el('cumExcess').textContent=lang==='zh'?'待后验':'Awaiting posterior';
+   el('cumExcess').className='status-value numeric';
+   setStatusNote('cumExcessNote','需至少一轮真实后验后显示','Shown after at least one realized posterior result');
+  }else{
+   el('cumExcess').textContent=fmtPct(cum);
+   el('cumExcess').className='status-value numeric '+cls(cum);
+   setStatusNote('cumExcessNote','已完成后验的累计相对收益差','Cumulative relative-return gap across completed posterior results');
+  }
+
+  const clockState=marketClockState[m]||{};
+  const sessionPhase=String(clockState.session_phase||'').toUpperCase();
+  const sessionLabel=phaseText(sessionPhase);
+  const rawRegime=previewRun?.market?.regime||latest?.regime||'';
+  const regimeLabel=humanRegime(rawRegime);
+  el('regime').textContent=sessionPhase
+   ? (sessionLabel+' · '+regimeLabel)
+   : regimeLabel;
+  el('regime').title=[sessionPhase,rawRegime].filter(Boolean).join(' · ');
+  setStatusNote(
+   'regimeNote',
+   rawRegime
+    ? '前半段是官方交易时段，后半段是最近一次正式决策使用的策略环境；两者不是同一个概念。'
+    : '当前有实时交易时段，但尚无可用于正式后验的冻结策略环境；盘中数据仍在监控。',
+   rawRegime
+    ? 'The first part is the official trading session; the second is the strategy regime used by the latest formal decision. They are different concepts.'
+    : 'The live trading session is available, but no strategy regime has yet been frozen for formal posterior evidence; intraday monitoring continues.'
+  );
+
+  const rawRunState=previewRun?(previewRun.status||'PREVIEW_READY'):(latest?.status||'');
+  const activeSession=['PREOPEN','OPEN','BREAK'].includes(sessionPhase);
+  const runStateText=previewRun
+   ? humanRunState(rawRunState)+(lang==='zh'?' · 预览':' · preview')
+   : rawRunState
+     ? humanRunState(rawRunState)
+     : activeSession
+       ? (lang==='zh'?'当日监控 · 等待收盘冻结':'Intraday monitoring · awaiting close freeze')
+       : (lang==='zh'?'尚无正式冻结决策':'No formal frozen decision yet');
+  el('runState').textContent=runStateText;
+  el('runState').title=rawRunState||sessionPhase;
+  setStatusNote(
+   'runStateNote',
+   previewRun
+    ? '即时预览不进入正式证据链'
+    : rawRunState==='NO_NEW_DATA'
+      ? '当前周期没有新增可用行情或后验结果'
+      : rawRunState
+        ? '这是正式决策/后验链的运行状态'
+        : activeSession
+          ? '行情仍在更新，但正式日线决策要等完整收盘数据后冻结；不是系统停止。'
+          : '当前没有可验证的正式冻结决策。',
+   previewRun
+    ? 'Preview does not enter the formal evidence chain'
+    : rawRunState==='NO_NEW_DATA'
+      ? 'No new usable market or posterior data in the current cycle'
+      : rawRunState
+        ? 'This is the state of the formal decision/posterior evidence chain.'
+        : activeSession
+          ? 'Market data are still updating, but the formal daily decision freezes only after a complete close; the system is not stopped.'
+          : 'There is no verifiable formal frozen decision yet.'
+  );
+
+  const frozenSelection=!!officialLatest;
+  if(el('selectedNamesLabel'))el('selectedNamesLabel').textContent=lang==='zh'
+   ? (frozenSelection?'当前入选':'当前候选')
+   : (frozenSelection?'Selected now':'Current candidates');
+  el('selectedNames').innerHTML=selected.length
+   ? selected.slice(0,6).map(x=>strategyLabelHtml(x.name,x.strategy_id)).join(lang==='zh'?'、':' · ')+(selected.length>6?' …':'')
+   : (lang==='zh'?'暂无入选':'No selection');
+  setStatusNote(
+   'selectedNamesNote',
+   selected.length
+    ? (frozenSelection?'显示当前正式冻结策略群，最多列出前6项':'显示当前盘中候选策略群，最多列出前6项；尚未形成正式收盘冻结决策')
+    : (frozenSelection?'当前正式冻结策略群为空':'当前没有满足盘中候选条件的策略'),
+   selected.length
+    ? (frozenSelection?'Current formally frozen strategy group; first six shown':'Current intraday candidate group; first six shown. It has not yet become the formal close-frozen decision.')
+    : (frozenSelection?'The formal frozen strategy group is empty':'No strategy currently meets the intraday candidate criteria')
+  );
+  if(previewRun){
+   el('dailyAnalysis').textContent=T[lang].preview;
+   el('dailyAnalysis').className='';
+  }else if(evaluated){
+   const g=Number(evaluated.evaluation.excess_return||0);
+   el('dailyAnalysis').textContent=g>1e-12?T[lang].positive:g<-1e-12?T[lang].negativeResult:T[lang].flat;
+   el('dailyAnalysis').className=cls(g);
+  }else if(isCN&&latest?.diagnostic_summary?.experiment_mode==='CN_RETURN_MAX_CAPACITY'){
+   const p=Number(latest.diagnostic_summary.projected_excess_expected_return);
+   el('dailyAnalysis').textContent=Number.isFinite(p)
+    ? (lang==='zh'?'当前主路线以可实现净收益为唯一优化目标；TRIAID 相对冻结基线的状态收益差为 '+signedPct(p)+'。该值用于决策排序，不是保证的未来收益。':'The primary route uses realizable net return as the sole optimization objective; the state-return gap versus the frozen baseline is '+signedPct(p)+'. This is a decision-ranking signal, not a guaranteed future return.')
+    : T[lang].pending;
+   el('dailyAnalysis').className=Number.isFinite(p)?cls(p):'';
+  }else if(latest){
+   el('dailyAnalysis').textContent=lang==='zh'
+    ? '当前决策已冻结，等待下一完整交易日结果。'
+    : 'The current decision is frozen and awaits the next complete trading-day outcome.';
+   el('dailyAnalysis').className='';
+  }else{
+   el('dailyAnalysis').textContent=activeSession
+    ? (lang==='zh'?'当前仅盘中监控，正式决策尚未冻结。':'Intraday monitoring only; the formal decision has not yet been frozen.')
+    : (lang==='zh'?'尚无可验证的正式决策或后验结果。':'No verifiable formal decision or posterior result yet.');
+   el('dailyAnalysis').className='';
+  }
+  if(previewRun){
+   setStatusNote('dailyAnalysisNote','当前是即时预览，不进入正式后验','Current result is a preview and does not enter formal posterior evidence');
+  }else if(evaluated){
+   setStatusNote('dailyAnalysisNote','来自已经完成的真实后验，可与同一冻结时点基线比较','Completed realized posterior; compare with the control frozen at the same time');
+  }else if(latest){
+   setStatusNote('dailyAnalysisNote','正式决策已经冻结，等待下一完整结果期进入后验','The formal decision is frozen and awaits the next complete outcome period');
+  }else{
+   setStatusNote(
+    'dailyAnalysisNote',
+    activeSession?'实时行情与候选策略仍在更新；正式后验必须等收盘冻结后才开始':'当前没有可进入正式后验的冻结决策',
+    activeSession?'Live market data and candidate strategies are still updating; formal posterior evidence starts only after the close freeze':'There is no frozen decision eligible for formal posterior evaluation'
+   );
+  }
+  renderUSReturnMax(m==='US'?d.us_return_max:null);
+  renderProspective(isCN?d.prospective_experiment:null,isCN?d.prospective_experiment_status:null);
+  renderRecoveryWave(isCN?d.recovery_wave:null);
+  renderHKRoutePanel(m,d.hk_return_max||null);
+  drawCurve(curves);
+  const selectedCards=cards.filter(x=>x.selected).sort((a,b)=>(b.baseline_weight||0)-(a.baseline_weight||0));
+  const candidateCards=cards.filter(x=>!x.selected).sort((a,b)=>((b.expected_net_return??-999)-(a.expected_net_return??-999)));
+  el('strategyRows').innerHTML=selectedCards.map(x=>{
+   const delta=(x.triaid_weight||0)-(x.baseline_weight||0);
+   const explanation=[x.summary,x.selection_reason,x.triaid_reason].filter(Boolean).join(' · ');
+   return '<tr class="selected">'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'" title="'+esc(x.lifecycle||'')+'">'+esc(lifecycleLabel(x.lifecycle))+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="num base">'+fmtPct(x.baseline_weight)+'</td>'+
+    '<td class="num triaid">'+fmtPct(x.triaid_weight)+'</td>'+
+    '<td class="num delta '+cls(delta)+'">'+signedPct(delta)+'</td>'+
+    '<td class="reason">'+esc(explanation)+'</td></tr>';
+  }).join('') || tableEmptyRow(8,'当前没有冻结入选策略。请结合候选池查看为什么没有策略满足入选条件。','No strategy is currently in the frozen selected set. Check the candidate pool for exclusion reasons.');
+  el('candidateRows').innerHTML=candidateCards.map(x=>{
+   return '<tr>'+
+    '<td>'+strategyLabelHtml(x.name,x.strategy_id)+'<br><span class="small muted">'+esc(x.strategy_id)+'</span></td>'+
+    '<td><span class="tag has-tip" data-tip="'+esc(statusTip(x.lifecycle))+'" title="'+esc(x.lifecycle||'')+'">'+esc(lifecycleLabel(x.lifecycle))+'</span></td>'+
+    '<td class="num '+cls(x.expected_net_return||0)+'">'+fmtPct(x.expected_net_return)+'</td>'+
+    '<td class="num">'+fmtPct(x.risk)+'</td>'+
+    '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · ')||(lang==='zh'?'当前没有补充说明':'No additional explanation'))+'</td></tr>';
+  }).join('') || tableEmptyRow(5,'当前没有未入选候选策略。','There are no unselected candidate strategies.');
+  const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
+  el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
+    (lang==='zh'?'平均相对收益差 ':'Mean relative return gap ')+signedPct(diag.mean_excess_return);
+  el('evoMean').className='sub '+cls(diag.mean_excess_return||0);
+  el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
+  const history=evo.history||[];const last=history.length?history[history.length-1]:null;
+  el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
+  el('runStatus').textContent=previewRun
+    ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
+    : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
+ }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
+}
+async function refreshRiskPanels(){
+ const [riskWarning,riskControl]=await Promise.all([
+  jsonOrNullCached('/api/risk-warning/latest',10000),
+  jsonOrNullCached('/api/risk-control/latest',10000)
+ ]);
+ renderRiskWarning(riskWarning);
+ renderRiskControl(riskControl);
+}
+async function propose(){
+ const x=await json('/api/evolution/propose',{method:'POST'});
+ el('runStatus').textContent=x.created?(x.candidate.version+' · CANDIDATE CREATED'):(x.reason||'NO CANDIDATE');
+ refreshAll();
+}
+const hoverTip=el('hoverTip');
+document.addEventListener('mouseover',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(!target)return;
+ const tip=target.dataset.strategyId
+  ? strategyMarketTip(target.dataset.strategyId,target.dataset.strategyName||strategyNameIndex[el('market').value][target.dataset.strategyId])
+  : target.dataset.tip;
+ if(!tip)return;
+ hoverTip.textContent=tip;hoverTip.style.display='block';
+});
+document.addEventListener('mousemove',e=>{
+ if(hoverTip.style.display!=='block')return;
+ const pad=14;let x=e.clientX+14,y=e.clientY+16;
+ const w=hoverTip.offsetWidth,h=hoverTip.offsetHeight;
+ if(x+w>window.innerWidth-pad)x=e.clientX-w-14;
+ if(y+h>window.innerHeight-pad)y=e.clientY-h-14;
+ hoverTip.style.left=Math.max(pad,x)+'px';hoverTip.style.top=Math.max(pad,y)+'px';
+});
+document.addEventListener('mouseout',e=>{
+ const target=e.target.closest('[data-tip],[data-strategy-id]');
+ if(target&&!target.contains(e.relatedTarget))hoverTip.style.display='none';
+});
+const tableHeaderObserver=new MutationObserver(mutations=>{
+ if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
+});
+tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
+function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();renderVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels()}
+applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();renderVolatilityForecast();refreshVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);setInterval(refreshVolatilityForecast,60000);
+</script>
+</body>
+</html>
+"""
++v.toLocaleString(undefined,{maximumFractionDigits:0})}
 function signedPct(x){if(x===null||x===undefined)return '-';const v=100*x;return Number.isFinite(v)?((v>0?'+':'')+v.toFixed(2)+'%'):'-'}
 function fmtRiskWithUnit(x,unit,digits=4){const n=Number(x);return Number.isFinite(n)?n.toFixed(digits)+(unit||''):'—'}
 function fmtMultiplier(x){const n=Number(x);return Number.isFinite(n)?n.toFixed(2)+'×':'—'}
