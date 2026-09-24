@@ -20,6 +20,7 @@ risk_projection_source=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encodi
 runtime_ports_source=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
 ui_ports_source=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
 projection_repository_source=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
+validation_projection_source=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
 market_contracts_source=(ROOT/"triaid_fin"/"market_contracts.py").read_text(encoding="utf-8")
 market_profiles_source=(ROOT/"triaid_fin"/"market_profiles"/"__init__.py").read_text(encoding="utf-8")
 
@@ -102,6 +103,9 @@ checks={
     "risk_center_frontend_uses_projection":"jsonCachedStale('/api/ui/risk-center',10000)" in app_source,
     "risk_center_frontend_no_domain_fanout":"jsonOrNullCached('/api/risk-warning/latest',10000)" not in app_source and "jsonOrNullCached('/api/risk-control/latest',10000)" not in app_source,
     "risk_projection_is_read_only":"risk_warning_run" not in risk_projection_source and "risk_control_run" not in risk_projection_source,
+    "validation_projection_is_read_only":"class ValidationSummaryProjection" in validation_projection_source and "does not recompute returns" in validation_projection_source,
+    "validation_frontend_uses_one_projection":"/api/ui/validation-summary?market_id=" in app_source,
+    "validation_frontend_has_no_outcome_domain_fanout":"/api/experiments/outcomes/" not in app_source[app_source.find("async function refreshValidationSummary"):app_source.find("function phaseText")],
     "market_page_frontend_uses_projection":"projectionUrl='/api/ui/market-page/'+m" in app_source,
 }
 
