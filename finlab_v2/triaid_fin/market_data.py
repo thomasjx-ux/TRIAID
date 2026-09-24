@@ -17,6 +17,7 @@ from .tencent_cn_data import TencentCNMarketDataProvider
 from .tushare_auction import TushareETFAuctionProvider
 from .provider_registry import ProviderRegistry
 from .market_registry import MARKET_REGISTRY, market_ids, normalize_market_id
+from .market_interfaces import market_interface
 from .trading_calendar import official_session_phase
 
 
@@ -35,8 +36,6 @@ class ModeConfig:
     quality: str
     execution_grade: bool
 
-
-HK_HIGH_FREQUENCY_OPTIONAL_SYMBOLS={"2819.HK"}
 
 MODE_CONFIGS={
     "DAILY":ModeConfig("DAILY","10y","1d",False,300,900,"research_grade",False),
@@ -184,48 +183,29 @@ class MarketDataHub:
         self.tushare_auction=TushareETFAuctionProvider()
         self.registry=ProviderRegistry()
 
-        # Market-specific routing: do not make one public endpoint a
-        # cross-market single point of failure.
-        self.registry.register(
-            "yahoo_bars",
-            self.provider,
-            routes=("US:PREOPEN","US:REALTIME"),
-        )
-        # Compatibility alias retained for tests and callers that explicitly
-        # re-route a capability to the generic research bar provider.
-        self.registry.register("research_bars",self.provider)
-        self.registry.register(
-            "sina_us_primary",
-            self.sina_us,
-            routes=("US:DAILY","US:INTRADAY"),
-        )
-        self.registry.register(
-            "tencent_equity_primary",
-            self.tencent_cn,
-            routes=(
-                "CN:DAILY","CN:INTRADAY","CN:REALTIME",
-                "HK:DAILY","HK:INTRADAY","HK:REALTIME",
-            ),
-        )
-        self.registry.register(
-            "us_l1_quotes",
-            self.alpaca,
-            routes=("US:QUOTE_L1",),
-        )
-        self.registry.register("tushare_cn_auction",self.tushare_auction,routes=("CN:PREOPEN",))
-        # Eastmoney remains research-only because Railway has observed remote
-        # disconnects from the current egress.
-        self.registry.register("eastmoney_experimental",self.eastmoney)
-
-        # Yahoo is now a last-resort bar fallback for regular-session equity
-        # data rather than the default provider for all three markets.
-        for route in ("US:DAILY","US:INTRADAY"):
-            self.registry.add_fallback(route,"yahoo_bars")
-        for route in (
-            "CN:DAILY","CN:INTRADAY","CN:REALTIME",
-            "HK:DAILY","HK:INTRADAY","HK:REALTIME",
+        # Providers are registered once. Market/mode routing is owned by the
+        # market-interface registry so adding or changing a market does not
+        # require editing MarketDataHub control flow.
+        for name,provider in (
+            ("yahoo_bars",self.provider),
+            ("research_bars",self.provider),
+            ("sina_us_primary",self.sina_us),
+            ("tencent_equity_primary",self.tencent_cn),
+            ("us_l1_quotes",self.alpaca),
+            ("tushare_cn_auction",self.tushare_auction),
+            ("eastmoney_experimental",self.eastmoney),
         ):
-            self.registry.add_fallback(route,"yahoo_bars")
+            self.registry.register(name,provider)
+
+        for market in market_ids():
+            profile=market_interface(market)
+            for mode,chain in profile.provider_chains.items():
+                route=f"{market}:{mode}"
+                if not chain:
+                    continue
+                self.registry.route(route,chain[0])
+                for fallback_name in chain[1:]:
+                    self.registry.add_fallback(route,fallback_name)
         self._cache:dict[tuple[str,str],ProviderPanel]={}
         self._errors:dict[tuple[str,str],dict]={}
         self._failovers:list[dict]=[]
@@ -569,11 +549,7 @@ class MarketDataHub:
         series=[]
         required_errors=[]
         degraded_symbols=[]
-        optional_sparse=(
-            set(HK_HIGH_FREQUENCY_OPTIONAL_SYMBOLS)
-            if market=="HK" and mode in {"INTRADAY","REALTIME"}
-            else set()
-        )
+        optional_sparse=set(market_interface(market).optional_symbols(mode))
         for symbol in symbols:
             try:
                 series.append(
