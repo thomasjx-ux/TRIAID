@@ -198,6 +198,10 @@ score=report["realized_scorecard"]
 assert score["status"]=="EVALUATED"
 assert score["hindsight_best_strategy_id"]=="P16_REV5"
 assert abs(score["opportunity_gap_to_hindsight_best"]-0.0020)<1e-12
+cap=report["capitalized_scorecard"]
+assert cap["currency"]=="HKD"
+assert len(cap["rows"])==4
+assert abs(cap["rows"][0]["realized_excess_pnl"]-cap["rows"][0]["starting_capital"]*(-0.0002))<1e-9
 
 attr=report["intervention_attribution"]
 assert attr["status"]=="EVALUATED"
