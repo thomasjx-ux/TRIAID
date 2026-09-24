@@ -85,11 +85,7 @@ class ProviderPanel:
             "execution_grade":self.execution_grade,
             "requested_symbols":list(self.requested_symbols or sorted(self.close)),
             "degraded_symbols":list(self.degraded_symbols or []),
-            "partial_symbol_policy":(
-                "HK_HIGH_FREQUENCY_SPARSE_DEFENSIVE_NO_INTERPOLATION"
-                if self.market_id=="HK" and self.mode in {"INTRADAY","REALTIME"}
-                else "STRICT_COMPLETE_PANEL"
-            ),
+            "partial_symbol_policy":market_interface(self.market_id).partial_policy(self.mode),
         }
 
 
@@ -337,22 +333,25 @@ class MarketDataHub:
 
     def auction_shadow_probe(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
         market=normalize_market_id(market_id)
-        if market!="CN":
+        profile=market_interface(market)
+        provider_name=profile.auction_shadow_provider_name
+        provider=self.registry.provider(provider_name) if provider_name else None
+        if provider is None or not hasattr(provider,"auction_shadow_probe"):
             return {
                 "market_id":market,
                 "available":False,
                 "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
-                "reason":"CN_ONLY",
+                "reason":"AUCTION_SHADOW_PROVIDER_NOT_REGISTERED",
                 "symbols":{},
             }
         rows={}
         available=0
         for symbol in symbols:
             try:
-                result=self.tencent_cn.auction_shadow_probe(symbol)
+                result=provider.auction_shadow_probe(symbol)
             except Exception as exc:
                 result={
-                    "provider":self.tencent_cn.version,
+                    "provider":getattr(provider,"version",type(provider).__name__),
                     "symbol":symbol,
                     "available":False,
                     "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
@@ -361,14 +360,14 @@ class MarketDataHub:
             rows[symbol]=result
             available+=1 if result.get("available") else 0
         return {
-            "market_id":"CN",
-            "provider":self.tencent_cn.version,
+            "market_id":market,
+            "provider":getattr(provider,"version",type(provider).__name__),
             "role":"SHADOW_ZERO_COST_VALIDATION_ONLY",
             "available_symbols":available,
             "total_symbols":len(rows),
             "all_symbols_available":bool(rows) and available==len(rows),
             "symbols":rows,
-            "promotion_rule":"ZERO_COST_SOURCE_MUST_PASS_REPEATED_PROSPECTIVE_0925_AVAILABILITY_AND_VALUE_CONSISTENCY_BEFORE_ROUTING",
+            "promotion_rule":"ZERO_COST_SOURCE_MUST_PASS_REPEATED_PROSPECTIVE_AVAILABILITY_AND_VALUE_CONSISTENCY_BEFORE_ROUTING",
         }
 
     def latest_quotes(self,market_id:str,symbols:list[str]|tuple[str,...])->dict:
@@ -512,10 +511,11 @@ class MarketDataHub:
         for s in required_series:
             common &= set(s.ts)
         ts=[t for t in by[benchmark].ts if t in common]
-        aligned_min=(
-            1 if market=="CN" and mode=="PREOPEN"
-            else max(2,min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points))
+        default_aligned=max(
+            2,
+            min(cfg.min_points,30 if mode!="DAILY" else cfg.min_points),
         )
+        aligned_min=market_interface(market).aligned_minimum(mode,default_aligned)
         if len(ts)<aligned_min:
             raise MarketDataError(
                 f"insufficient_aligned_points:{provider.version}:{market}:{mode}:{len(ts)}<{aligned_min}"
