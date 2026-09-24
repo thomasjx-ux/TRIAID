@@ -397,12 +397,26 @@ def runtime_checks()->list[dict]:
     interface_markets=(
         ((interface_status.get("market_interfaces") or {}).get("markets") or {})
     )
+    interface_ports=interface_status.get("ports") or {}
+    evidence_repo_status=interface_status.get("formal_evidence_repository") or {}
     check(
         "system_interface_registry_contract",
         interface_status.get("architecture")=="MODULAR_INTERFACE_REGISTRY"
         and set(interface_markets)>={"US","CN","HK"}
-        and (interface_status.get("ports") or {}).get("runtime_services")
-        and (interface_status.get("ports") or {}).get("ui_read_services"),
+        and all(
+            interface_ports.get(name)
+            for name in (
+                "runtime_services",
+                "runtime_journal",
+                "market_data",
+                "decision",
+                "research",
+                "ui_read_services",
+                "market_page",
+                "risk",
+            )
+        )
+        and evidence_repo_status.get("version")=="verified-projection-repository@1.0.0",
         interface_status,
     )
 
@@ -602,6 +616,33 @@ def runtime_checks()->list[dict]:
             f"{market}_projection_posterior_never_unexplained",
             posterior.get("state")=="READY" or bool(posterior.get("reason")),
             posterior,
+        )
+        formal_evidence=page.get("formal_evidence") or {}
+        check(
+            f"{market}_formal_evidence_frozen",
+            formal_evidence.get("state")=="FROZEN"
+            and bool(formal_evidence.get("evidence_id"))
+            and bool(formal_evidence.get("evidence_hash_sha256"))
+            and bool((formal_evidence.get("decision_lineage") or {}).get("decision_id")),
+            formal_evidence,
+        )
+        frozen=payloads.get(f"/api/experiments/evidence/{market}/latest") or {}
+        excluded=set(frozen.get("future_information_excluded") or [])
+        check(
+            f"{market}_formal_evidence_repository_contract",
+            frozen.get("evidence_schema")=="formal-market-projection-evidence@1.0.0"
+            and frozen.get("evidence_id")==formal_evidence.get("evidence_id")
+            and frozen.get("evidence_hash_sha256")==formal_evidence.get("evidence_hash_sha256")
+            and excluded=={"posterior","curves","live","activity","intraday"}
+            and all(
+                key not in frozen
+                for key in ("posterior","curves","live","activity","intraday")
+            ),
+            {
+                "evidence_id":frozen.get("evidence_id"),
+                "excluded":sorted(excluded),
+                "keys":sorted(frozen),
+            },
         )
         check(
             f"{market}_live_projection_contract",
