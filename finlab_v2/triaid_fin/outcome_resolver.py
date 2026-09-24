@@ -237,6 +237,30 @@ class OutcomeResolver:
             "rule":"T0_FORMAL_EVIDENCE_IS_PAIRED_ONLY_WITH_EXISTING_AUDITED_T1_RESULTS; RESOLVER_DOES_NOT_RECOMPUTE_RETURNS",
         }
 
+    def history(self,market_id:str,limit:int=200)->list[dict]:
+        market=str(market_id).upper()
+        rows=self.journal.read_jsonl(
+            "verified_outcomes/ledger.jsonl",
+            limit=max(200,int(limit)*4),
+        )
+        latest_by_evidence={}
+        for row in rows:
+            if str(row.get("market_id") or "").upper()!=market:
+                continue
+            evidence_id=str(row.get("evidence_id") or "")
+            if not evidence_id:
+                continue
+            latest_by_evidence[evidence_id]=dict(row)
+        ordered=sorted(
+            latest_by_evidence.values(),
+            key=lambda row:(
+                str(row.get("outcome_as_of") or ""),
+                str(row.get("resolved_at_utc") or ""),
+                str(row.get("evidence_id") or ""),
+            ),
+        )
+        return ordered[-int(limit):]
+
     def latest(self,market_id:str)->dict:
         market=str(market_id).upper()
         return self.journal.load_json(
