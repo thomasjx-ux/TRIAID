@@ -18,6 +18,7 @@ from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.decision_api import build_decision_router
 from triaid_fin.account_api import build_account_router
 from triaid_fin.external_strategy_api import build_external_strategy_router
+from triaid_fin.trader_shadow_api import build_trader_shadow_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
@@ -309,6 +310,7 @@ app.include_router(build_market_data_router(engine,market_automation,calendar_sy
 app.include_router(build_decision_router(decision_scheduler))
 app.include_router(build_account_router(engine))
 app.include_router(build_external_strategy_router(engine))
+app.include_router(build_trader_shadow_router(engine))
 
 
 def release_audit_status()->dict:
@@ -549,9 +551,11 @@ def system_interfaces()->dict:
         },
         "strategy_source_modules":{
             "external_strategy":engine.external_strategies.version,
+            "trader_shadow":engine.trader_shadow.version,
             "isolation_rule":"QUARANTINE_AND_SHADOW_NEVER_RECEIVE_CAPITAL",
             "fault_isolation":"PROVIDER_ACCOUNT_POOL_SCOPED",
             "feedback":"IMMEDIATE_OPERATION_RECEIPT_PLUS_EVENT_JOURNAL",
+            "trader_shadow_policy":"ONE_SUBMISSION_GENERATES_TRADER_ASSISTED_AUTO_ROUTES_WITHOUT_GLOBAL_EVIDENCE_MUTATION",
         },
         "report_modules":{
             "daily_report":engine.daily_report.version,

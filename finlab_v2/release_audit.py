@@ -31,6 +31,7 @@ BUILD_CASES=[
     "preopen_baseline_freshness_smoke.py",
     "n_market_multi_account_smoke.py",
     "external_strategy_module_smoke.py",
+    "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
     "tushare_auction_smoke.py",
@@ -103,6 +104,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/registry",
     "/api/accounts/status",
     "/api/external-strategies/status",
+    "/api/trader-shadow/status",
     "/api/system/interfaces",
     "/api/ui/market-clocks",
     "/api/ui/market-page/US?lang=zh",
@@ -200,6 +202,8 @@ def structural_checks()->list[dict]:
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
+    trader_shadow=(ROOT/"triaid_fin"/"trader_shadow.py").read_text(encoding="utf-8")
+    trader_shadow_api=(ROOT/"triaid_fin"/"trader_shadow_api.py").read_text(encoding="utf-8")
     contracts=(ROOT/"triaid_fin"/"contracts.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
@@ -308,6 +312,21 @@ def structural_checks()->list[dict]:
         and "build_external_strategy_router(engine)" in app
         and "max_strategy_weight" in contracts
         and '"external_strategy"' in engine,
+        None,
+    )
+    check(
+        "trader_shadow_is_minimal_automated_and_isolated",
+        "class TraderShadowModule" in trader_shadow
+        and "TRIAID_ASSISTED" in trader_shadow
+        and "TRIAID_AUTO" in trader_shadow
+        and "FULL_MARKET_AUTO_DEFAULT" in trader_shadow
+        and "capital_optional" in trader_shadow
+        and "formal_next_period_outcome_auto_resolved" in trader_shadow
+        and "global_evidence_mutation" in trader_shadow
+        and "build_trader_shadow_router" in trader_shadow_api
+        and "build_trader_shadow_router(engine)" in app
+        and "trader_shadow.resolve_market" in engine
+        and '"trader_shadow"' in engine,
         None,
     )
     check(
@@ -493,6 +512,7 @@ def runtime_checks()->list[dict]:
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
     external_strategy_status=payloads.get("/api/external-strategies/status") or {}
+    trader_shadow_status=payloads.get("/api/trader-shadow/status") or {}
     interface_status=payloads.get("/api/system/interfaces") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
     scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
@@ -563,6 +583,24 @@ def runtime_checks()->list[dict]:
         and strategy_source_modules.get("fault_isolation")=="PROVIDER_ACCOUNT_POOL_SCOPED",
         {
             "status":external_strategy_status,
+            "strategy_source_modules":strategy_source_modules,
+        },
+    )
+
+    trader_shadow_policy=trader_shadow_status.get("automation_policy") or {}
+    check(
+        "trader_shadow_runtime_contract",
+        trader_shadow_status.get("version")=="trader-shadow@1.0.0"
+        and trader_shadow_policy.get("auto_create_shadow_account") is True
+        and trader_shadow_policy.get("full_strategy_pool_default") is True
+        and trader_shadow_policy.get("weights_optional_equal_weight_default") is True
+        and trader_shadow_policy.get("three_route_comparison_auto_generated") is True
+        and trader_shadow_policy.get("formal_next_period_outcome_auto_resolved") is True
+        and trader_shadow_policy.get("broker_execution") is False
+        and trader_shadow_policy.get("global_evidence_mutation") is False
+        and strategy_source_modules.get("trader_shadow")=="trader-shadow@1.0.0",
+        {
+            "status":trader_shadow_status,
             "strategy_source_modules":strategy_source_modules,
         },
     )

@@ -42,6 +42,7 @@ from .strategy_population import StrategyPopulationModule
 from .strategy_registry import strategy_ids_for_market
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
+from .trader_shadow import TraderShadowDecision, TraderShadowModule, TraderShadowOutcome
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 from .hk_return_max import HKReturnMaxLedger, HKReturnMaxRoute
 from .volatility_forecast import cached_all_market_volatility_forecasts, cached_volatility_forecast, refresh_all_market_volatility_forecasts, refresh_market_volatility_forecast
@@ -69,6 +70,13 @@ class EvolutionLabEngine:
         self._apply_strategy_profiles()
         self.population_state=PopulationStateTracker(self.store,self.strategy_population)
         self.core=TriaidCoreModule(self.evolution.active())
+        self.trader_shadow=TraderShadowModule(
+            self.store,
+            self.account_registry,
+            self.strategy_population,
+            self.external_strategies,
+            core_provider=lambda:self.core,
+        )
         self.evaluation=EvaluationModule()
         self.audit=AuditModule()
         self.alpha_evidence=AlphaEvidenceLedger(self.store)
@@ -188,6 +196,54 @@ class EvolutionLabEngine:
     def set_external_strategy_isolation(self,strategy_id:str,target_state:str)->dict:
         return self.external_strategies.promote(strategy_id,target_state)
 
+    def trader_shadow_status(self)->dict:
+        return self.trader_shadow.status()
+
+    def trader_shadow_catalog(self,trader_id:str,market_id:str)->dict:
+        return self.trader_shadow.catalog(trader_id,market_id)
+
+    def submit_trader_shadow_decision(self,submission:TraderShadowDecision)->dict:
+        market_id=normalize_market_id(submission.market_id)
+        account,pool=self.trader_shadow.ensure_trader(submission.trader_id)
+        profile=self.strategy_evolution.active(market_id)
+        prepared=prepare_live_market(market_id,profile.window_weights)
+        states=self.population_state.preview(
+            market_id,
+            prepared["strategy_states"],
+        )
+        external_states=self.external_strategies.states_for_account(
+            market_id,
+            account.account_id,
+            pool.pool_id,
+        )
+        states=list(states)+list(external_states)
+        snapshot=prepared["snapshot"]
+        snapshot.metadata=dict(snapshot.metadata or {})
+        snapshot.metadata.update({
+            "research_only":True,
+            "broker_execution_enabled":False,
+            "run_scope":"TRADER_SHADOW_COMPARISON",
+            "evidence_eligible":False,
+            "account_id":account.account_id,
+            "strategy_pool_id":pool.pool_id,
+        })
+        return self.trader_shadow.submit(
+            submission,
+            snapshot,
+            states,
+            account,
+            pool,
+        )
+
+    def submit_trader_shadow_outcome(self,outcome:TraderShadowOutcome)->dict:
+        return self.trader_shadow.submit_outcome(outcome)
+
+    def trader_shadow_daily_summary(self,trader_id:str,market_id:str)->dict:
+        return self.trader_shadow.daily_summary(trader_id,market_id)
+
+    def trader_shadow_history(self,trader_id:str,market_id:str|None=None,limit:int=100)->list[dict]:
+        return self.trader_shadow.history(trader_id,market_id,limit)
+
     def refresh_core(self)->None:
         params=self.evolution.active()
         self.core=TriaidCoreModule(params)
@@ -207,6 +263,7 @@ class EvolutionLabEngine:
             "market_observation":self.observations.version if hasattr(self,"observations") else "market-observation@0.1.0",
             "strategy_population":self.strategy_population.version,
             "external_strategy":self.external_strategies.version,
+            "trader_shadow":self.trader_shadow.version if hasattr(self,"trader_shadow") else "trader-shadow@unknown",
             "policy_triage":self.policy_triage.version if hasattr(self,"policy_triage") else "policy-triage@unknown",
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,
@@ -642,6 +699,15 @@ class EvolutionLabEngine:
                 and strategy_pool_id=="GLOBAL"
             )
             snapshot.metadata["global_route_account"]=global_route_account
+            trader_shadow_resolution=None
+            if global_route_account and evidence_eligible and daily_bar_complete:
+                trader_shadow_resolution=self.trader_shadow.resolve_market(
+                    market_id,
+                    prepared["previous_as_of"],
+                    prepared["latest_as_of"],
+                    prepared["realized_returns_from_previous_period"],
+                )
+            snapshot.metadata["trader_shadow_auto_resolution"]=trader_shadow_resolution
             if not global_route_account:
                 snapshot.metadata["experiment_mode"]="ACCOUNT_STRATEGY_POOL"
                 snapshot.metadata["experiment_design"]="Account-scoped strategy-pool research. It consumes shared market data but cannot mutate global route ledgers, lifecycle evidence, or primary-market reports."
