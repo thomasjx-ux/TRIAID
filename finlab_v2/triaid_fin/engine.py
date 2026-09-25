@@ -889,6 +889,7 @@ class EvolutionLabEngine:
                     capital_state={"capital":account.capital,"base_currency":account.base_currency},
                     risk_state={
                         "risk_budget":account.risk_budget,
+                        "max_strategy_weight":account.max_strategy_weight,
                         "max_drawdown_constraint":account.max_drawdown_constraint,
                     },
                     cross_market_state={},
