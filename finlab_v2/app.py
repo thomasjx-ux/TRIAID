@@ -2983,6 +2983,9 @@ const MARKET_UI={
  }
 };
 let marketClockState={};
+let homeBriefState={markets:{}};
+const fullLoadedAt={},fullLastAttemptAt={},fullLoadedRunIds={},fullRequestPending={};
+const liveRequestPending={},lastLiveRefreshAt={},strategyContextFetchedAt={};
 let homeSummaryState={
  selectedCount:null,
  changedCount:null,
@@ -3127,6 +3130,52 @@ async function refreshVolatilityForecast(){
   volatilityForecastState={markets:{},errors:{ALL:String(e)},model:'EWMA94_MULTI_WINDOW_REALIZED_VOL',version:null};
  }
  renderVolatilityForecast();
+}
+function applyHomeBrief(m){
+ const row=(homeBriefState.markets||{})[m];
+ if(!row||row.status!=='READY'||previewRunIds[m])return;
+ // A fully rendered projection for the same formal decision takes priority.
+ if(Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)&&fullLoadedRunIds[m]===row.run_id)return;
+ const selected=row.selection||{};
+ homeSummaryState.selectedCount=selected.selected_count;
+ homeSummaryState.changedCount=selected.changed_count;
+ homeSummaryState.selectedNames=(lang==='zh'?selected.selected_names_zh:selected.selected_names_en)||[];
+ homeSummaryState.evaluated=row.latest_evaluated||null;
+ homeSummaryState.preview=false;
+ homeSummaryState.latestStatus=row.run_status||null;
+ if(row.market_as_of)el('date').textContent=row.market_as_of;
+ if(row.market_regime)el('regime').textContent=phaseText(marketClockState[m]?.session_phase)+' · '+humanRegime(row.market_regime);
+ el('selectedCount').textContent=String(selected.selected_count??'-');
+ el('selectedNames').textContent=homeSummaryState.selectedNames.slice(0,6).join(lang==='zh'?'、':' · ')||'-';
+ el('runState').textContent=humanRunState(row.run_status);
+ renderHomeSummary();
+}
+async function refreshHomeBrief(){
+ try{
+  const payload=await jsonCached('/api/ui/home-brief',12000);
+  if(!(payload.integrity||{}).passed)return;
+  homeBriefState=payload;
+  const m=el('market').value,row=(payload.markets||{})[m];
+  applyHomeBrief(m);
+  // A newly frozen decision invalidates cached formal detail without waiting
+  // for the next low-frequency full refresh.
+  if(row?.run_id&&Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)
+     &&row.run_id!==fullLoadedRunIds[m]&&!fullRequestPending[m]){
+   clearMarketCache(m);
+   refreshAll(false,true).catch(()=>null);
+  }
+ }catch(e){
+  // First paint remains available from clocks and independently polled live data.
+ }
+}
+function refreshStrategyContextIfDue(m){
+ if(document.hidden)return;
+ const now=Date.now();
+ if(strategyContextFetchedAt[m]&&now-strategyContextFetchedAt[m]<180000)return;
+ strategyContextFetchedAt[m]=now;
+ jsonCached('/api/market-data/strategy-context/'+m,180000)
+  .then(ctx=>{strategyMarketContext[m]=ctx;})
+  .catch(()=>{strategyContextFetchedAt[m]=0;});
 }
 function renderHomeSummary(){
  const m=el('market').value;
