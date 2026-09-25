@@ -95,7 +95,7 @@ assert us["data_maturity"]=="FORMAL_COMPLETED_SESSION_ONLY"
 assert brief["performance_contract"]["no_market_data_fetch"] is True
 assert brief["performance_contract"]["no_daily_report_rebuild"] is True
 
-for other in set(MARKET_REGISTRY.market_ids)-{"US"}:
+for other in set(market_ids())-{"US"}:
     assert brief["markets"][other]["status"]=="WAITING"
     assert brief["markets"][other]["latest_evaluated"] is None
 
