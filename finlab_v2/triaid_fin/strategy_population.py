@@ -537,7 +537,7 @@ class StrategyPopulationModule:
         if max_weight_override is not None:
             cfg=replace(
                 cfg,
-                max_weight=min(float(cfg.max_weight),max(0.0,min(1.0,float(max_weight_override)))),
+                max_weight=max(1e-9,min(1.0,float(max_weight_override))),
             )
         states=list(states)
         mode=str(experiment_mode or "").upper()
