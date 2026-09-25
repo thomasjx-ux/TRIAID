@@ -500,6 +500,23 @@ def daily(
     return engine.daily_summary(market_id,compact=compact)
 
 
+@app.get("/api/ui/daily-report")
+def ui_daily_report(
+    market_id: str | None = None,
+    compact: bool = Query(default=True),
+):
+    if market_id is not None:
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404,detail=str(exc)) from exc
+        return ui_read_services.daily_report.summary(market,compact=compact)
+    payload=ui_read_services.daily_report.all_markets(compact=compact)
+    if not (payload.get("integrity") or {}).get("passed"):
+        return JSONResponse(status_code=503,content=payload)
+    return payload
+
+
 @app.get("/api/volatility-forecast")
 def volatility_forecasts() -> dict:
     return engine.volatility_forecasts()
@@ -527,6 +544,10 @@ def system_interfaces()->dict:
             "runtime_services":RuntimeServices.version,
             "runtime_journal":runtime_services.journal.version,
             "ui_read_services":UiReadServices.version,
+        },
+        "report_modules":{
+            "daily_report":engine.daily_report.version,
+            "coverage_rule":"MARKET_REGISTRY_DRIVEN_NO_SILENT_OMISSION",
         },
         "formal_evidence_repository":{
             "version":verified_projection_repository.version,
