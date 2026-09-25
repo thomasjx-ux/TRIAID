@@ -280,6 +280,7 @@ class ReviewModule:
     )->dict:
         currency,sleeves=cls._capital_context(current.market.market_id)
         current_weights=cls._group_weights(current)
+        triaid_weights=cls._decision_after(current)
         previous_weights=cls._group_weights(previous) if previous else {}
         current_return=comparison.get("current_run") or {}
         latest_realized=comparison.get("latest_evaluated_today") or current_return or {}
@@ -308,10 +309,33 @@ class ReviewModule:
                     "amount_delta":capital*(after_w-before_w),
                 })
 
+            overlay_rows=[]
+            overlay_ids=sorted(set(current_weights)|set(triaid_weights))
+            overlay_l1=0.0
+            for strategy_id in overlay_ids:
+                baseline_w=float(current_weights.get(strategy_id,0.0))
+                triaid_w=float(triaid_weights.get(strategy_id,0.0))
+                delta=triaid_w-baseline_w
+                overlay_l1+=abs(delta)
+                overlay_rows.append({
+                    "strategy_id":strategy_id,
+                    "baseline_weight":baseline_w,
+                    "triaid_weight":triaid_w,
+                    "weight_delta":delta,
+                    "baseline_amount":capital*baseline_w,
+                    "triaid_amount":capital*triaid_w,
+                    "amount_delta":capital*delta,
+                    "reason":cls._reason(current,strategy_id),
+                })
+
             row={
                 "currency":currency,
                 "starting_capital":capital,
                 "strategy_allocations":allocation_rows,
+                "triaid_overlay_allocations":overlay_rows,
+                "triaid_overlay_l1_change":overlay_l1,
+                "one_way_turnover_fraction":0.5*overlay_l1,
+                "one_way_reallocated_amount":0.5*overlay_l1*capital,
                 "selector_state_return_estimate_before":state_before,
                 "selector_state_return_estimate_after":state_after,
                 "selector_state_return_estimate_delta":(
@@ -359,6 +383,9 @@ class ReviewModule:
                 "show_absolute_difference":True,
                 "show_weight_difference":True,
                 "show_realized_pnl_difference":True,
+                "show_triaid_before_after_allocation":True,
+                "show_turnover_amount":True,
+                "show_opportunity_gap":True,
             },
             "semantics":{
                 "realized":"Realized return and P&L are based only on evaluated outcomes.",
