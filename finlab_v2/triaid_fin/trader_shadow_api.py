@@ -5,7 +5,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from .trader_shadow import TraderShadowDecision, TraderShadowOutcome
+from .trader_shadow import TraderCustomStrategyObservation, TraderCustomStrategyRegistration, TraderShadowDecision, TraderShadowOutcome
 
 
 def _require_admin_token(x_triaid_admin_token: str | None = Header(default=None)) -> None:
@@ -32,6 +32,30 @@ def build_trader_shadow_router(engine) -> APIRouter:
         try:
             return engine.trader_shadow_catalog(trader_id,market_id)
         except (KeyError,ValueError) as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+    @router.post("/custom-strategies")
+    def register_custom_strategy(
+        request: TraderCustomStrategyRegistration,
+        _admin: None = Depends(_require_admin_token),
+    ) -> dict:
+        try:
+            return engine.register_trader_custom_strategy(request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404,detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+    @router.post("/custom-strategies/observe")
+    def observe_custom_strategy(
+        request: TraderCustomStrategyObservation,
+        _admin: None = Depends(_require_admin_token),
+    ) -> dict:
+        try:
+            return engine.observe_trader_custom_strategy(request)
+        except KeyError as exc:
+            raise HTTPException(status_code=404,detail=str(exc)) from exc
+        except ValueError as exc:
             raise HTTPException(status_code=400,detail=str(exc)) from exc
 
     @router.post("/decisions")
