@@ -55,9 +55,13 @@ class HomeBriefProjection:
                 selected=list(run.strategy_group.members) if run and run.strategy_group else []
                 before=dict(run.strategy_group.weights) if run and run.strategy_group else {}
                 after=dict(run.triaid_decision.weights_after) if run and run.triaid_decision else {}
-                names={
+                names_zh={
                     card["strategy_id"]:card.get("name") or card["strategy_id"]
                     for card in self.services.strategy_cards("zh",market)
+                }
+                names_en={
+                    card["strategy_id"]:card.get("name") or card["strategy_id"]
+                    for card in self.services.strategy_cards("en",market)
                 }
                 last=evaluated.get(market)
                 markets[market]={
@@ -76,9 +80,12 @@ class HomeBriefProjection:
                             1 for sid in selected
                             if abs(float(after.get(sid,0.0))-float(before.get(sid,0.0)))>1e-8
                         ) if run else None,
-                        "selected_names":[names.get(sid,sid) for sid in sorted(
+                        "selected_names_zh":[names_zh.get(sid,sid) for sid in sorted(
                             selected,key=lambda sid:float(after.get(sid,0.0)),reverse=True
-                        ][:6]],
+                        )[:6]],
+                        "selected_names_en":[names_en.get(sid,sid) for sid in sorted(
+                            selected,key=lambda sid:float(after.get(sid,0.0)),reverse=True
+                        )[:6]],
                     },
                     "latest_evaluated":{
                         "run_id":last.run_id,
