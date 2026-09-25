@@ -2915,11 +2915,10 @@ function clearMarketCache(m){
  }
 }
 function warmMarketCache(m){
- const urls=[
-   '/api/ui/market-page/'+m+'?lang='+lang,
-   '/api/ui/market-page/'+m+'/live'
- ];
- urls.forEach(url=>jsonCached(url,30000).catch(()=>null));
+ if(document.hidden||m===el('market').value)return;
+ // Only prefetch after the user expresses intent (market-card hover). No
+ // automatic full-market fan-out competes with first paint.
+ jsonCached('/api/ui/market-page/'+m+'?lang='+lang,30000).catch(()=>null);
 }
 function warmAllMarkets(){
  const selected=el('market').value;
@@ -2984,6 +2983,7 @@ const MARKET_UI={
 };
 let marketClockState={};
 let homeBriefState={markets:{}};
+let briefDisplayedMarket=null;
 const fullLoadedAt={},fullLastAttemptAt={},fullLoadedRunIds={},fullRequestPending={};
 const liveRequestPending={},lastLiveRefreshAt={},strategyContextFetchedAt={};
 let homeSummaryState={
@@ -3135,7 +3135,7 @@ function applyHomeBrief(m){
  const row=(homeBriefState.markets||{})[m];
  if(!row||row.status!=='READY'||previewRunIds[m])return;
  // A fully rendered projection for the same formal decision takes priority.
- if(Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)&&fullLoadedRunIds[m]===row.run_id)return;
+ if(briefDisplayedMarket===m&&Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)&&fullLoadedRunIds[m]===row.run_id)return;
  const selected=row.selection||{};
  homeSummaryState.selectedCount=selected.selected_count;
  homeSummaryState.changedCount=selected.changed_count;
@@ -3148,6 +3148,7 @@ function applyHomeBrief(m){
  el('selectedCount').textContent=String(selected.selected_count??'-');
  el('selectedNames').textContent=homeSummaryState.selectedNames.slice(0,6).join(lang==='zh'?'、':' · ')||'-';
  el('runState').textContent=humanRunState(row.run_status);
+ briefDisplayedMarket=m;
  renderHomeSummary();
 }
 async function refreshHomeBrief(){
@@ -3445,13 +3446,19 @@ function renderMarketIdentity(){
  renderHomeSummary();
 }
 async function refreshMarketClocks(){
- const hadClock=Object.keys(marketClockState).length>0;
+ const previousPhase=marketClockState[el('market').value]?.session_phase;
  try{
   const payload=await jsonCached('/api/ui/market-clocks',15000);
   marketClockState=Object.fromEntries((payload.markets||[]).map(x=>[x.market_id,x]));
   renderMarketIdentity();
   tickMarketClocks();
-  if(!hadClock)refreshAll(true).catch(()=>null);
+  const m=el('market').value;
+  if(previousPhase&&previousPhase!==marketClockState[m]?.session_phase){
+   // A local exchange phase transition is a genuine reason to refresh
+   // the selected formal page, unlike a one-second clock tick.
+   clearMarketCache(m);
+   refreshAll(false,true).catch(()=>null);
+  }
  }catch(e){
   renderMarketIdentity();
  }
@@ -4506,6 +4513,7 @@ async function refreshAll(preferStale=false,forceServer=false){
   if(seq!==refreshSeq||el('market').value!==m)return;
   fullLoadedAt[m]=Date.now();
   fullLoadedRunIds[m]=((page.sections?.strategies?.data||[]).find(x=>x.run_id)||{}).run_id||null;
+  briefDisplayedMarket=m;
   refreshValidationSummary(m,seq).catch(()=>null);
   const sections=page.sections||{};
   const s=page.core||{};
@@ -4800,8 +4808,56 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();renderVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();renderVolatilityForecast();refreshVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);setInterval(refreshVolatilityForecast,60000);
+function toggleLang(){
+ lang=lang==='zh'?'en':'zh';
+ applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
+ renderVolatilityForecast();applyHomeBrief(el('market').value);
+ refreshAll(true);refreshLiveWindows();refreshRiskPanels();
+}
+function refreshFullIfDue(){
+ if(document.hidden)return;
+ const m=el('market').value;
+ if(fullRequestPending[m])return;
+ const phase=String(marketClockState[m]?.session_phase||'');
+ const intervalMs=['OPEN','PREOPEN','BREAK','POSTCLOSE'].includes(phase)?60000:180000;
+ const last=Math.max(fullLoadedAt[m]||0,fullLastAttemptAt[m]||0);
+ const retryAfter=fullLoadedAt[m]?intervalMs:20000;
+ if(Date.now()-last>=retryAfter)refreshAll();
+}
+function refreshLiveIfDue(force=false){
+ if(document.hidden)return;
+ const m=el('market').value;
+ if(liveRequestPending[m])return;
+ const phase=String(marketClockState[m]?.session_phase||'');
+ const intervalMs=phase==='OPEN'?5000:['PREOPEN','BREAK','POSTCLOSE'].includes(phase)?10000:30000;
+ if(force||Date.now()-(lastLiveRefreshAt[m]||0)>=intervalMs){
+  lastLiveRefreshAt[m]=Date.now();
+  refreshLiveWindows();
+ }
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden)return;
+ refreshMarketClocks();refreshHomeBrief();refreshFullIfDue();
+ refreshLiveIfDue(true);refreshRiskPanels();
+});
+document.querySelectorAll('[data-clock-market]').forEach(node=>{
+ node.addEventListener('mouseenter',()=>{
+  const m=node.dataset.clockMarket;
+  if(m&&m!==el('market').value)warmMarketCache(m);
+ });
+});
+applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
+refreshMarketClocks();refreshHomeBrief();refreshLiveIfDue(true);
+setTimeout(()=>{if(!document.hidden)refreshAll(true)},150);
+setTimeout(()=>{if(!document.hidden)refreshRiskPanels()},800);
+setTimeout(()=>{if(!document.hidden)refreshVolatilityForecast()},1700);
+setInterval(tickMarketClocks,1000);
+setInterval(refreshMarketClocks,15000);
+setInterval(refreshHomeBrief,30000);
+setInterval(refreshFullIfDue,15000);
+setInterval(refreshLiveIfDue,5000);
+setInterval(()=>{if(!document.hidden)refreshRiskPanels()},30000);
+setInterval(()=>{if(!document.hidden)refreshVolatilityForecast()},60000);
 </script>
 </body>
 </html>
