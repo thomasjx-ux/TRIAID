@@ -17,6 +17,7 @@ from triaid_fin.contracts import OutcomeRequest, RunRequest
 from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.decision_api import build_decision_router
 from triaid_fin.account_api import build_account_router
+from triaid_fin.external_strategy_api import build_external_strategy_router
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.market_api import build_market_data_router
 from triaid_fin.market_runtime import MarketDataAutomation
@@ -307,6 +308,7 @@ app=FastAPI(
 app.include_router(build_market_data_router(engine,market_automation,calendar_sync))
 app.include_router(build_decision_router(decision_scheduler))
 app.include_router(build_account_router(engine))
+app.include_router(build_external_strategy_router(engine))
 
 
 def release_audit_status()->dict:
