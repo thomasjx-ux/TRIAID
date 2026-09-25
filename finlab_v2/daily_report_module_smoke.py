@@ -7,7 +7,7 @@ from triaid_fin.market_registry import MARKET_REGISTRY, MarketSpec, market_ids
 engine=EvolutionLabEngine()
 expected=list(market_ids())
 
-assert engine.daily_report.version.startswith("daily-report@")
+assert engine.daily_report.version=="daily-report@1.1.0"
 assert engine.module_manifest["daily_report"]==engine.daily_report.version
 
 payload=engine.daily_reports(compact=True)
@@ -25,7 +25,28 @@ for market in expected:
     assert module["market_id"]==market
     assert module["enabled_markets"]==expected
     assert module["coverage_rule"]=="MARKET_REGISTRY_DRIVEN_NO_SILENT_OMISSION"
+    assert module["timing_rule"]=="MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT"
     assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
+    assert report["report_contract"]["market_phase_aware"] is True
+    assert report["report_contract"]["formal_and_live_layers_separated"] is True
+    timing=report["report_timing"]
+    assert timing["market_id"]==market
+    assert timing["content_profile"]
+    assert timing["data_maturity"]
+    assert timing["timing_rule"]=="MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT"
+
+# Prove that one aggregate clock does not force markets into one report maturity.
+profiles=engine.daily_report._content_profile
+assert profiles("PREOPEN",is_trading_day=True,close_finalized=False,current_session_formal=False,calendar_known=True)[:2]==("PREOPEN_BRIEF","PREVIOUS_FINAL_PLUS_PREOPEN")
+assert profiles("OPEN",is_trading_day=True,close_finalized=False,current_session_formal=False,calendar_known=True)[:2]==("LIVE_INTRADAY_UPDATE","LIVE_PARTIAL")
+assert profiles("BREAK",is_trading_day=True,close_finalized=False,current_session_formal=False,calendar_known=True)[:2]==("MIDSESSION_BREAK_UPDATE","LIVE_PARTIAL")
+assert profiles("POSTCLOSE",is_trading_day=True,close_finalized=False,current_session_formal=False,calendar_known=True)[:2]==("POSTCLOSE_SETTLING","CLOSE_PENDING")
+assert profiles("POSTCLOSE",is_trading_day=True,close_finalized=True,current_session_formal=True,calendar_known=True)[:2]==("FINAL_DAILY","CURRENT_SESSION_FINAL")
+assert profiles("CLOSED",is_trading_day=False,close_finalized=False,current_session_formal=False,calendar_known=True)[:2]==("NON_TRADING_DAY_LATEST_FINAL","FINAL_HISTORICAL")
+
+assert payload["timing_alignment"]["cross_market_learning_basis"]=="FORMAL_COMPLETED_SESSION_CUTOFFS_ONLY"
+assert payload["timing_alignment"]["alignment_rule"]=="DO_NOT_FORCE_MARKETS_IN_DIFFERENT_SESSION_PHASES_OR_LOCAL_DATES_INTO_ONE_MATURITY_STATE"
+assert payload["integrity"]["missing_timing_context"]==[]
 
 # Prove that report coverage follows the registry rather than a fixed US/CN/HK list.
 MARKET_REGISTRY.register(
@@ -47,7 +68,9 @@ expanded=engine.daily_reports(compact=True)
 assert "TST" in expanded["markets"]
 assert "TST" in expanded["reports"]
 assert expanded["reports"]["TST"]["report_module"]["market_extension_state"]=="BASE_REPORT_ONLY"
+assert expanded["reports"]["TST"]["report_timing"]["content_profile"]=="CALENDAR_DEGRADED"
 assert expanded["integrity"]["missing_markets"]==[]
+assert expanded["integrity"]["missing_timing_context"]==[]
 
 print("TRIAID_DAILY_REPORT_MODULE_SMOKE_PASS")
 print({
