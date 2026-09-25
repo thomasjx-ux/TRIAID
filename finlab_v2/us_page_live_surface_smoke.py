@@ -31,6 +31,10 @@ checks={
     "daily_empty_explained":'id="usrmDailyEmpty"' in html and "盘中状态单独显示在上方" in html,
     "unavailable_realized_table_collapses":"usrmRealizedWrap').style.display=hasRealized?'block':'none'" in source,
     "unavailable_daily_table_collapses":"usrmDailyWrap').style.display=hasDaily?'block':'none'" in source,
+    "us_ex_post_oracle_not_misrepresented":"事后收益第一名不等于决策时可选出的第一名" in source,
+    "legacy_unverified_sleeve_explicitly_labeled":"LEGACY_MULTI_STRATEGY_TARGET_UNVERIFIED" in source,
+    "legacy_unverified_capital_pnl_not_rendered":"const hasRealized=rs.length>0&&!legacyMix;" in source,
+    "capital_exposure_uses_full_frozen_mix":"按整组冻结权重计算" in source,
     "formal_return_max_still_present":'id="usrmStrategyRows"' in html and 'id="usrmCapitalRows"' in html,
     "projection_requires_us_route_completeness":"US_ROUTE=RouteProjectionSpec" in us_profile and "capital_sleeves=4" in us_profile and "min_asset_weights=5" in us_profile and "registered_route_contract" in projection.lower(),
 }
