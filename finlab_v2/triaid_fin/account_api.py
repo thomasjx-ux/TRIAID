@@ -29,8 +29,14 @@ def build_account_router(engine) -> APIRouter:
     def account_strategy_ids_api(account_id: str, market_id: str) -> dict:
         try:
             market=normalize_market_id(market_id)
-            ids=strategy_ids_for_market(market,account_id=account_id)
             account=engine.account_registry.get_account(account_id)
+            internal_ids=strategy_ids_for_market(market,account_id=account_id)
+            external_ids=engine.external_strategies.strategy_ids_for_account(
+                market,
+                account_id,
+                account.strategy_pool_id,
+            )
+            ids=tuple(dict.fromkeys((*internal_ids,*external_ids)))
         except KeyError as exc:
             raise HTTPException(status_code=404,detail=str(exc)) from exc
         return {
