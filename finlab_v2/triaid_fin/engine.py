@@ -42,7 +42,7 @@ from .strategy_population import StrategyPopulationModule
 from .strategy_registry import strategy_ids_for_market
 from .trading_calendar import VERSION as TRADING_CALENDAR_VERSION
 from .trading_calendar_sync import VERSION as TRADING_CALENDAR_SYNC_VERSION
-from .trader_shadow import TraderShadowDecision, TraderShadowModule, TraderShadowOutcome
+from .trader_shadow import TraderCustomStrategyObservation, TraderCustomStrategyRegistration, TraderShadowDecision, TraderShadowModule, TraderShadowOutcome
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 from .hk_return_max import HKReturnMaxLedger, HKReturnMaxRoute
 from .volatility_forecast import cached_all_market_volatility_forecasts, cached_volatility_forecast, refresh_all_market_volatility_forecasts, refresh_market_volatility_forecast
@@ -202,6 +202,12 @@ class EvolutionLabEngine:
     def trader_shadow_catalog(self,trader_id:str,market_id:str)->dict:
         return self.trader_shadow.catalog(trader_id,market_id)
 
+    def register_trader_custom_strategy(self,request:TraderCustomStrategyRegistration)->dict:
+        return self.trader_shadow.register_custom_strategy(request)
+
+    def observe_trader_custom_strategy(self,request:TraderCustomStrategyObservation)->dict:
+        return self.trader_shadow.observe_custom_strategy(request)
+
     def submit_trader_shadow_decision(self,submission:TraderShadowDecision)->dict:
         market_id=normalize_market_id(submission.market_id)
         account,pool=self.trader_shadow.ensure_trader(submission.trader_id)
@@ -264,6 +270,7 @@ class EvolutionLabEngine:
             "strategy_population":self.strategy_population.version,
             "external_strategy":self.external_strategies.version,
             "trader_shadow":self.trader_shadow.version if hasattr(self,"trader_shadow") else "trader-shadow@unknown",
+            "strategy_interface_catalog":self.trader_shadow.strategy_interfaces.version if hasattr(self,"trader_shadow") else "strategy-interface-catalog@unknown",
             "policy_triage":self.policy_triage.version if hasattr(self,"policy_triage") else "policy-triage@unknown",
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,

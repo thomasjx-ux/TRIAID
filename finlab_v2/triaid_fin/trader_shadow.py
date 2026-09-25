@@ -9,7 +9,9 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
 
 from .contracts import AccountProfile, MarketSnapshot, StrategyGroup, StrategyPoolSpec, StrategyState
+from .external_strategy import ExternalStrategyObservation, ExternalStrategySpec, external_strategy_id
 from .market_registry import MARKET_REGISTRY, normalize_market_id
+from .strategy_interfaces import StrategyInterfaceCatalog
 from .strategy_registry import FAMILIES, strategy_ids_for_market
 
 
@@ -78,6 +80,84 @@ class TraderShadowDecision(BaseModel):
         return text
 
 
+class TraderCustomStrategyRegistration(BaseModel):
+    trader_id: str
+    local_strategy_id: str
+    market_support: List[str]
+    name: str
+    name_en: str | None = None
+    summary: str | None = None
+
+    @field_validator("trader_id")
+    @classmethod
+    def _trader_id(cls,value):
+        return _clean_trader_id(value)
+
+    @field_validator("local_strategy_id")
+    @classmethod
+    def _local_strategy_id(cls,value):
+        key=str(value or "").strip().upper()
+        if not key or not re.fullmatch(r"[A-Z0-9_.-]{1,64}",key):
+            raise ValueError("local_strategy_id must match [A-Z0-9_.-] and be <=64 chars")
+        return key
+
+    @field_validator("market_support")
+    @classmethod
+    def _markets(cls,value):
+        rows=[]
+        for raw in value:
+            market=normalize_market_id(str(raw))
+            if market not in rows:
+                rows.append(market)
+        if not rows:
+            raise ValueError("market_support cannot be empty")
+        return rows
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls,value):
+        text=str(value or "").strip()
+        if not text:
+            raise ValueError("name cannot be empty")
+        return text
+
+
+class TraderCustomStrategyObservation(BaseModel):
+    trader_id: str
+    local_strategy_id: str
+    market_id: str
+    as_of: str
+    expected_net_return: float
+    risk: float = 0.0
+    uncertainty: float = 0.0
+    estimated_cost: float = 0.0
+    recent_returns: List[float] = Field(default_factory=list)
+    max_drawdown: float | None = None
+    liquidity_ok: bool = True
+    capacity_ok: bool = True
+    risk_ok: bool = True
+    concentration_ok: bool = True
+    hard_failure: bool = False
+
+    @field_validator("trader_id")
+    @classmethod
+    def _trader_id(cls,value):
+        return _clean_trader_id(value)
+
+    @field_validator("local_strategy_id")
+    @classmethod
+    def _local_strategy_id(cls,value):
+        key=str(value or "").strip().upper()
+        if not key or not re.fullmatch(r"[A-Z0-9_.-]{1,64}",key):
+            raise ValueError("local_strategy_id must match [A-Z0-9_.-] and be <=64 chars")
+        return key
+
+    @field_validator("market_id")
+    @classmethod
+    def _market_id(cls,value):
+        return normalize_market_id(str(value))
+
+
 class TraderShadowOutcome(BaseModel):
     decision_id: str
     realized_returns: Dict[str,float]
@@ -110,7 +190,8 @@ FAMILY_LABELS = {
     "breadth_rotation":("市场宽度轮动","Breadth Rotation"),
     "cash":("现金","Cash"),
     "market_extension":("市场扩展策略","Market Extension"),
-    "external":("交易员自有策略","Trader-Provided Strategy"),
+    "external":("外部策略","External Strategy"),
+    "trader_custom":("交易员自定义策略","Trader Custom Strategy"),
 }
 
 
@@ -125,7 +206,7 @@ class TraderShadowModule:
     The module never places broker orders and never writes global evidence ledgers.
     """
 
-    version="trader-shadow@1.0.0"
+    version="trader-shadow@1.1.0"
     registry_file="trader_shadow_decisions.json"
     event_file="trader_shadow_events.jsonl"
 
@@ -141,6 +222,10 @@ class TraderShadowModule:
         self.account_registry=account_registry
         self.strategy_population=strategy_population
         self.external_strategies=external_strategies
+        self.strategy_interfaces=StrategyInterfaceCatalog(
+            self.strategy_population,
+            self.external_strategies,
+        )
         self.core_provider=core_provider
         payload=self.store.load_json(self.registry_file,default={}) or {}
         self._decisions=dict(payload.get("decisions") or {})
@@ -152,6 +237,10 @@ class TraderShadowModule:
     @staticmethod
     def pool_id(trader_id:str)->str:
         return f"TRADER_SHADOW_POOL_{_clean_trader_id(trader_id)}"
+
+    @staticmethod
+    def custom_provider_id(trader_id:str)->str:
+        return f"TRADER_{_clean_trader_id(trader_id)}"
 
     def _persist(self)->None:
         self.store.save_json(self.registry_file,{
@@ -220,32 +309,103 @@ class TraderShadowModule:
         )
         return tuple(dict.fromkeys((*internal,*external)))
 
+    def register_custom_strategy(self,request:TraderCustomStrategyRegistration)->dict:
+        account,pool=self.ensure_trader(request.trader_id)
+        spec=ExternalStrategySpec(
+            provider_id=self.custom_provider_id(request.trader_id),
+            local_strategy_id=request.local_strategy_id,
+            account_id=account.account_id,
+            strategy_pool_id=pool.pool_id,
+            market_support=list(request.market_support),
+            name_zh=request.name,
+            name_en=request.name_en or request.name,
+            summary_zh=request.summary or "交易员自定义策略；进入影子模型前需要至少一次标准化状态观测。",
+            summary_en=request.summary or "Trader-defined strategy; at least one standardized state observation is required before shadow-model use.",
+        )
+        result=self.external_strategies.register(spec)
+        self._event(
+            "CUSTOM_STRATEGY_REGISTERED",
+            trader_id=_clean_trader_id(request.trader_id),
+            strategy_id=result["strategy"]["strategy_id"],
+            market_support=list(request.market_support),
+        )
+        return result
+
+    def observe_custom_strategy(self,request:TraderCustomStrategyObservation)->dict:
+        account,pool=self.ensure_trader(request.trader_id)
+        provider_id=self.custom_provider_id(request.trader_id)
+        sid=external_strategy_id(provider_id,request.local_strategy_id)
+        rows={
+            row.get("strategy_id"):row
+            for row in (self.external_strategies.status(account.account_id).get("strategies") or [])
+        }
+        spec=rows.get(sid)
+        if spec is None:
+            raise KeyError(f"custom strategy is not registered: {sid}")
+        if str(spec.get("strategy_pool_id"))!=pool.pool_id:
+            raise ValueError("custom strategy is bound to another strategy pool")
+        if str(spec.get("isolation_state"))=="QUARANTINE":
+            self.external_strategies.promote(sid,"SHADOW")
+        metrics={}
+        if request.max_drawdown is not None:
+            metrics["max_drawdown"]=float(request.max_drawdown)
+        result=self.external_strategies.ingest(ExternalStrategyObservation(
+            provider_id=provider_id,
+            local_strategy_id=request.local_strategy_id,
+            market_id=request.market_id,
+            as_of=request.as_of,
+            expected_net_return=request.expected_net_return,
+            risk=request.risk,
+            uncertainty=request.uncertainty,
+            estimated_cost=request.estimated_cost,
+            recent_returns=list(request.recent_returns),
+            liquidity_ok=request.liquidity_ok,
+            capacity_ok=request.capacity_ok,
+            risk_ok=request.risk_ok,
+            concentration_ok=request.concentration_ok,
+            hard_failure=request.hard_failure,
+            metrics=metrics,
+        ))
+        self._event(
+            "CUSTOM_STRATEGY_OBSERVED",
+            trader_id=_clean_trader_id(request.trader_id),
+            strategy_id=sid,
+            market_id=request.market_id,
+            as_of=request.as_of,
+            shadow_simulation_eligible=bool(
+                result.get("isolation_state")=="SHADOW"
+                and (result.get("normalized_state") or {}).get("eligible")
+            ),
+        )
+        return {
+            **result,
+            "shadow_simulation_eligible":bool(
+                result.get("isolation_state") in {"SHADOW","ACTIVE"}
+                and (result.get("normalized_state") or {}).get("eligible")
+            ),
+            "global_allocation_eligible":bool(result.get("allocation_eligible")),
+            "automation":"FIRST_OBSERVATION_AUTO_PROMOTES_QUARANTINE_TO_SHADOW_ONLY",
+        }
+
     def catalog(self,trader_id:str,market_id:str)->dict:
         market=normalize_market_id(market_id)
         account,pool=self.ensure_trader(trader_id)
         ids=self._available_ids(market,account,pool)
+        interface_catalog=self.strategy_interfaces.catalog(
+            market,
+            account.account_id,
+            ids,
+        )
         families:dict[str,list[dict]]={}
-        for sid in ids:
-            definition=self.strategy_population.definition(sid)
-            if definition is None:
-                continue
-            if sid.startswith("EXT::"):
-                family="external"
-            elif sid in FAMILIES:
-                family=FAMILIES[sid]
-            else:
-                family="market_extension"
+        for row in interface_catalog["strategies"]:
+            family=row.get("family") or "external"
             labels=FAMILY_LABELS.get(family,(family,family))
-            families.setdefault(family,[]).append({
-                "strategy_id":sid,
-                "name_zh":definition.name.zh,
-                "name_en":definition.name.en,
-                "summary_zh":definition.summary.zh,
-                "summary_en":definition.summary.en,
-                "family":family,
+            item={
+                **row,
                 "family_zh":labels[0],
                 "family_en":labels[1],
-            })
+            }
+            families.setdefault(family,[]).append(item)
         family_rows=[]
         for family,strategies in sorted(families.items()):
             labels=FAMILY_LABELS.get(family,(family,family))
@@ -258,20 +418,28 @@ class TraderShadowModule:
             })
         return {
             "version":self.version,
+            "strategy_interface_catalog_version":self.strategy_interfaces.version,
             "trader_id":_clean_trader_id(trader_id),
             "account_id":account.account_id,
             "strategy_pool_id":pool.pool_id,
             "market_id":market,
             "currency":MARKET_REGISTRY.get(market).currency,
-            "strategy_count":sum(row["count"] for row in family_rows),
+            "strategy_count":interface_catalog["strategy_count"],
+            "source_counts":interface_catalog["source_counts"],
+            "interfaces":interface_catalog["interfaces"],
+            "catalog_policy":interface_catalog["policy"],
             "families":family_rows,
             "interaction_policy":{
                 "default":"FULL_POOL_AUTO",
-                "manual_requirement":"Only submit the strategies actually chosen in the trader decision result.",
+                "manual_requirement":"Choose any currently selectable strategy; strategies outside the built-in pool can be added through the trader custom adapter.",
                 "weights_optional":True,
                 "weights_default":"EQUAL_WEIGHT",
                 "capital_optional":True,
                 "extra_pool_configuration_required":False,
+                "custom_strategy_registration_fields":["local_strategy_id","name","market_support"],
+                "first_observation_auto_enters_shadow":True,
+                "shadow_strategy_can_join_shadow_simulation":True,
+                "active_promotion_required_for_global_allocation":True,
             },
         }
 
@@ -421,6 +589,7 @@ class TraderShadowModule:
             base_cost_bps=float(MARKET_REGISTRY.get(market_id).base_cost_bps),
             experiment_mode="TRADER_SHADOW_AUTO",
             max_weight_override=account.max_strategy_weight,
+            allow_shadow_simulation=True,
         )
         auto_decision=core.decide(market_copy,auto_group,full_states)
 
@@ -443,6 +612,11 @@ class TraderShadowModule:
                 currency,
                 {
                     "same_trader_selected_universe":True,
+                    "shadow_simulation_enabled":True,
+                    "shadow_strategy_ids":[
+                        sid for sid in selected
+                        if state_map[sid].lifecycle=="shadow" and state_map[sid].eligible
+                    ],
                     "core_version":assisted_decision.core_version,
                     "core_diagnostics":assisted_decision.diagnostics,
                 },
@@ -455,6 +629,7 @@ class TraderShadowModule:
                 currency,
                 {
                     "full_pool_auto_selection":True,
+                    "shadow_simulation_enabled":True,
                     "selected_group_before_core":list(auto_group.members),
                     "core_version":auto_decision.core_version,
                     "core_diagnostics":auto_decision.diagnostics,
@@ -757,5 +932,10 @@ class TraderShadowModule:
                 "formal_next_period_outcome_auto_resolved":True,
                 "broker_execution":False,
                 "global_evidence_mutation":False,
+                "open_strategy_interface_catalog":True,
+                "custom_strategy_adapter":True,
+                "first_observation_auto_enters_shadow":True,
+                "shadow_strategy_simulation":True,
+                "active_required_for_global_allocation":True,
             },
         }
