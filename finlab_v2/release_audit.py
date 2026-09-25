@@ -229,8 +229,10 @@ def structural_checks()->list[dict]:
     check(
         "full_market_cache_and_lazy_initial_load",
         "class ReadThroughProjectionCache" in projection_cache_source
-        and "ui_projection_cache.read(" in app
-        and "ttl_seconds=120" in app
+        and "ui_projection_cache.peek(" in app
+        and "ui_projection_cache.refresh(" in app
+        and "STALE_WHILE_REVALIDATE" in app
+        and "soft_ttl_seconds" in app
         and "setInterval(refreshAll,15000)" not in app
         and "setTimeout(warmAllMarkets,1200)" not in app
         and "setInterval(refreshFullIfDue,15000)" in app
