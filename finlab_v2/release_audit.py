@@ -228,11 +228,13 @@ def structural_checks()->list[dict]:
         "full_market_cache_and_lazy_initial_load",
         "class ReadThroughProjectionCache" in projection_cache_source
         and "ui_projection_cache.read(" in app
-        and "ttl_seconds=25" in app
+        and "ttl_seconds=120" in app
         and "setInterval(refreshAll,15000)" not in app
         and "setTimeout(warmAllMarkets,1200)" not in app
         and "setInterval(refreshFullIfDue,15000)" in app
-        and "setInterval(refreshLiveIfDue,5000)" in app,
+        and "setInterval(refreshLiveIfDue,5000)" in app
+        and 'copy_mode="shallow_top"' in app
+        and "setTimeout(()=>{if(!document.hidden)refreshAll(true)},1400)" in app,
         None,
     )
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
