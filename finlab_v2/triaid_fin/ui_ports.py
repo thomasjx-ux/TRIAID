@@ -30,7 +30,7 @@ class MarketPageReadPort:
         return self._engine.latest_decision_run(market_id)
 
     def all_runs(self):
-        return self._engine.all_runs()
+        return self._engine.global_runs()
 
     def evidence_eligible_run(self,run)->bool:
         return bool(self._engine._evidence_eligible_run(run))
