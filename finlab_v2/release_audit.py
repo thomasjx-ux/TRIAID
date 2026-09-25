@@ -726,7 +726,7 @@ def runtime_checks()->list[dict]:
         economic=economic_payloads.get(market) or {}
         check(
             f"{market}_economic_evolution_read_model",
-            economic.get("version")=="economic-evolution@1.0.0"
+            economic.get("version")=="economic-evolution@1.1.0"
             and economic.get("market_id")==market
             and economic.get("objective")=="MAXIMIZE_LONG_HORIZON_REALIZABLE_NET_COMPOUND_GROWTH"
             and economic.get("status") in {
@@ -735,7 +735,16 @@ def runtime_checks()->list[dict]:
                 "EVALUABLE_DESCRIPTIVE_EVIDENCE",
                 "COST_MODEL_UNAVAILABLE",
                 "INVALID_MODELED_NET_RETURN",
-            },
+            }
+            and (
+                economic.get("status") in {"WAITING_FOR_MATCHED_FORMAL_OUTCOMES","COST_MODEL_UNAVAILABLE","INVALID_MODELED_NET_RETURN"}
+                or (
+                    (economic.get("value_frontier_candidate") or {}).get("version")=="value-frontier-allocator@0.1.0"
+                    and (economic.get("value_frontier_candidate") or {}).get("uses_frozen_t0_information_only") is True
+                    and (economic.get("value_frontier_candidate") or {}).get("reads_realized_t1_to_choose_weights") is False
+                    and (economic.get("next_gate") or {}).get("production_core_changed") is False
+                )
+            ),
             economic,
         )
     for market in ("US","CN","HK"):
