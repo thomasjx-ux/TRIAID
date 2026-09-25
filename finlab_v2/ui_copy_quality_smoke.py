@@ -17,6 +17,11 @@ ui_tips=block("const UI_TIPS=","function uiTipUseGuide")
 zh=ui_tips[ui_tips.find(" zh:{"):ui_tips.find(" en:{")]
 ui_ids=set(re.findall(r"^\s{2}([A-Za-z0-9_]+):",zh,flags=re.M))
 
+section_tips=block("const SECTION_TITLE_TIPS=","function applySectionTitleTooltips")
+section_zh=section_tips[section_tips.find(" zh:{"):section_tips.find(" en:{")]
+section_title_ids=set(re.findall(r"^\s{2}([A-Za-z0-9_]+):",section_zh,flags=re.M))
+heading_ids=set(re.findall(r"<h[1-4][^>]*\sid=\\?\"([^\\\"]+)\\?\"",app))
+
 ui_guide=block("function uiTipUseGuide","function applyUiTooltips")
 classified=set()
 for raw in re.findall(r"new Set\(\[([^\]]*)\]\)",ui_guide):
@@ -64,6 +69,13 @@ checks={
     )),
     "risk_footer_tells_reading_order":"先看主要风险驱动，再看尚未确认项，最后看20/60/120/250日" in app,
     "hk_scope_help_is_comparison_specific":"不能借用美股/A股权重、容量或结果补齐港股结论" in app,
+    "all_named_headings_have_toolkit":heading_ids.issubset(ui_ids|section_title_ids),
+    "section_title_tooltips_are_actionable":all(x in section_tips for x in (
+        "怎么看：",
+        "风险中心用于约束价值创造，不是自动把系统切成防守模式",
+        "避免防守状态长期固化成不作为",
+        "不直接修改生产权重",
+    )),
 }
 
 failed=[k for k,v in checks.items() if not v]
@@ -73,6 +85,8 @@ if classified-ui_ids:
     failed.append("unknown_classified_ui_ids="+",".join(sorted(classified-ui_ids)))
 if vague_hits:
     failed.append("vague_phrases="+",".join(vague_hits))
+if heading_ids-(ui_ids|section_title_ids):
+    failed.append("missing_heading_tooltips="+",".join(sorted(heading_ids-(ui_ids|section_title_ids))))
 
 if failed:
     raise SystemExit("TRIAID_UI_COPY_QUALITY_FAILED:"+"|".join(failed))
