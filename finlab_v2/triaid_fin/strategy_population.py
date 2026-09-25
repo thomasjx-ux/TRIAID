@@ -203,6 +203,8 @@ class StrategyPopulationModule:
         cards = []
         market_key=market_id.upper() if market_id else None
         for item in self.definitions():
+            if item.strategy_id.startswith("EXT::"):
+                continue
             support={m.upper() for m in item.market_support}
             if (
                 market_key
