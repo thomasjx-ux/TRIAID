@@ -22,6 +22,8 @@ TRIAID must not equate lower action with higher quality.
 
 Non-intervention is a valid decision only when the evidence supports that, under the same constraints and horizon, it preserves or increases expected realizable value relative to feasible alternatives.
 
+Non-intervention is therefore treated as an active policy choice, not as the absence of a decision. It must be scored, audited, and compared like any other intervention.
+
 "Do nothing" therefore carries an opportunity cost and must be evaluated against the best feasible action set.
 
 ## Article IV — Domain neutrality
