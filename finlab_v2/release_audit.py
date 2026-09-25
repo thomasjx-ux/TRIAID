@@ -35,6 +35,7 @@ BUILD_CASES=[
     "homepage_swr_cache_smoke.py",
     "economic_evolution_smoke.py",
     "value_frontier_smoke.py",
+    "triaid_fin/value_frontier_shadow_v2_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -114,8 +115,11 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/market-clocks",
     "/api/ui/home-brief",
     "/api/evolution/economic-value?market_id=US",
+    "/api/evolution/value-frontier-shadow?market_id=US",
     "/api/evolution/economic-value?market_id=CN",
+    "/api/evolution/value-frontier-shadow?market_id=CN",
     "/api/evolution/economic-value?market_id=HK",
+    "/api/evolution/value-frontier-shadow?market_id=HK",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
@@ -211,6 +215,7 @@ def structural_checks()->list[dict]:
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
     value_frontier=(ROOT/"triaid_fin"/"value_frontier.py").read_text(encoding="utf-8")
+    value_frontier_shadow_v2=(ROOT/"triaid_fin"/"value_frontier_shadow_v2.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -418,6 +423,27 @@ def structural_checks()->list[dict]:
         and "reads_realized_t1_to_choose_weights" in economic_evolution
         and "SHADOW_ONLY_PENDING_PROSPECTIVE_VALIDATION" in economic_evolution
         and '"production_core_changed": False' in economic_evolution,
+        None,
+    )
+    check(
+        "value_frontier_shadow_v2_is_non_mutating_and_cost_aware",
+        "VERSION = \"value-frontier-shadow@0.2.0\"" in value_frontier_shadow_v2
+        and 'mode=\"SHADOW_ONLY\"' in value_frontier_shadow_v2
+        and "production_mutation: bool = False" in value_frontier_shadow_v2
+        and "frozen_t0_only: bool = True" in value_frontier_shadow_v2
+        and "reads_t1_for_allocation: bool = False" in value_frontier_shadow_v2
+        and "modeled_execution_cost" in value_frontier_shadow_v2
+        and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" in value_frontier_shadow_v2
+        and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
+        None,
+    )
+    check(
+        "value_frontier_shadow_preview_is_read_only_and_api_exposed",
+        "def value_frontier_shadow_preview" in engine
+        and "allocate_shadow(" in engine
+        and '"production_mutation":False' in engine.replace(" ","")
+        and '@app.get("/api/evolution/value-frontier-shadow")' in app
+        and "engine.value_frontier_shadow_preview" in app,
         None,
     )
     check(

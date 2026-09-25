@@ -46,6 +46,7 @@ from .trader_shadow import TraderCustomStrategyObservation, TraderCustomStrategy
 from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 from .hk_return_max import HKReturnMaxLedger, HKReturnMaxRoute
 from .volatility_forecast import cached_all_market_volatility_forecasts, cached_volatility_forecast, refresh_all_market_volatility_forecasts, refresh_market_volatility_forecast
+from .value_frontier_shadow_v2 import allocate_shadow
 
 
 class EvolutionLabEngine:
@@ -1276,6 +1277,46 @@ class EvolutionLabEngine:
             )
         ]
         return rows[-1] if rows else None
+
+    def value_frontier_shadow_preview(self,market_id:str)->dict:
+        market=normalize_market_id(market_id)
+        run=self.latest_decision_run(market,primary_only=True)
+        if run is None or run.strategy_group is None or run.triaid_decision is None:
+            return {
+                "market_id":market,
+                "available":False,
+                "reason":"NO_PRIMARY_DECISION_SNAPSHOT",
+                "production_mutation":False,
+            }
+        metadata=run.market.metadata or {}
+        modeled_cost_bps=float(metadata.get("base_cost_bps",0.0) or 0.0)
+        preview=allocate_shadow(
+            market,
+            run.strategy_states,
+            run.strategy_group.members,
+            risk_budget=float(metadata.get("account_risk_budget",1.0) or 1.0),
+            position_cap=float((run.strategy_group.diagnostics or {}).get("max_strategy_weight_constraint",0.28) or 0.28),
+            frozen_incumbent=run.triaid_decision.weights_after,
+            previous_weights=run.triaid_decision.weights_before,
+            modeled_cost_bps=modeled_cost_bps,
+            absolute_return_calibrated=bool(metadata.get("absolute_return_calibrated",False)),
+        )
+        current=dict(run.triaid_decision.weights_after)
+        shadow=dict(preview.weights)
+        ids=sorted(set(current)|set(shadow))
+        return {
+            "market_id":market,
+            "available":True,
+            "run_id":run.run_id,
+            "as_of":run.market.as_of,
+            "snapshot_id":run.market.snapshot_id,
+            "production_core_version":run.triaid_decision.core_version,
+            "shadow":preview.to_dict(),
+            "production_weights":current,
+            "weight_delta":{sid:shadow.get(sid,0.0)-current.get(sid,0.0) for sid in ids},
+            "production_mutation":False,
+            "decision_time_only":True,
+        }
 
     def run_live_research(self,market_id:str,account_id:str="GLOBAL")->RunRecord:
         run=self.create_pending_live_run(market_id,"OFFICIAL_EVIDENCE",account_id)
