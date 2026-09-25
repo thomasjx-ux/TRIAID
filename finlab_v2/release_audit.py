@@ -631,7 +631,7 @@ def runtime_checks()->list[dict]:
         check(
             f"{market}_daily_report_timing_contract",
             timing.get("market_id")==market
-            and timing.get("timezone")==expected_timezones.get(market)
+            and timing.get("timezone")==((clock_map.get(market) or {}).get("timezone"))
             and timing.get("content_profile") in allowed_profiles
             and bool(timing.get("data_maturity"))
             and timing.get("timing_rule")=="MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT"
