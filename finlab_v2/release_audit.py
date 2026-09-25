@@ -62,6 +62,7 @@ BUILD_CASES=[
     "hk_high_frequency_degradation_smoke.py",
     "ui_smoke.py",
     "market_switch_fastpath_smoke.py",
+    "home_first_paint_smoke.py",
     "live_phase_semantics_smoke.py",
     "market_ui_readability_smoke.py",
     "ui_table_contract_smoke.py",
@@ -107,6 +108,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/trader-shadow/status",
     "/api/system/interfaces",
     "/api/ui/market-clocks",
+    "/api/ui/home-brief",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
@@ -209,8 +211,30 @@ def structural_checks()->list[dict]:
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
+    home_brief_source=(ROOT/"triaid_fin"/"home_brief.py").read_text(encoding="utf-8")
+    projection_cache_source=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
+    check(
+        "first_paint_market_brief_is_memory_only",
+        "class HomeBriefProjection" in home_brief_source
+        and "no_daily_report_rebuild" in home_brief_source
+        and "no_outcome_resolution" in home_brief_source
+        and '@app.get("/api/ui/home-brief")' in app
+        and "refreshHomeBrief()" in app,
+        None,
+    )
+    check(
+        "full_market_cache_and_lazy_initial_load",
+        "class ReadThroughProjectionCache" in projection_cache_source
+        and "ui_projection_cache.read(" in app
+        and "ttl_seconds=25" in app
+        and "setInterval(refreshAll,15000)" not in app
+        and "setTimeout(warmAllMarkets,1200)" not in app
+        and "setInterval(refreshFullIfDue,15000)" in app
+        and "setInterval(refreshLiveIfDue,5000)" in app,
+        None,
+    )
     check("policy_triage_integrated","PolicyTriageModule" in engine and "\"policy_triage\"" in engine)
     check("risk_increase_requires_persistence","INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE" in scheduler)
     check("preopen_baseline_freshness_guard","PREOPEN_BASELINE_STALE" in scheduler and "baseline_expected_as_of" in scheduler and "baseline_reference_as_of" in scheduler)
@@ -533,6 +557,7 @@ def runtime_checks()->list[dict]:
     trader_shadow_status=payloads.get("/api/trader-shadow/status") or {}
     interface_status=payloads.get("/api/system/interfaces") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
+    home_brief=payloads.get("/api/ui/home-brief") or {}
     scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
     volatility_forecast=payloads.get("/api/volatility-forecast") or {}
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
@@ -718,6 +743,41 @@ def runtime_checks()->list[dict]:
         for row in clock_rows if isinstance(row,dict)
     }
     check("market_clock_base_market_coverage",base_markets.issubset(set(clock_map)),sorted(clock_map))
+    brief_rows=home_brief.get("markets") or {}
+    brief_integrity=home_brief.get("integrity") or {}
+    brief_policy=home_brief.get("performance_contract") or {}
+    check(
+        "fast_home_brief_runtime_contract",
+        home_brief.get("version")=="home-brief@1.0.0"
+        and set(registered_markets)==set(brief_rows)
+        and brief_integrity.get("passed") is True
+        and brief_policy.get("no_daily_report_rebuild") is True
+        and brief_policy.get("no_market_data_fetch") is True
+        and brief_policy.get("no_outcome_resolution") is True,
+        {
+            "version":home_brief.get("version"),
+            "markets":sorted(brief_rows),
+            "integrity":brief_integrity,
+        },
+    )
+    for market in sorted(base_markets):
+        brief=brief_rows.get(market) or {}
+        check(
+            f"{market}_fast_brief_formal_evidence_guard",
+            brief.get("market_id")==market
+            and brief.get("data_maturity") in {"FORMAL_COMPLETED_SESSION_ONLY","UNAVAILABLE"}
+            and brief.get("status") in {"READY","WAITING"}
+            and (
+                brief.get("latest_evaluated") is None
+                or (brief.get("latest_evaluated") or {}).get("evaluation",{}).get("status")=="EVALUATED"
+            ),
+            {
+                "market_id":brief.get("market_id"),
+                "status":brief.get("status"),
+                "run_id":brief.get("run_id"),
+                "data_maturity":brief.get("data_maturity"),
+            },
+        )
 
     daily_reports=daily_report_payload.get("reports") or {}
     daily_timing=daily_report_payload.get("market_timing") or {}
