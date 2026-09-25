@@ -34,6 +34,7 @@ from .observation import MarketObservationStore
 from .objective import VERSION as OBJECTIVE_CONSTITUTION_VERSION
 from .review import ReviewModule
 from .daily_experiment_intelligence import build_cross_market_learning, build_market_intelligence
+from .daily_report import DailyReportModule
 from .store import RunStore
 from .strategy_evolution import StrategyEvolutionModule
 from .strategy_population import StrategyPopulationModule
@@ -80,6 +81,17 @@ class EvolutionLabEngine:
         self.hazard_prospective=HazardProspectiveLedger(self.store)
         self.risk_warning=RiskWarningSystem(self.store)
         self.risk_control=CrossMarketRiskControlExperiment(self.store)
+        self.daily_report=DailyReportModule(
+            market_ids_provider=market_ids,
+            all_runs_provider=self.all_runs,
+            review=self.review,
+            store=self.store,
+            market_section_providers={
+                "US":self._daily_us_sections,
+                "CN":self._daily_cn_sections,
+                "HK":self._daily_hk_sections,
+            },
+        )
         self._runs:Dict[str,RunRecord]={r.run_id:r for r in self.store.list_runs()}
         self._lock=RLock()
         self._live_lock=RLock()
@@ -184,6 +196,7 @@ class EvolutionLabEngine:
             "audit":self.audit.version if hasattr(self,"audit") else "audit@0.2.0",
             "alpha_evidence":self.alpha_evidence.version if hasattr(self,"alpha_evidence") else "alpha-evidence-ledger@unknown",
             "review":self.review.version if hasattr(self,"review") else "review@0.2.0",
+            "daily_report":self.daily_report.version if hasattr(self,"daily_report") else "daily-report@unknown",
             "prospective_experiment":self.prospective_experiment.version if hasattr(self,"prospective_experiment") else "cn-prospective-controls@unknown",
             "recovery_wave_core":self.recovery_wave_core.version if hasattr(self,"recovery_wave_core") else "recovery-wave-core@unknown",
             "recovery_wave_ledger":self.recovery_wave_ledger.version if hasattr(self,"recovery_wave_ledger") else "recovery-wave-ledger@unknown",
@@ -1477,99 +1490,97 @@ class EvolutionLabEngine:
     def refresh_market_data(self,market_id:str,mode:str)->dict:
         return refresh_market_data(market_id,mode)
 
+    def _daily_us_sections(
+        self,
+        *,
+        market_id:str,
+        compact:bool,
+        summary:dict,
+        all_rows:list,
+    )->dict:
+        payload={}
+        us_return=self.us_return_max_ledger.daily_report()
+        if us_return:
+            payload["us_return_max"]=us_return
+        if not compact:
+            long_cycle=self.long_cycle_hypothesis.latest()
+            if long_cycle:
+                payload["long_cycle_hypothesis"]=long_cycle
+            crash_linkage=self.cross_market_crash.latest()
+            if crash_linkage:
+                payload["cross_market_crash"]=crash_linkage
+            latent=self.latent_hazard.latest()
+            if latent:
+                payload["latent_hazard"]=latent
+            policy_curve=self.policy_curve.latest()
+            if policy_curve:
+                payload["policy_expectation_curve"]=policy_curve
+            hazard_shadow=self.hazard_prospective.latest()
+            if hazard_shadow:
+                payload["hazard_prospective"]=hazard_shadow
+            risk_warning=self.risk_warning.latest()
+            if risk_warning:
+                payload["risk_warning"]=risk_warning
+            risk_control=self.risk_control.latest()
+            if risk_control:
+                payload["risk_control"]=risk_control
+        return payload
+
+    def _daily_hk_sections(
+        self,
+        *,
+        market_id:str,
+        compact:bool,
+        summary:dict,
+        all_rows:list,
+    )->dict:
+        payload={}
+        hk_return=self.hk_return_max_ledger.daily_report()
+        if hk_return:
+            payload["hk_return_max"]=hk_return
+        return payload
+
+    def _daily_cn_sections(
+        self,
+        *,
+        market_id:str,
+        compact:bool,
+        summary:dict,
+        all_rows:list,
+    )->dict:
+        payload={}
+        recovery=self.recovery_wave_ledger.daily_report("CN")
+        if recovery:
+            payload["recovery_wave"]=recovery
+        payload["prospective_experiment_status"]=self.prospective_experiment.status()
+        prospective=self.prospective_experiment.daily_report()
+        if prospective:
+            try:
+                source=self.get_run(str(prospective.get("source_run_id")))
+            except Exception:
+                source=None
+            reason_map={}
+            if source and source.strategy_group:
+                reason_map={
+                    sid:value.model_dump()
+                    for sid,value in source.strategy_group.reasons.items()
+                }
+            for row in prospective.get("strategy_determination",[]):
+                sid=row.get("strategy_id")
+                definition=self.strategy_population.definition(str(sid))
+                row["name"]={
+                    "zh":definition.name.zh if definition else str(sid),
+                    "en":definition.name.en if definition else str(sid),
+                }
+                row["selection_reason"]=reason_map.get(sid)
+            payload["prospective_experiment"]=prospective
+        return payload
+
     def daily_summary(self,market_id:str|None=None,compact:bool=False)->dict:
-        all_rows=self.all_runs()
-        rows=all_rows
-        if market_id:
-            rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
-        summary=self.review.daily_summary(rows,compact=compact)
-        decision_events=self.store.read_jsonl("decision_events.jsonl",limit=10000)
-        session_dates={}
-        for market in market_ids():
-            market_events=[
-                row for row in decision_events
-                if str(row.get("market_id") or "").upper()==market
-                and row.get("session_date")
-            ]
-            session_dates[market]=(
-                str(market_events[-1].get("session_date"))
-                if market_events
-                else next(
-                    (
-                        r.market.as_of for r in reversed(all_rows)
-                        if r.market.market_id.upper()==market and r.market.as_of
-                    ),
-                    summary.get("date"),
-                )
-            )
-        if market_id:
-            market_key=market_id.upper()
-            summary["experiment_intelligence"]=build_market_intelligence(
-                all_rows,self.store,market_key,session_dates.get(market_key) or summary.get("date"),events=decision_events
-            )
-        summary["cross_market_learning"]=build_cross_market_learning(
-            all_rows,self.store,session_dates,events=decision_events
-        )
-        include_us=(market_id is None) or market_id.upper()=="US"
-        if include_us:
-            us_return=self.us_return_max_ledger.daily_report()
-            if us_return:
-                summary["us_return_max"]=us_return
-            if not compact:
-                long_cycle=self.long_cycle_hypothesis.latest()
-                if long_cycle:
-                    summary["long_cycle_hypothesis"]=long_cycle
-                crash_linkage=self.cross_market_crash.latest()
-                if crash_linkage:
-                    summary["cross_market_crash"]=crash_linkage
-                latent=self.latent_hazard.latest()
-                if latent:
-                    summary["latent_hazard"]=latent
-                policy_curve=self.policy_curve.latest()
-                if policy_curve:
-                    summary["policy_expectation_curve"]=policy_curve
-                hazard_shadow=self.hazard_prospective.latest()
-                if hazard_shadow:
-                    summary["hazard_prospective"]=hazard_shadow
-                risk_warning=self.risk_warning.latest()
-                if risk_warning:
-                    summary["risk_warning"]=risk_warning
-                risk_control=self.risk_control.latest()
-                if risk_control:
-                    summary["risk_control"]=risk_control
-        include_hk=(market_id is None) or market_id.upper()=="HK"
-        if include_hk:
-            hk_return=self.hk_return_max_ledger.daily_report()
-            if hk_return:
-                summary["hk_return_max"]=hk_return
-        include_cn=(market_id is None) or market_id.upper()=="CN"
-        if include_cn:
-            recovery=self.recovery_wave_ledger.daily_report("CN")
-            if recovery:
-                summary["recovery_wave"]=recovery
-            summary["prospective_experiment_status"]=self.prospective_experiment.status()
-            prospective=self.prospective_experiment.daily_report()
-            if prospective:
-                try:
-                    source=self.get_run(str(prospective.get("source_run_id")))
-                except Exception:
-                    source=None
-                reason_map={}
-                if source and source.strategy_group:
-                    reason_map={
-                        sid:value.model_dump()
-                        for sid,value in source.strategy_group.reasons.items()
-                    }
-                for row in prospective.get("strategy_determination",[]):
-                    sid=row.get("strategy_id")
-                    definition=self.strategy_population.definition(str(sid))
-                    row["name"]={
-                        "zh":definition.name.zh if definition else str(sid),
-                        "en":definition.name.en if definition else str(sid),
-                    }
-                    row["selection_reason"]=reason_map.get(sid)
-                summary["prospective_experiment"]=prospective
-        return summary
+        return self.daily_report.summary(market_id,compact=compact)
+
+    def daily_reports(self,compact:bool=True)->dict:
+        return self.daily_report.all_markets(compact=compact)
 
     def curves(self,market_id:str|None=None)->List[dict]:
         rows=self.all_runs()
