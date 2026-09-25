@@ -1,0 +1,39 @@
+name: TRIAID Local Desktop Smoke
+
+on:
+  push:
+    branches:
+      - research/local-desktop-lab
+    paths:
+      - finlab_v2/local_desktop/**
+      - finlab_v2/requirements-desktop.txt
+      - .github/workflows/local-desktop-audit.yml
+  pull_request:
+    paths:
+      - finlab_v2/local_desktop/**
+      - finlab_v2/requirements-desktop.txt
+      - .github/workflows/local-desktop-audit.yml
+
+jobs:
+  local-desktop:
+    runs-on: ubuntu-latest
+    env:
+      TRIAID_STORAGE_BACKEND: file
+      TRIAID_DATA_AUTOMATION: "0"
+      TRIAID_CALENDAR_SYNC: "0"
+      TRIAID_LONG_RESEARCH_BOOTSTRAP: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install -r finlab_v2/requirements.txt
+          python -m pip install httpx==0.28.1
+      - name: Validate local bootstrap, secret separation and UI-preservation contract
+        working-directory: finlab_v2
+        run: python -m local_desktop.smoke
+      - name: End-to-end HTTP parity and local access controls
+        working-directory: finlab_v2
+        run: python -m local_desktop.integration_smoke
