@@ -287,6 +287,16 @@ def structural_checks()->list[dict]:
         None,
     )
     check(
+        "daily_report_is_trading_analysis_first",
+        "TRIAID_TRADING_ANALYSIS_DAILY" in daily_report
+        and "_compose_trading_analysis" in daily_report
+        and '"operations_in_body":False' in daily_report.replace(" ","")
+        and "triaid_intervention" in daily_report
+        and "realized_profit_analysis" in daily_report
+        and "opportunity_cost" in daily_report,
+        None,
+    )
+    check(
         "daily_report_is_market_phase_aware",
         "_content_profile" in daily_report
         and "MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT" in daily_report
@@ -599,7 +609,7 @@ def runtime_checks()->list[dict]:
     daily_integrity=daily_report_payload.get("integrity") or {}
     check(
         "daily_report_phase_aware_contract",
-        daily_report_payload.get("version")=="daily-report@1.1.0"
+        daily_report_payload.get("version")=="daily-report@1.2.0"
         and daily_integrity.get("passed") is True
         and base_markets.issubset(set(daily_reports))
         and base_markets.issubset(set(daily_timing))
@@ -611,6 +621,28 @@ def runtime_checks()->list[dict]:
             "timing_alignment":daily_alignment,
         },
     )
+    for market in sorted(base_markets):
+        trading=((daily_reports.get(market) or {}).get("trading_analysis") or {})
+        policy=trading.get("reporting_policy") or {}
+        profit=trading.get("realized_profit_analysis") or {}
+        check(
+            f"{market}_daily_report_trading_analysis_contract",
+            trading.get("report_type")=="TRIAID_TRADING_ANALYSIS_DAILY"
+            and trading.get("market_id")==market
+            and policy.get("primary_subject")=="TRADING_AND_ECONOMIC_VALUE"
+            and policy.get("operations_in_body") is False
+            and isinstance(trading.get("baseline_portfolio"),dict)
+            and isinstance(trading.get("triaid_intervention"),dict)
+            and isinstance(trading.get("trade_translation"),dict)
+            and isinstance(profit,dict)
+            and isinstance(trading.get("opportunity_cost"),dict)
+            and isinstance(trading.get("next_trade_plan"),dict),
+            {
+                "report_type":trading.get("report_type"),
+                "policy":policy,
+                "keys":sorted(trading),
+            },
+        )
     allowed_profiles={
         "CALENDAR_DEGRADED",
         "NON_TRADING_DAY_LATEST_FINAL",

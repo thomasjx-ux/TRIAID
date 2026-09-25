@@ -19,7 +19,7 @@ class DailyReportModule:
     same data maturity merely because they share one aggregate report surface.
     """
 
-    version = "daily-report@1.1.0"
+    version = "daily-report@1.2.0"
 
     def __init__(
         self,
@@ -258,6 +258,74 @@ class DailyReportModule:
             "timing_rule": "MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT",
         }
 
+    @staticmethod
+    def _compose_trading_analysis(
+        market_id: str,
+        summary: dict,
+        timing: dict,
+        intelligence: dict,
+    ) -> dict:
+        strategy_report=(
+            (summary.get("investment_strategy_reports") or {}).get(market_id)
+            or {}
+        )
+        fusion=dict(strategy_report.get("trading_fusion") or {})
+        scorecard=dict(intelligence.get("realized_scorecard") or {})
+        capitalized=dict(intelligence.get("capitalized_scorecard") or {})
+        attribution=dict(intelligence.get("intervention_attribution") or {})
+        transition=dict(intelligence.get("transition_evidence") or {})
+        next_decision=dict(intelligence.get("next_frozen_decision") or {})
+        return {
+            "report_type":"TRIAID_TRADING_ANALYSIS_DAILY",
+            "market_id":market_id,
+            "session":{
+                "session_phase":timing.get("session_phase"),
+                "content_profile":timing.get("content_profile"),
+                "data_maturity":timing.get("data_maturity"),
+                "working_report_date":timing.get("working_report_date"),
+                "formal_evidence_date":timing.get("formal_evidence_date"),
+            },
+            "market_and_strategy_context":{
+                "market_context":fusion.get("market_context"),
+                "strategy_thesis":strategy_report.get("strategy_thesis"),
+                "session_review":strategy_report.get("session_review"),
+            },
+            "baseline_portfolio":fusion.get("baseline_portfolio"),
+            "triaid_intervention":fusion.get("triaid_intervention"),
+            "trade_translation":fusion.get("trade_translation"),
+            "realized_profit_analysis":{
+                "fusion_view":fusion.get("realized_profit_analysis"),
+                "formal_scorecard":scorecard,
+                "capitalized_scorecard":capitalized,
+                "intervention_attribution":attribution,
+            },
+            "opportunity_cost":{
+                **dict(fusion.get("opportunity_cost") or {}),
+                "formal_hindsight_best_strategy_id":scorecard.get("hindsight_best_strategy_id"),
+                "formal_hindsight_best_strategy_return":scorecard.get("hindsight_best_strategy_return"),
+                "formal_triaid_gap_to_hindsight_best":scorecard.get("opportunity_gap_to_hindsight_best"),
+                "formal_baseline_gap_to_hindsight_best":scorecard.get("baseline_gap_to_hindsight_best"),
+            },
+            "transition_to_trade":{
+                "transition_evidence":transition,
+                "next_frozen_decision":next_decision,
+                "rule":"Transition evidence explains why TRIAID changed or did not change allocation; it is not an operations report.",
+            },
+            "next_trade_plan":fusion.get("next_trade_plan") or strategy_report.get("forward_view"),
+            "reporting_policy":{
+                "primary_subject":"TRADING_AND_ECONOMIC_VALUE",
+                "show_market_to_triaid_to_trade_chain":True,
+                "show_before_after_weights":True,
+                "show_before_after_capital":True,
+                "show_realized_return_and_pnl":True,
+                "show_baseline_gap":True,
+                "show_hindsight_opportunity_gap":True,
+                "show_trading_cost":True,
+                "operations_in_body":False,
+                "operations_appendix":"EXCEPTION_ONLY",
+            },
+        }
+
     def _apply_market_extension(
         self,
         summary: dict,
@@ -311,12 +379,19 @@ class DailyReportModule:
                 formal_date=formal_dates.get(market_key),
             )
             summary["report_timing"] = timing
-            summary["experiment_intelligence"] = build_market_intelligence(
+            intelligence = build_market_intelligence(
                 all_rows,
                 self._store,
                 market_key,
                 working_dates.get(market_key) or summary.get("date"),
                 events=decision_events,
+            )
+            summary["experiment_intelligence"] = intelligence
+            summary["trading_analysis"] = self._compose_trading_analysis(
+                market_key,
+                summary,
+                timing,
+                intelligence,
             )
 
         # Cross-market learning deliberately uses completed/formal cutoffs, not
@@ -355,6 +430,9 @@ class DailyReportModule:
             "formal_and_live_layers_separated": True,
             "cross_market_learning_uses_formal_cutoffs": True,
             "same_clock_time_does_not_imply_same_market_maturity": True,
+            "trading_analysis_is_primary": True,
+            "operations_in_body": False,
+            "operations_appendix_exception_only": True,
         })
         summary["report_module"] = {
             "version": self.version,
@@ -413,7 +491,7 @@ class DailyReportModule:
         }
         return {
             "version": self.version,
-            "report_type": "INVESTMENT_STRATEGY_DAILY",
+            "report_type": "TRIAID_TRADING_ANALYSIS_DAILY",
             "markets": list(markets),
             "market_count": len(markets),
             "reports": reports,

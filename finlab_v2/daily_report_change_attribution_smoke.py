@@ -108,15 +108,18 @@ current=RunRecord(
 report=ReviewModule().daily_summary([previous,current])
 assert report["date"]=="2026-09-22"
 assert report["report_contract"]["strategy_change_reason_required"] is True
-assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
+assert report["report_contract"]["report_type"]=="TRIAID_TRADING_ANALYSIS_DAILY"
 assert report["report_contract"]["technical_runtime_report_default"] is False
 assert report["report_contract"]["amount_percent_and_difference_required"] is True
 assert report["report_contract"]["capital_sleeves_required"] is True
-assert report["report_contract"]["experiment_evolution_review_required"] is True
-assert report["report_contract"]["goal_gap_required"] is True
+assert report["report_contract"]["experiment_evolution_review_required"] is False
+assert report["report_contract"]["goal_gap_required"] is False
 assert report["report_contract"]["transition_evidence_required"] is True
 assert report["report_contract"]["cross_market_learning_required"] is True
-assert report["report_contract"]["body_priority"][0]=="experiment_evolution_review"
+assert report["report_contract"]["body_priority"][0]=="market_and_session"
+assert report["report_contract"]["trading_analysis_is_primary"] is True
+assert report["report_contract"]["operational_analysis_in_body"] is False
+assert report["report_contract"]["triaid_trade_fusion_required"] is True
 strategy_report=report["investment_strategy_reports"]["US"]
 assert strategy_report["report_type"]=="INVESTMENT_STRATEGY_DAILY"
 assert strategy_report["strategy_thesis"]["objective"].startswith("Maximize realizable net return")
@@ -134,6 +137,13 @@ assert abs(s100k["baseline_realized_pnl"]-2000.0)<1e-9
 assert abs(s100k["triaid_realized_pnl"]-2100.0)<1e-9
 assert abs(s100k["realized_excess_pnl"]-100.0)<1e-9
 assert abs(s100k["trading_cost_amount"]-10.0)<1e-9
+assert abs(s100k["hindsight_best_strategy_pnl"]-2500.0)<1e-9
+assert abs(s100k["triaid_opportunity_gap_amount"]-400.0)<1e-9
+assert abs(s100k["baseline_opportunity_gap_amount"]-500.0)<1e-9
+overlay={row["strategy_id"]:row for row in s100k["triaid_overlay_allocations"]}
+assert abs(overlay["P00_BUY_HOLD"]["amount_delta"]+10000.0)<1e-9
+assert abs(overlay["P02_VOL15"]["amount_delta"]-10000.0)<1e-9
+assert abs(s100k["one_way_reallocated_amount"]-10000.0)<1e-9
 alloc={row["strategy_id"]:row for row in s100k["strategy_allocations"]}
 assert abs(alloc["P02_VOL15"]["amount_after"]-70000.0)<1e-9
 assert abs(alloc["P02_VOL15"]["amount_delta"]-70000.0)<1e-9
@@ -148,6 +158,16 @@ comparison=report["return_comparisons"]["US"]["current_run"]
 assert comparison["outcome_status"]=="EVALUATED"
 assert abs(comparison["realized_excess_return"]-0.001)<1e-12
 assert abs(comparison["contribution_deltas"]["P02_VOL15"]-0.0025)<1e-12
+assert comparison["hindsight_best_strategy_id"]=="P02_VOL15"
+assert abs(comparison["hindsight_best_strategy_return"]-0.025)<1e-12
+assert abs(comparison["triaid_gap_to_hindsight_best"]-0.004)<1e-12
+fusion=strategy_report["trading_fusion"]
+assert fusion["market_context"]["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
+assert fusion["triaid_intervention"]["intervention_changed"] is True
+assert abs(fusion["triaid_intervention"]["weights_before"]["P02_VOL15"]-0.7)<1e-12
+assert abs(fusion["triaid_intervention"]["weights_after"]["P02_VOL15"]-0.8)<1e-12
+assert fusion["trade_translation"]["capital_sleeves"]==[100000.0,1000000.0,10000000.0,100000000.0]
+assert fusion["opportunity_cost"]["hindsight_best_strategy_id"]=="P02_VOL15"
 assert any("策略成员变化" in line for line in report["analysis_zh"])
 
 compact_report=ReviewModule().daily_summary([previous,current],compact=True)

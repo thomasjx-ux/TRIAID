@@ -11,7 +11,7 @@ from .market_registry import MARKET_REGISTRY
 
 
 class ReviewModule:
-    version="review@0.7.0"
+    version="review@0.8.0"
 
     @staticmethod
     def _evidence_eligible(run:RunRecord)->bool:
@@ -105,17 +105,53 @@ class ReviewModule:
                 -float(evaluation.baseline_contributions.get(sid,0.0))
                 for sid in ids
             }
+            realized_returns={
+                str(sid):float(value)
+                for sid,value in evaluation.strategy_realized_returns.items()
+            }
+            ranked_realized=sorted(
+                realized_returns.items(),
+                key=lambda item:item[1],
+                reverse=True,
+            )
+            best_strategy_id,best_strategy_return=(
+                ranked_realized[0] if ranked_realized else (None,None)
+            )
+            triaid_realized=float(evaluation.triaid_return or 0.0)
+            baseline_realized=float(evaluation.baseline_return or 0.0)
             payload.update({
-                "baseline_realized_return":float(evaluation.baseline_return or 0.0),
-                "triaid_realized_return":float(evaluation.triaid_return or 0.0),
+                "baseline_realized_return":baseline_realized,
+                "triaid_realized_return":triaid_realized,
                 "realized_excess_return":float(evaluation.excess_return or 0.0),
                 "trading_cost":float(evaluation.trading_cost or 0.0),
-                "strategy_realized_returns":dict(evaluation.strategy_realized_returns),
+                "strategy_realized_returns":realized_returns,
                 "contribution_deltas":dict(sorted(
                     contribution_deltas.items(),
                     key=lambda item:abs(item[1]),
                     reverse=True,
                 )),
+                "hindsight_best_strategy_id":best_strategy_id,
+                "hindsight_best_strategy_return":best_strategy_return,
+                "triaid_gap_to_hindsight_best":(
+                    best_strategy_return-triaid_realized
+                    if best_strategy_return is not None else None
+                ),
+                "baseline_gap_to_hindsight_best":(
+                    best_strategy_return-baseline_realized
+                    if best_strategy_return is not None else None
+                ),
+                "hindsight_best_baseline_weight":(
+                    float(group_weights.get(best_strategy_id,0.0))
+                    if best_strategy_id is not None else None
+                ),
+                "hindsight_best_triaid_weight":(
+                    float(triaid_weights.get(best_strategy_id,0.0))
+                    if best_strategy_id is not None else None
+                ),
+                "hindsight_semantics":(
+                    "Best realized strategy is an ex-post opportunity ceiling only; "
+                    "it was not knowable at decision time."
+                ),
             })
         return payload
 
@@ -244,6 +280,7 @@ class ReviewModule:
     )->dict:
         currency,sleeves=cls._capital_context(current.market.market_id)
         current_weights=cls._group_weights(current)
+        triaid_weights=cls._decision_after(current)
         previous_weights=cls._group_weights(previous) if previous else {}
         current_return=comparison.get("current_run") or {}
         latest_realized=comparison.get("latest_evaluated_today") or current_return or {}
@@ -254,6 +291,10 @@ class ReviewModule:
         realized_triaid=latest_realized.get("triaid_realized_return")
         realized_excess=latest_realized.get("realized_excess_return")
         trading_cost=latest_realized.get("trading_cost")
+        hindsight_best_strategy_id=latest_realized.get("hindsight_best_strategy_id")
+        hindsight_best_strategy_return=latest_realized.get("hindsight_best_strategy_return")
+        triaid_gap_to_best=latest_realized.get("triaid_gap_to_hindsight_best")
+        baseline_gap_to_best=latest_realized.get("baseline_gap_to_hindsight_best")
 
         rows=[]
         for capital in sleeves:
@@ -272,10 +313,33 @@ class ReviewModule:
                     "amount_delta":capital*(after_w-before_w),
                 })
 
+            overlay_rows=[]
+            overlay_ids=sorted(set(current_weights)|set(triaid_weights))
+            overlay_l1=0.0
+            for strategy_id in overlay_ids:
+                baseline_w=float(current_weights.get(strategy_id,0.0))
+                triaid_w=float(triaid_weights.get(strategy_id,0.0))
+                delta=triaid_w-baseline_w
+                overlay_l1+=abs(delta)
+                overlay_rows.append({
+                    "strategy_id":strategy_id,
+                    "baseline_weight":baseline_w,
+                    "triaid_weight":triaid_w,
+                    "weight_delta":delta,
+                    "baseline_amount":capital*baseline_w,
+                    "triaid_amount":capital*triaid_w,
+                    "amount_delta":capital*delta,
+                    "reason":cls._reason(current,strategy_id),
+                })
+
             row={
                 "currency":currency,
                 "starting_capital":capital,
                 "strategy_allocations":allocation_rows,
+                "triaid_overlay_allocations":overlay_rows,
+                "triaid_overlay_l1_change":overlay_l1,
+                "one_way_turnover_fraction":0.5*overlay_l1,
+                "one_way_reallocated_amount":0.5*overlay_l1*capital,
                 "selector_state_return_estimate_before":state_before,
                 "selector_state_return_estimate_after":state_after,
                 "selector_state_return_estimate_delta":(
@@ -310,6 +374,22 @@ class ReviewModule:
                 "trading_cost_amount":(
                     capital*trading_cost if trading_cost is not None else None
                 ),
+                "hindsight_best_strategy_id":hindsight_best_strategy_id,
+                "hindsight_best_strategy_return":hindsight_best_strategy_return,
+                "hindsight_best_strategy_pnl":(
+                    capital*hindsight_best_strategy_return
+                    if hindsight_best_strategy_return is not None else None
+                ),
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "triaid_opportunity_gap_amount":(
+                    capital*triaid_gap_to_best
+                    if triaid_gap_to_best is not None else None
+                ),
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "baseline_opportunity_gap_amount":(
+                    capital*baseline_gap_to_best
+                    if baseline_gap_to_best is not None else None
+                ),
             }
             rows.append(row)
 
@@ -323,6 +403,9 @@ class ReviewModule:
                 "show_absolute_difference":True,
                 "show_weight_difference":True,
                 "show_realized_pnl_difference":True,
+                "show_triaid_before_after_allocation":True,
+                "show_turnover_amount":True,
+                "show_opportunity_gap":True,
             },
             "semantics":{
                 "realized":"Realized return and P&L are based only on evaluated outcomes.",
@@ -391,11 +474,97 @@ class ReviewModule:
             })
 
         capitalized=cls._capitalized_report(current,previous,change,comparison)
+        selector_weights=cls._group_weights(current)
+        triaid_weights=cls._decision_after(current)
+        overlay_ids=sorted(set(selector_weights)|set(triaid_weights))
+        overlay_rows=[]
+        for strategy_id in overlay_ids:
+            before=float(selector_weights.get(strategy_id,0.0))
+            after=float(triaid_weights.get(strategy_id,0.0))
+            overlay_rows.append({
+                "strategy_id":strategy_id,
+                "baseline_weight":before,
+                "triaid_weight":after,
+                "weight_delta":after-before,
+                "reason":cls._reason(current,strategy_id),
+            })
+        overlay_rows.sort(key=lambda row:abs(row["weight_delta"]),reverse=True)
+
+        hindsight_best_id=realized.get("hindsight_best_strategy_id")
+        hindsight_best_return=realized.get("hindsight_best_strategy_return")
+        triaid_gap_to_best=realized.get("triaid_gap_to_hindsight_best")
+        baseline_gap_to_best=realized.get("baseline_gap_to_hindsight_best")
+        decision=current.triaid_decision
+        trading_fusion={
+            "market_context":{
+                "market_id":current.market.market_id,
+                "as_of":current.market.as_of,
+                "regime":market_regime,
+                "run_status":current.status,
+                "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            },
+            "baseline_portfolio":{
+                "selector_weights":dict(selector_weights),
+                "selected_strategy_ids":[
+                    sid for sid,weight in selector_weights.items()
+                    if float(weight)>1e-12
+                ],
+                "state_return_estimate":(
+                    cls._weighted_state_estimate(current,selector_weights)
+                    if selector_weights else None
+                ),
+                "selection_change_vs_previous":{
+                    "added":change.get("added",[]),
+                    "removed":change.get("removed",[]),
+                    "top_weight_movements":review_points,
+                },
+            },
+            "triaid_intervention":{
+                "core_version":decision.core_version if decision else None,
+                "weights_before":dict(decision.weights_before) if decision else dict(selector_weights),
+                "weights_after":dict(decision.weights_after) if decision else dict(selector_weights),
+                "weight_deltas":overlay_rows,
+                "intervention_l1":change.get("triaid_overlay_l1_change"),
+                "intervention_changed":change.get("triaid_overlay_changed"),
+                "diagnostics":dict(decision.diagnostics) if decision else {},
+                "discipline":"TRIAID may change allocation only through the frozen decision layer; realized results are evaluated later.",
+            },
+            "trade_translation":{
+                "currency":capitalized.get("currency"),
+                "capital_sleeves":capitalized.get("capital_sleeves"),
+                "capital_rows":capitalized.get("rows"),
+                "purpose":"Translate TRIAID weight changes into actual capital reallocation, turnover, cost and P&L equivalents.",
+            },
+            "realized_profit_analysis":{
+                "status":realized.get("outcome_status"),
+                "baseline_realized_return":realized.get("baseline_realized_return"),
+                "triaid_realized_return":realized.get("triaid_realized_return"),
+                "realized_excess_return":realized_gap,
+                "trading_cost":realized.get("trading_cost"),
+                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:10],
+                "capitalized":capitalized,
+            },
+            "opportunity_cost":{
+                "hindsight_best_strategy_id":hindsight_best_id,
+                "hindsight_best_strategy_return":hindsight_best_return,
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "hindsight_best_baseline_weight":realized.get("hindsight_best_baseline_weight"),
+                "hindsight_best_triaid_weight":realized.get("hindsight_best_triaid_weight"),
+                "semantics":realized.get("hindsight_semantics"),
+            },
+            "next_trade_plan":{
+                **outlook,
+                "replacement_candidates":change.get("excluded_strategies",[])[:10],
+                "decision_rule":"Change the portfolio only when prospective net-return advantage remains after switching cost and hard feasibility constraints.",
+            },
+        }
 
         return {
             "report_type":"INVESTMENT_STRATEGY_DAILY",
             "market_id":current.market.market_id,
             "as_of":current.market.as_of,
+            "trading_fusion":trading_fusion,
             "strategy_thesis":{
                 "objective":"Maximize realizable net return subject to hard feasibility constraints.",
                 "current_leaders":leaders,
@@ -416,7 +585,11 @@ class ReviewModule:
                 "triaid_realized_return":realized.get("triaid_realized_return"),
                 "realized_excess_return":realized_gap,
                 "trading_cost":realized.get("trading_cost"),
-                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:5],
+                "hindsight_best_strategy_id":hindsight_best_id,
+                "hindsight_best_strategy_return":hindsight_best_return,
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:10],
                 "note":"Realized performance is kept separate from model/state estimates.",
                 "capitalized":capitalized,
             },
@@ -538,25 +711,43 @@ class ReviewModule:
             "analysis_zh":analysis_zh,
             "latest_market_regime":latest.market.regime if latest else None,
             "report_contract":{
-                "report_type":"INVESTMENT_STRATEGY_DAILY",
-                "body_priority":["experiment_evolution_review","realized_scorecard","intervention_attribution","transition_evidence","goal_gap","counterfactual_replay","next_validation","strategy_analysis","session_review","forward_view"],
+                "report_type":"TRIAID_TRADING_ANALYSIS_DAILY",
+                "body_priority":[
+                    "market_and_session",
+                    "baseline_portfolio",
+                    "triaid_intervention",
+                    "trade_translation",
+                    "realized_profit_analysis",
+                    "return_attribution",
+                    "opportunity_cost",
+                    "strategy_review",
+                    "next_trade_plan",
+                    "cross_market_context",
+                ],
                 "highest_discipline":{
-                    "internal_goal":"Validate and evolve TRIAID prospectively.",
+                    "internal_goal":"Validate TRIAID through prospective trading decisions.",
                     "external_goal":"Maximize long-run realizable net return.",
-                    "joint_goal":"Continuously reduce the distance between TRIAID capability gains and economic gains without hindsight contamination.",
+                    "joint_goal":"Show exactly how market evidence became a TRIAID allocation change and how that change affected realized economic return.",
                 },
-                "experiment_evolution_review_required":True,
-                "goal_gap_required":True,
+                "trading_analysis_is_primary":True,
+                "triaid_trade_fusion_required":True,
+                "realized_profit_analysis_required":True,
+                "opportunity_cost_required":True,
+                "experiment_evolution_review_required":False,
+                "goal_gap_required":False,
                 "transition_evidence_required":True,
                 "counterfactual_replay_discipline_required":True,
                 "cross_market_learning_required":True,
                 "technical_runtime_report_default":False,
+                "operational_analysis_in_body":False,
+                "operational_analysis_policy":"EXCEPTION_ONLY_TECHNICAL_APPENDIX",
                 "amount_percent_and_difference_required":True,
                 "capital_sleeves_required":True,
                 "strategy_change_reason_required":True,
                 "before_after_weight_required":True,
                 "selected_and_excluded_reason_required":True,
                 "baseline_vs_triaid_return_required":True,
+                "triaid_vs_hindsight_best_required":True,
                 "realized_vs_state_estimate_separated":True,
                 "capital_and_cost_effects_preserved_in_underlying_run":True,
             },
