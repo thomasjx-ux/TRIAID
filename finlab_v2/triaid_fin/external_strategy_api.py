@@ -24,13 +24,26 @@ def build_external_strategy_router(engine) -> APIRouter:
     router=APIRouter(prefix="/api/external-strategies",tags=["external-strategies"])
 
     @router.get("/status")
-    def status(account_id: str | None = Query(default=None)) -> dict:
+    def status() -> dict:
+        payload=engine.external_strategy_status()
+        return {
+            "version":payload.get("version"),
+            "count":payload.get("count"),
+            "isolation_policy":payload.get("isolation_policy"),
+        }
+
+    @router.get("/details")
+    def details(
+        account_id: str | None = Query(default=None),
+        _admin: None = Depends(_require_admin_token),
+    ) -> dict:
         return engine.external_strategy_status(account_id)
 
     @router.get("/feedback")
     def feedback(
         limit: int = Query(default=100,ge=1,le=1000),
         account_id: str | None = Query(default=None),
+        _admin: None = Depends(_require_admin_token),
     ) -> dict:
         rows=engine.external_strategy_feedback(limit,account_id)
         return {
