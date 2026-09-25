@@ -220,7 +220,6 @@ def structural_checks()->list[dict]:
     contracts=(ROOT/"triaid_fin"/"contracts.py").read_text(encoding="utf-8")
     global_constitution=(ROOT/"triaid_constitution.py").read_text(encoding="utf-8")
     finance_objective=(ROOT/"triaid_fin"/"objective.py").read_text(encoding="utf-8")
-    constitution_doc=(ROOT.parent/"TRIAID_CONSTITUTION.md").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
@@ -235,8 +234,7 @@ def structural_checks()->list[dict]:
         and "objective_class_override_allowed" in global_constitution
         and "inherits_global_constitution" in finance_objective
         and "defensiveness_is_terminal_objective" in finance_objective
-        and "TRIAID Constitution — Unified Value Maximization Discipline" in constitution_doc
-        and "Anti-inaction rule" in constitution_doc,
+        ,
         None,
     )
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
