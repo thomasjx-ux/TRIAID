@@ -36,6 +36,7 @@ from triaid_fin.projection_repository import VerifiedProjectionRepository
 from triaid_fin.outcome_resolver import OutcomeResolver
 from triaid_fin.validation_projection import ValidationSummaryProjection
 from triaid_fin.home_brief import HomeBriefProjection
+from triaid_fin.economic_evolution import EconomicEvolutionModule
 from triaid_fin.projection_cache import ReadThroughProjectionCache
 
 engine=EvolutionLabEngine()
@@ -1095,6 +1096,37 @@ def population_rules(market_id: str) -> dict:
 @app.get("/api/population-state/{market_id}")
 def population_state(market_id: str) -> dict:
     return engine.population_state.status(market_id)
+
+
+@app.get("/api/evolution/economic-value")
+def economic_evolution_value(market_id: str | None = None) -> dict:
+    """Read-only matched formal research outcomes, never an execution signal."""
+    if market_id is not None:
+        try:
+            markets=(normalize_market_id(market_id),)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    else:
+        markets=market_ids()
+    rows=engine.global_runs()
+    evaluator=EconomicEvolutionModule()
+    reports={
+        market:evaluator.report(
+            rows,
+            market,
+            primary_mode=str(
+                MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or ""
+            ) or None,
+        )
+        for market in markets
+    }
+    if market_id is not None:
+        return reports[markets[0]]
+    return {
+        "version":evaluator.version,
+        "markets":reports,
+        "no_core_mutation":True,
+    }
 
 
 @app.get("/api/evolution")
