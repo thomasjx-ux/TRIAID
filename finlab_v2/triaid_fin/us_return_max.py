@@ -29,9 +29,9 @@ class USReturnMaxRoute:
     - four USD sleeves share the same objective and differ only by capital-specific capacity.
     """
 
-    version="us-return-max-route@0.5.0"
+    version="us-return-max-route@0.6.0"
     interface_version="us-return-max-contract@1"
-    capital_version="us-return-max-capacity@0.1.0"
+    capital_version="us-return-max-capacity@0.2.0"
     sleeves=USD_CAPITAL_SLEEVES
     adv_lookback=20
 
@@ -313,7 +313,7 @@ class USReturnMaxRoute:
             "products":pilot_products,
             "semantics":"SHADOW_TO_PILOT EXECUTION CHECK AT THE CAPPED PILOT RISK BUDGET; NOT A BROKER FILL",
         }
-        target_assets=dict(winner_row["target_asset_weights"])
+        target_assets=self._asset_targets(panel,visible_i,route_weights)
         target_risk_weight=sum(target_assets.values())
         adv_by_symbol={
             a:self._adv_notional(panel,a,completed_i)
@@ -426,6 +426,7 @@ class USReturnMaxRoute:
                 for row in sorted(candidate_rows,key=lambda x:(-float(x["net_selection_score"]),str(x["strategy_id"])))
             ],
             "target_strategy_weights":route_weights,
+            "execution_target_source":"FULL_FROZEN_STRATEGY_MIX",
             "return_first_population_control_weights":population_weights,
             "generic_core_control_weights":generic_weights,
             "projected_annualized_expected_net_return":route_expected,
@@ -743,6 +744,29 @@ class USReturnMaxLedger:
                     "generic_core_cumulative_return":x["generic_core_cumulative_return"],
                     "spy_buy_hold_cumulative_return":x["spy_buy_hold_cumulative_return"],
                 }
+        # Legacy frozen v0.5 decisions may price a multi-strategy theoretical
+        # portfolio using only the winning strategy's execution asset mix.
+        # Never rewrite their hashes; label capacity P&L as unverified instead.
+        selected_count=sum(
+            1 for sid,w in route_weights.items()
+            if sid!="P28_CASH" and float(w)>1e-12
+        )
+        if decision.get("execution_target_source")=="FULL_FROZEN_STRATEGY_MIX":
+            target_consistency="VERIFIED_FULL_FROZEN_MIX"
+        elif selected_count>1:
+            target_consistency="LEGACY_MULTI_STRATEGY_TARGET_UNVERIFIED"
+        elif selected_count==1:
+            target_consistency="LEGACY_SINGLE_STRATEGY_TARGET"
+        else:
+            target_consistency="UNKNOWN"
+        capacity_review=self._review_sleeves(decision,future)
+        capacity_review["execution_target_consistency"]=target_consistency
+        if target_consistency=="LEGACY_MULTI_STRATEGY_TARGET_UNVERIFIED":
+            capacity_review["comparison_caveat"]=(
+                "Frozen strategy P&L uses the full selected mix, but this legacy "
+                "capacity sleeve may use only the leading strategy's asset mix. "
+                "Do not compare the two as like-for-like realized performance."
+            )
         return {
             "decision_id":decision.get("decision_id"),
             "decision_hash":decision.get("decision_hash"),
@@ -755,7 +779,8 @@ class USReturnMaxLedger:
             "current_generic_core_theoretical_return":self._compound(generic_daily),
             "current_spy_buy_hold_return":self._compound(spy_daily),
             "matured_horizons":horizons,
-            "capital_sleeves":self._review_sleeves(decision,future),
+            "execution_target_consistency":target_consistency,
+            "capital_sleeves":capacity_review,
         }
 
     def verify_integrity(self)->dict:
