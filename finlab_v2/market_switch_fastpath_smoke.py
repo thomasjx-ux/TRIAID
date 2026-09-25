@@ -50,8 +50,8 @@ checks={
     "full_refresh_low_frequency":"setInterval(refreshFullIfDue,15000)" in app and "setInterval(refreshAll,15000)" not in app,
     "live_refresh_phase_aware":"setInterval(refreshLiveIfDue,5000)" in app and "phase==='OPEN'?5000" in app,
     "hidden_tab_avoids_heavy_work":"document.addEventListener('visibilitychange'" in app and "if(document.hidden)return;" in app,
-    "duplicate_full_refresh_guard":"if(fullRequestPending[m]&&!forceServer)return;" in app,
-    "duplicate_live_refresh_guard":"if(liveRequestPending[m])return;" in app,
+    "duplicate_full_refresh_guard":"if(fullRequestPending[m]&&!forceServer&&fullRequestPending[m]===refreshSeq)return;" in app,
+    "duplicate_live_refresh_guard":"if(liveRequestPending[m]&&liveRequestPending[m]===liveSeq)return;" in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
