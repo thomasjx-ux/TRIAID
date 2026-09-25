@@ -228,7 +228,7 @@ resolved=module.resolve_market(
 )
 assert row["decision_id"] in resolved["resolved_decision_ids"]
 summary=module.daily_summary("ALICE","US")
-assert summary["latest_resolved"]["decision_id"]==row["decision_id"]
+assert summary["latest_resolved"]["decision_id"]==custom_row["decision_id"]
 simple=summary["simple_view"]
 assert simple["trader"]["net_pnl"] is not None
 assert simple["triaid_assisted"]["net_pnl"] is not None
