@@ -1,7 +1,7 @@
 # TRIAID GPT Async Prospective Validation
 
 Status: PROTOCOL_REGISTERED; live independently executable GPT Core is not presumed.
-Protocol version: gpt-forward-validation@1.0.0
+Protocol version: gpt-forward-validation@1.1.0
 Initial source baseline: thomasjx-ux/TRIAID commit 206966fd98ece3e56d2aa94ade693b0f253f6d92, 2026-09-25. Standalone candidate: finlab_v2/triaid_fin/value_frontier_shadow_v2.py, value-frontier-shadow@0.2.0.
 
 ## Purpose and independence
@@ -29,3 +29,73 @@ CN, HK and US each use their own exchange local date/time and next trading day. 
 
 ## Outputs
 The archive is the immutable per-market decision/outcome pairs, a human-readable concise per-market latest run explanation, and the existing three-market daily report as a consumer, not a source of experimental truth. First official experiment begins only when an actual prior-to-next-open freeze has been written and verified.
+
+## Trigger versus evidence time
+The automation clock is only a trigger. The evidence time is the market-specific data-complete timestamp. A valid freeze requires all of the following before the next target session opens:
+- the exchange confirms that the market session is complete;
+- all instruments required by the frozen strategy universe have same-session settled DAILY observations or an explicitly allowed, pre-registered substitute;
+- the strategy registry and current Core inputs are complete;
+- the run starts after the latest required source timestamp and before the next target session opens;
+- the system records scheduler_trigger_time, evidence_ready_time, freeze_start_time and freeze_verified_time separately.
+If evidence becomes complete after the scheduled trigger but before the next target session opens, the scheduled run may still freeze using only information timestamped before freeze_start_time. If evidence is still incomplete, the run fails closed and produces no valid decision.
+
+## Data completeness gate
+A decision is VALID_FROZEN only when:
+1. session_status is CLOSED or the exchange-specific equivalent;
+2. coverage_ratio for required instruments is 1.0, unless the protocol version explicitly declares a lower threshold for that market and the missing instruments cannot affect the selected strategy;
+3. no selected strategy depends on unavailable PREOPEN, INTRADAY, REALTIME, L1/L2, derivatives, broker-fill, corporate-action or FX inputs;
+4. all required adjusted/unadjusted price conventions are declared and internally consistent;
+5. strategy registry version, Core version, calendar version and evaluation version are pinned;
+6. source receipts and freeze hash are persisted and read back successfully.
+Otherwise set one of DATA_INCOMPLETE, CALENDAR_UNCERTAIN, CORE_UNAVAILABLE, SOURCE_UNVERIFIED, or UNFROZEN. Invalid runs remain audit records but never enter prospective performance statistics.
+
+## Canonical immutable decision schema
+Every decision.json must include at least:
+- protocol_version, market_id, t0_trade_date, target_t1_trade_date;
+- scheduler_trigger_time, evidence_ready_time, freeze_start_time, freeze_verified_time and exchange_timezone;
+- exchange_session_type, actual_close_time, calendar_source and calendar_version;
+- source_receipts with provider, instrument, source_timestamp, receipt_timestamp, price_adjustment and freshness;
+- strategy_registry_version, full eligible universe, full excluded universe and exclusion reasons;
+- core_version, core_commit_sha, constitution_version, discipline_commit_sha and evaluation_version;
+- executable_status and validity_status;
+- weights_before, weights_after, no_intervention_weights, cash_weights, market_benchmark and every registered challenger;
+- expected_return fields only when the underlying model is calibrated to support them; otherwise use relative score fields and label them as non-probabilistic;
+- modeled_turnover, modeled_cost, capacity assumptions and capital cases;
+- pre-registered T1 evaluation metrics;
+- canonical_payload_sha256 and GitHub blob SHA after readback.
+The canonical payload used for SHA-256 must exclude the GitHub blob SHA itself.
+
+## Canonical immutable outcome schema
+Every outcome.json must include:
+- reference to the exact decision blob SHA and canonical_payload_sha256;
+- realized_t1_trade_date and exchange timezone;
+- realized per-instrument returns using the same price convention as the decision;
+- realized portfolio gross return, modeled cost, net return and modeled P&L for each capital case;
+- identical figures for no-intervention, market benchmark, cash and every challenger that was frozen at T0;
+- paired deltas versus each baseline;
+- selected/unselected strategy attribution and missed-opportunity diagnostics;
+- risk, drawdown and latent-hazard deltas when available;
+- source receipts and exact outcome data timestamps;
+- result status: VALID_OUTCOME, PENDING, DATA_INCOMPLETE or EVALUATION_INVALID.
+Outcome metrics cannot be changed after creation. Corrections require a new correction record that references the original and never deletes it.
+
+## Cross-market information cutoff
+Cross-market inputs are allowed only if their public source timestamp is no later than that market's freeze_start_time. A later US close can never be injected into an already-frozen CN or HK decision. Overnight information may influence the next eligible market freeze only after it is publicly available and recorded in source_receipts. Any cross-market derived feature must carry source market, source close, publication timestamp and transformation version.
+
+## False-success prevention
+The following are never counted as successful prospective experiments:
+- a run created after the target T1 market opened;
+- an outcome evaluated against a decision that was not read-back verified;
+- a decision using revised or corrected market data that were not available at freeze time;
+- a baseline chosen using T1 hindsight;
+- a missing symbol silently replaced by the market index;
+- a Core result reconstructed only from narrative reasoning;
+- a strategy universe changed after seeing the T1 result;
+- a negative result excluded because of data or model inconvenience.
+Maintain counts for VALID_FROZEN, VALID_OUTCOME, INVALID, PENDING and LATE_EXCLUDED separately.
+
+## Daily and cumulative audit
+Each valid run updates an audit summary derived only from immutable ledger files. Report paired sample count, missing count, invalid count, cumulative net value by model capital, excess value versus each frozen baseline, turnover, modeled costs, drawdown, and frequency of no-action/cash decisions. The 20/60/120/250-session windows are descriptive until a pre-declared statistical test has enough paired observations. Never call the system superior merely because a short window is positive.
+
+## Version changes
+A Core, strategy registry, cost model, market data provider, calendar method, evaluation metric or constitution change creates a new prospective version segment. Old frozen records remain judged by the rules and versions pinned at their own T0. Aggregate reporting must show both all-history and within-version results; it must not pool materially different versions without disclosing the break.
