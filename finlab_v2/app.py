@@ -34,6 +34,8 @@ from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 from triaid_fin.projection_repository import VerifiedProjectionRepository
 from triaid_fin.outcome_resolver import OutcomeResolver
 from triaid_fin.validation_projection import ValidationSummaryProjection
+from triaid_fin.home_brief import HomeBriefProjection
+from triaid_fin.projection_cache import ReadThroughProjectionCache
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -55,6 +57,8 @@ market_page_projection=MarketPageProjection(
 )
 risk_center_projection=RiskCenterProjection(ui_read_services.risk)
 validation_summary_projection=ValidationSummaryProjection(outcome_resolver)
+home_brief_projection=HomeBriefProjection(ui_read_services.market_page)
+ui_projection_cache=ReadThroughProjectionCache()
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -620,6 +624,12 @@ def experiment_outcome_latest(market_id:str)->dict:
     }
 
 
+@app.get("/api/ui/home-brief")
+def ui_home_brief()->dict:
+    """Small, read-only first-paint payload; never resolves or publishes evidence."""
+    return home_brief_projection.full()
+
+
 @app.get("/api/ui/core")
 def ui_core_status()->dict:
     return {
@@ -631,17 +641,46 @@ def ui_core_status()->dict:
 @app.get("/api/ui/market-page/{market_id}")
 def ui_market_page(
     market_id:str,
+    background_tasks:BackgroundTasks,
     lang:str=Query(default="zh",pattern="^(zh|en)$"),
     run_id:str|None=None,
+    refresh:bool=Query(default=False),
 )->dict:
     try:
-        payload=market_page_projection.full(market_id,lang,run_id)
+        market=normalize_market_id(market_id)
+        if run_id:
+            # Never cache manual previews as formal market-page evidence.
+            payload=market_page_projection.full(market,lang,run_id)
+            cache_hit=False
+        else:
+            # Changing a frozen run bypasses the old cache immediately. Live
+            # prices still use the independent uncached /live read model.
+            latest=engine.latest_decision_run(market)
+            fingerprint=(
+                latest.run_id,
+                latest.status,
+                latest.evaluation.status if latest.evaluation else None,
+            ) if latest else ("NO_FORMAL_RUN",)
+            key=("market-page",market,lang,fingerprint)
+            payload,cache_hit=ui_projection_cache.read(
+                key,
+                lambda:market_page_projection.full(market,lang,None),
+                ttl_seconds=25,
+                force=refresh,
+            )
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
-        try:
-            outcome_resolver.resolve_market(payload.get("market_id") or market_id)
-        except Exception:
-            pass
+        if not cache_hit and not run_id:
+            # Outcome resolution is idempotent and belongs off the page
+            # response critical path. The separate validation endpoint also
+            # resolves any pending outcomes independently.
+            background_tasks.add_task(outcome_resolver.resolve_market,market)
+        payload["read_cache"]={
+            "hit":cache_hit,
+            "ttl_seconds":25 if not run_id else 0,
+            "live_read_model_separate":True,
+            "formal_evidence_date":((payload.get("sections") or {}).get("daily") or {}).get("as_of"),
+        }
         return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
@@ -2876,11 +2915,10 @@ function clearMarketCache(m){
  }
 }
 function warmMarketCache(m){
- const urls=[
-   '/api/ui/market-page/'+m+'?lang='+lang,
-   '/api/ui/market-page/'+m+'/live'
- ];
- urls.forEach(url=>jsonCached(url,30000).catch(()=>null));
+ if(document.hidden||m===el('market').value)return;
+ // Only prefetch after the user expresses intent (market-card hover). No
+ // automatic full-market fan-out competes with first paint.
+ jsonCached('/api/ui/market-page/'+m+'?lang='+lang,30000).catch(()=>null);
 }
 function warmAllMarkets(){
  const selected=el('market').value;
@@ -2944,6 +2982,10 @@ const MARKET_UI={
  }
 };
 let marketClockState={};
+let homeBriefState={markets:{}};
+let briefDisplayedMarket=null;
+const fullLoadedAt={},fullLastAttemptAt={},fullLoadedRunIds={},fullRequestPending={};
+const liveRequestPending={},lastLiveRefreshAt={},strategyContextFetchedAt={};
 let homeSummaryState={
  selectedCount:null,
  changedCount:null,
@@ -3088,6 +3130,53 @@ async function refreshVolatilityForecast(){
   volatilityForecastState={markets:{},errors:{ALL:String(e)},model:'EWMA94_MULTI_WINDOW_REALIZED_VOL',version:null};
  }
  renderVolatilityForecast();
+}
+function applyHomeBrief(m){
+ const row=(homeBriefState.markets||{})[m];
+ if(!row||row.status!=='READY'||previewRunIds[m])return;
+ // A fully rendered projection for the same formal decision takes priority.
+ if(briefDisplayedMarket===m&&Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)&&fullLoadedRunIds[m]===row.run_id)return;
+ const selected=row.selection||{};
+ homeSummaryState.selectedCount=selected.selected_count;
+ homeSummaryState.changedCount=selected.changed_count;
+ homeSummaryState.selectedNames=(lang==='zh'?selected.selected_names_zh:selected.selected_names_en)||[];
+ homeSummaryState.evaluated=row.latest_evaluated||null;
+ homeSummaryState.preview=false;
+ homeSummaryState.latestStatus=row.run_status||null;
+ if(row.market_as_of)el('date').textContent=row.market_as_of;
+ if(row.market_regime)el('regime').textContent=phaseText(marketClockState[m]?.session_phase)+' · '+humanRegime(row.market_regime);
+ el('selectedCount').textContent=String(selected.selected_count??'-');
+ el('selectedNames').textContent=homeSummaryState.selectedNames.slice(0,6).join(lang==='zh'?'、':' · ')||'-';
+ el('runState').textContent=humanRunState(row.run_status);
+ briefDisplayedMarket=m;
+ renderHomeSummary();
+}
+async function refreshHomeBrief(){
+ try{
+  const payload=await jsonCached('/api/ui/home-brief',12000);
+  if(!(payload.integrity||{}).passed)return;
+  homeBriefState=payload;
+  const m=el('market').value,row=(payload.markets||{})[m];
+  applyHomeBrief(m);
+  // A newly frozen decision invalidates cached formal detail without waiting
+  // for the next low-frequency full refresh.
+  if(row?.run_id&&Object.prototype.hasOwnProperty.call(fullLoadedRunIds,m)
+     &&row.run_id!==fullLoadedRunIds[m]&&!fullRequestPending[m]){
+   clearMarketCache(m);
+   refreshAll(false,true).catch(()=>null);
+  }
+ }catch(e){
+  // First paint remains available from clocks and independently polled live data.
+ }
+}
+function refreshStrategyContextIfDue(m){
+ if(document.hidden)return;
+ const now=Date.now();
+ if(strategyContextFetchedAt[m]&&now-strategyContextFetchedAt[m]<180000)return;
+ strategyContextFetchedAt[m]=now;
+ jsonCached('/api/market-data/strategy-context/'+m,180000)
+  .then(ctx=>{strategyMarketContext[m]=ctx;})
+  .catch(()=>{strategyContextFetchedAt[m]=0;});
 }
 function renderHomeSummary(){
  const m=el('market').value;
@@ -3357,13 +3446,19 @@ function renderMarketIdentity(){
  renderHomeSummary();
 }
 async function refreshMarketClocks(){
- const hadClock=Object.keys(marketClockState).length>0;
+ const previousPhase=marketClockState[el('market').value]?.session_phase;
  try{
   const payload=await jsonCached('/api/ui/market-clocks',15000);
   marketClockState=Object.fromEntries((payload.markets||[]).map(x=>[x.market_id,x]));
   renderMarketIdentity();
   tickMarketClocks();
-  if(!hadClock)refreshAll(true).catch(()=>null);
+  const m=el('market').value;
+  if(previousPhase&&previousPhase!==marketClockState[m]?.session_phase){
+   // A local exchange phase transition is a genuine reason to refresh
+   // the selected formal page, unlike a one-second clock tick.
+   clearMarketCache(m);
+   refreshAll(false,true).catch(()=>null);
+  }
  }catch(e){
   renderMarketIdentity();
  }
@@ -3385,7 +3480,9 @@ function setPulse(id,on,warn=false){
 }
 async function refreshLiveWindows(){
  const m=el('market').value;
+ if(liveRequestPending[m]&&liveRequestPending[m]===liveSeq)return;
  const seq=++liveSeq;
+ liveRequestPending[m]=seq;
  try{
   const page=await jsonCached('/api/ui/market-page/'+m+'/live',2000);
   if(seq!==liveSeq||el('market').value!==m)return;
@@ -3433,10 +3530,11 @@ async function refreshLiveWindows(){
    el('indexMeta').textContent='Market-page projection error: '+e.message;
    el('scheduleMeta').textContent='Market-page projection error: '+e.message;
   }
+ }finally{
+  if(liveRequestPending[m]===seq)delete liveRequestPending[m];
  }
- jsonCached('/api/market-data/strategy-context/'+m,60000)
-   .then(ctx=>{strategyMarketContext[m]=ctx;})
-   .catch(()=>{});
+ // Enrichment is requested after the formal page is rendered, not on every
+ // five-second live tick. Its own TTL is independent of live data freshness.
 }
 function renderUSIntradayState(live,events,schedulerState){
  const panel=el('usrmIntradayPanel');
@@ -3508,9 +3606,11 @@ function onMarketChange(){
  const seq=++marketSwitchSeq;
  applyMarketScope();
  renderMarketIdentity();
+ applyHomeBrief(el('market').value);
  requestAnimationFrame(()=>{
    if(seq!==marketSwitchSeq)return;
    refreshAll(true);
+   lastLiveRefreshAt[el('market').value]=Date.now();
    refreshLiveWindows();
  });
 }
@@ -3532,7 +3632,7 @@ async function pollRun(id,market){
    if(!['CREATED','FETCHING_DATA'].includes(x.status)){
     if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
     clearMarketCache(market);
-    await refreshAll();
+    await refreshAll(false,true);
     return;
    }
   }catch(e){}
@@ -4403,15 +4503,21 @@ function humanCoreVersion(version){
  return s.replace(/^triaid-core-/i,'TRIAID Core · ');
 }
 function setStatusNote(id,zh,en){if(el(id))el(id).textContent=lang==='zh'?zh:en}
-async function refreshAll(preferStale=false){
+async function refreshAll(preferStale=false,forceServer=false){
  const m=el('market').value;
+ if(fullRequestPending[m]&&!forceServer&&fullRequestPending[m]===refreshSeq)return;
  const seq=++refreshSeq;
+ fullRequestPending[m]=seq;
+ fullLastAttemptAt[m]=Date.now();
  const previewId=previewRunIds[m];
  try{
   const marketGet=preferStale?jsonCachedStale:jsonCached;
-  const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'')+(forceServer?'&refresh=true':'');
   const page=await marketGet(projectionUrl,30000);
   if(seq!==refreshSeq||el('market').value!==m)return;
+  fullLoadedAt[m]=Date.now();
+  fullLoadedRunIds[m]=((page.sections?.strategies?.data||[]).find(x=>x.run_id)||{}).run_id||null;
+  briefDisplayedMarket=m;
   refreshValidationSummary(m,seq).catch(()=>null);
   const sections=page.sections||{};
   const s=page.core||{};
@@ -4655,7 +4761,12 @@ async function refreshAll(preferStale=false){
   el('runStatus').textContent=previewRun
     ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
     : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
- }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
+  refreshStrategyContextIfDue(m);
+ }catch(e){
+  if(seq===refreshSeq&&el('market').value===m)el('runStatus').textContent='UI data error: '+e.message;
+ }finally{
+  if(fullRequestPending[m]===seq)delete fullRequestPending[m];
+ }
 }
 async function refreshRiskPanels(){
  try{
@@ -4701,8 +4812,56 @@ const tableHeaderObserver=new MutationObserver(mutations=>{
  if(mutations.some(m=>m.type==='childList'||m.type==='characterData'))applyTableHeaderTooltips();
 });
 tableHeaderObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
-function toggleLang(){lang=lang==='zh'?'en':'zh';applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();renderVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels()}
-applyText();applyMarketScope();renderMarketIdentity();refreshMarketClocks();tickMarketClocks();renderVolatilityForecast();refreshVolatilityForecast();refreshAll();refreshLiveWindows();refreshRiskPanels();setTimeout(warmAllMarkets,1200);setInterval(tickMarketClocks,1000);setInterval(refreshMarketClocks,15000);setInterval(refreshAll,15000);setInterval(refreshLiveWindows,5000);setInterval(refreshRiskPanels,10000);setInterval(refreshVolatilityForecast,60000);
+function toggleLang(){
+ lang=lang==='zh'?'en':'zh';
+ applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
+ renderVolatilityForecast();applyHomeBrief(el('market').value);
+ refreshAll(true);refreshLiveWindows();refreshRiskPanels();
+}
+function refreshFullIfDue(){
+ if(document.hidden)return;
+ const m=el('market').value;
+ if(fullRequestPending[m])return;
+ const phase=String(marketClockState[m]?.session_phase||'');
+ const intervalMs=['OPEN','PREOPEN','BREAK','POSTCLOSE'].includes(phase)?60000:180000;
+ const last=Math.max(fullLoadedAt[m]||0,fullLastAttemptAt[m]||0);
+ const retryAfter=fullLoadedAt[m]?intervalMs:20000;
+ if(Date.now()-last>=retryAfter)refreshAll();
+}
+function refreshLiveIfDue(force=false){
+ if(document.hidden)return;
+ const m=el('market').value;
+ if(liveRequestPending[m])return;
+ const phase=String(marketClockState[m]?.session_phase||'');
+ const intervalMs=phase==='OPEN'?5000:['PREOPEN','BREAK','POSTCLOSE'].includes(phase)?10000:30000;
+ if(force||Date.now()-(lastLiveRefreshAt[m]||0)>=intervalMs){
+  lastLiveRefreshAt[m]=Date.now();
+  refreshLiveWindows();
+ }
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden)return;
+ refreshMarketClocks();refreshHomeBrief();refreshFullIfDue();
+ refreshLiveIfDue(true);refreshRiskPanels();
+});
+document.querySelectorAll('[data-clock-market]').forEach(node=>{
+ node.addEventListener('mouseenter',()=>{
+  const m=node.dataset.clockMarket;
+  if(m&&m!==el('market').value)warmMarketCache(m);
+ });
+});
+applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
+refreshMarketClocks();refreshHomeBrief();refreshLiveIfDue(true);
+setTimeout(()=>{if(!document.hidden)refreshAll(true)},150);
+setTimeout(()=>{if(!document.hidden)refreshRiskPanels()},800);
+setTimeout(()=>{if(!document.hidden)refreshVolatilityForecast()},1700);
+setInterval(tickMarketClocks,1000);
+setInterval(refreshMarketClocks,15000);
+setInterval(refreshHomeBrief,30000);
+setInterval(refreshFullIfDue,15000);
+setInterval(refreshLiveIfDue,5000);
+setInterval(()=>{if(!document.hidden)refreshRiskPanels()},30000);
+setInterval(()=>{if(!document.hidden)refreshVolatilityForecast()},60000);
 </script>
 </body>
 </html>
