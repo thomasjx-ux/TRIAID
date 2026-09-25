@@ -12,7 +12,7 @@ class ReadThroughProjectionCache:
     are cached; errors never become a successful stale answer.
     """
 
-    version="read-through-projection-cache@1.0.0"
+    version="read-through-projection-cache@1.1.0"
 
     def __init__(self,max_entries:int=48)->None:
         self.max_entries=max(1,int(max_entries))
@@ -20,12 +20,18 @@ class ReadThroughProjectionCache:
         self._locks={}
         self._guard=Lock()
 
-    def read(self,key,build,*,ttl_seconds:float,force:bool=False)->tuple[dict,bool]:
+    @staticmethod
+    def _copy_for_caller(value,copy_mode:str):
+        if copy_mode=="shallow_top":
+            return dict(value) if isinstance(value,dict) else value
+        return deepcopy(value)
+
+    def read(self,key,build,*,ttl_seconds:float,force:bool=False,copy_mode:str="deep")->tuple[dict,bool]:
         ttl=max(0.0,float(ttl_seconds))
         with self._guard:
             entry=self._entries.get(key)
             if not force and entry and monotonic()-entry[0]<ttl:
-                return deepcopy(entry[1]),True
+                return self._copy_for_caller(entry[1],copy_mode),True
             singleflight=self._locks.setdefault(key,Lock())
 
         # Requests for unrelated markets do not block one another.
@@ -33,11 +39,14 @@ class ReadThroughProjectionCache:
             with self._guard:
                 entry=self._entries.get(key)
                 if not force and entry and monotonic()-entry[0]<ttl:
-                    return deepcopy(entry[1]),True
+                    return self._copy_for_caller(entry[1],copy_mode),True
             result=build()
             integrity=(result.get("integrity") or {}) if isinstance(result,dict) else {}
             if integrity.get("passed") is True:
                 with self._guard:
+                    # Keep the cached snapshot isolated. Callers opt into a
+                    # shallow top-level copy only when their route contract
+                    # guarantees nested projection data is read-only.
                     self._entries[key]=(monotonic(),deepcopy(result))
                     if len(self._entries)>self.max_entries:
                         oldest=min(self._entries,key=lambda k:self._entries[k][0])
