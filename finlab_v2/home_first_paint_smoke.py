@@ -6,7 +6,7 @@ from time import sleep
 from types import SimpleNamespace
 
 from triaid_fin.home_brief import HomeBriefProjection
-from triaid_fin.market_registry import MARKET_REGISTRY
+from triaid_fin.market_registry import market_ids
 from triaid_fin.projection_cache import ReadThroughProjectionCache
 from triaid_fin.ui_ports import MarketPageReadPort
 
@@ -80,7 +80,7 @@ projection=HomeBriefProjection(read)
 brief=projection.full()
 assert brief["version"]=="home-brief@1.0.0"
 assert brief["integrity"]["passed"] is True
-assert set(brief["markets"])==set(MARKET_REGISTRY.market_ids)
+assert set(brief["markets"])==set(market_ids())
 assert read.history_calls==1
 us=brief["markets"]["US"]
 assert us["run_id"]==run.run_id
