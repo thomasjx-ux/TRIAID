@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TRIAID FIN Local</title>
+<style>
+:root{font-family:"Segoe UI",Inter,system-ui,sans-serif;color:#dce5f2;background:#111827}
+*{box-sizing:border-box}body{margin:0;height:100vh;overflow:hidden}
+header{height:58px;display:flex;align-items:center;gap:15px;padding:0 18px;background:#101b2e;border-bottom:1px solid #344255}
+.brand{font-weight:850;font-size:16px;white-space:nowrap;letter-spacing:.02em}
+.brand small{display:block;color:#8ea4ba;font-size:10px;font-weight:400;margin-top:2px}
+nav{display:flex;gap:7px;flex-wrap:wrap}
+button{font:inherit;font-size:12px;color:#cad8ec;background:#1b2a41;border:1px solid #3b516d;border-radius:8px;padding:9px 14px;cursor:pointer}
+button:focus-visible{outline:2px solid #6fa5f8}button.active{background:#2867b8;border-color:#4c91e9;color:white}
+.spacer{flex:1}.status{font-size:11px;color:#9fb6ce;white-space:nowrap}
+.status.online{color:#6de2ab}.status.offline{color:#ff998e}
+main{height:calc(100vh - 58px);position:relative;background:#f5f7fa}
+iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#f5f7fa}
+iframe[hidden]{display:none}
+@media(max-width:1000px){header{height:auto;min-height:58px;flex-wrap:wrap;padding:8px}main{height:calc(100vh - 110px)}.status{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TRIAID FIN <span style="color:#79b4ff">LOCAL</span><small>单用户科研工作站 · 独立后台</small></div>
+  <nav aria-label="桌面视图">
+    <button id="fullTab" class="active" aria-pressed="true" data-view="classic">完整原版界面</button>
+    <button id="liveTab" aria-pressed="false" data-view="live">实时研究实验台</button>
+    <button id="reload" title="只刷新当前界面，不重启实验后台">刷新界面</button>
+  </nav>
+  <div class="spacer"></div>
+  <span id="status" class="status" role="status">连接本地后台…</span>
+</header>
+<main>
+  <!-- The existing production UI is served unmodified: all buttons, tooltips,
+       strategy tables, multilingual labels and interactions are preserved. -->
+  <iframe id="classic" src="/" title="TRIAID 原版完整界面"></iframe>
+  <iframe id="live" title="TRIAID 实时研究实验台" hidden></iframe>
+</main>
+<script>
+(function(){
+ "use strict";
+ const frames={classic:document.getElementById("classic"),live:document.getElementById("live")};
+ let active="classic";
+ function select(view){
+   active=view;
+   for(const [key,frame] of Object.entries(frames))frame.hidden=key!==view;
+   if(view==="live"&&!frames.live.src)frames.live.src="/desktop/live";
+   for(const btn of document.querySelectorAll("[data-view]")){
+     const on=btn.dataset.view===view;btn.classList.toggle("active",on);btn.setAttribute("aria-pressed",String(on));
+   }
+ }
+ document.querySelectorAll("[data-view]").forEach(btn=>btn.addEventListener("click",()=>select(btn.dataset.view)));
+ document.getElementById("reload").addEventListener("click",()=>frames[active].contentWindow.location.reload());
+ document.addEventListener("keydown",event=>{
+   if(event.ctrlKey&&event.key==="1"){event.preventDefault();select("classic")}
+   if(event.ctrlKey&&event.key==="2"){event.preventDefault();select("live")}
+ });
+ async function health(){
+   const status=document.getElementById("status");
+   try{
+     const response=await fetch("/desktop/ping",{cache:"no-store"});
+     if(!response.ok)throw Error("offline");
+     status.textContent="本地后台运行中 · 关闭窗口不影响后台";
+     status.className="status online";
+   }catch(_){status.textContent="后台连接失败 · 请检查本地服务";status.className="status offline"}
+ }
+ health();setInterval(health,15000);
+})();
+</script>
+</body>
+</html>
