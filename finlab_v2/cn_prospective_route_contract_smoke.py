@@ -13,8 +13,8 @@ html=home()
 checks={
     "cn_primary_route_is_return_max":"metadata={\"primary_experiment_mode\":\"CN_RETURN_MAX_CAPACITY\"}" in registry,
     "prospective_protocol_is_legacy_route":'experiment_mode = "CN_WORST_POOL_RESCUE"' in prospective,
-    "daily_summary_exposes_protocol_status":'summary["prospective_experiment_status"]=self.prospective_experiment.status()' in engine,
-    "daily_summary_only_exposes_report_when_present":'prospective=self.prospective_experiment.daily_report()' in engine and 'if prospective:' in engine,
+    "daily_summary_exposes_protocol_status":'def _daily_cn_sections' in engine and 'payload["prospective_experiment_status"]=self.prospective_experiment.status()' in engine,
+    "daily_summary_only_exposes_report_when_present":'prospective=self.prospective_experiment.daily_report()' in engine and 'payload["prospective_experiment"]=prospective' in engine,
     "ui_does_not_claim_inactive_protocol_is_primary":"当前主路线是 CN_RETURN_MAX_CAPACITY" in app,
     "ui_explains_protocol_mismatch":"这套前瞻协议只在 CN_WORST_POOL_RESCUE 下登记" in app,
     "ui_hides_empty_prospective_tables":".prospective-panel.unavailable .summary" in html and ".prospective-panel.unavailable h3" in html and ".prospective-panel.unavailable .tablewrap" in html,

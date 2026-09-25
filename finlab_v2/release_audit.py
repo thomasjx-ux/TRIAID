@@ -44,6 +44,7 @@ BUILD_CASES=[
     "core_evolution_validation_smoke.py",
     "strategy_evolution_validation_smoke.py",
     "daily_report_change_attribution_smoke.py",
+    "daily_report_module_smoke.py",
     "daily_experiment_intelligence_smoke.py",
     "long_cycle_hypothesis_smoke.py",
     "cross_market_crash_smoke.py",
@@ -135,6 +136,7 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/daily?compact=true&market_id=US",
     "/api/daily?compact=true&market_id=CN",
     "/api/daily?compact=true&market_id=HK",
+    "/api/ui/daily-report?compact=true",
     "/api/strategies?market_id=US&lang=zh",
     "/api/strategies?market_id=CN&lang=zh",
     "/api/strategies?market_id=HK&lang=zh",
@@ -193,6 +195,7 @@ def structural_checks()->list[dict]:
     risk_projection=(ROOT/"triaid_fin"/"risk_projection.py").read_text(encoding="utf-8")
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
+    daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
@@ -271,6 +274,16 @@ def structural_checks()->list[dict]:
         and "self.services.market_data." in runtime
         and "self.services.decision." in scheduler
         and "self.services.market_data." in scheduler,
+        None,
+    )
+    check(
+        "daily_report_is_registry_driven_module",
+        "class DailyReportModule" in daily_report
+        and "self.market_ids()" in daily_report
+        and "MARKET_REGISTRY_DRIVEN_NO_SILENT_OMISSION" in daily_report
+        and "class DailyReportReadPort" in ui_ports
+        and '"daily_report"' in engine
+        and '@app.get("/api/ui/daily-report")' in app,
         None,
     )
     check(

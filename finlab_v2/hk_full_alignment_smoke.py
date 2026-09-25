@@ -133,7 +133,7 @@ checks={
     "hk_realized_capacity_ui":'id="hkRealizedRows"' in app,
     "hk_posterior_path_ui":'id="hkDailyRows"' in app,
     "old_capacity_gap_copy_removed":"港股独立容量后验账本尚未形成" not in app,
-    "engine_exposes_hk_route_report":"hk_return_max_daily_report" in engine and 'summary["hk_return_max"]' in engine,
+    "engine_exposes_hk_route_report":"hk_return_max_daily_report" in engine and 'def _daily_hk_sections' in engine and 'payload["hk_return_max"]=hk_return' in engine,
     "engine_records_hk_outcome":"hk_return_max_ledger.record_outcome" in engine,
     "engine_freezes_hk_decision":"hk_return_max_ledger.freeze" in engine,
 }
