@@ -35,6 +35,7 @@ BUILD_CASES=[
     "homepage_swr_cache_smoke.py",
     "economic_evolution_smoke.py",
     "value_frontier_smoke.py",
+    "value_frontier_research_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -211,6 +212,7 @@ def structural_checks()->list[dict]:
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
     value_frontier=(ROOT/"triaid_fin"/"value_frontier.py").read_text(encoding="utf-8")
+    value_frontier_research=(ROOT/"triaid_fin"/"value_frontier_research.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -418,6 +420,16 @@ def structural_checks()->list[dict]:
         and "reads_realized_t1_to_choose_weights" in economic_evolution
         and "SHADOW_ONLY_PENDING_PROSPECTIVE_VALIDATION" in economic_evolution
         and '"production_core_changed": False' in economic_evolution,
+        None,
+    )
+    check(
+        "value_frontier_research_is_non_mutating",
+        "class ValueFrontierResearchCore" in value_frontier_research
+        and 'mode":"RESEARCH_ONLY"' in value_frontier_research.replace(" ","")
+        and "production_mutation_allowed=False" in value_frontier_research.replace(" ","")
+        and "ValueFrontierAllocator.allocate(" in value_frontier_research
+        and "uses_frozen_t0_information_only" in value_frontier_research
+        and "reads_realized_t1_to_choose_weights" in value_frontier_research,
         None,
     )
     check(
