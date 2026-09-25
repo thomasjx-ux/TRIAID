@@ -141,10 +141,27 @@ class TriaidCoreModule:
         if "P28_CASH" in group.members:
             raw["P28_CASH"]=0.0
 
-        target=_normalize_capped(raw,0.28) if raw else ({"P28_CASH":1.0} if "P28_CASH" in group.members else {})
+        position_cap=float((group.diagnostics or {}).get("max_strategy_weight_constraint",0.28) or 0.28)
+        position_cap=max(1e-9,min(1.0,position_cap))
+        target=_normalize_capped(raw,position_cap) if raw else ({"P28_CASH":1.0} if "P28_CASH" in group.members else {})
         strength=max(0.0,min(1.0,self.params.intervention_strength))
         keys=set(before)|set(target)
         after={k:(1-strength)*before.get(k,0.0)+strength*target.get(k,0.0) for k in keys}
+        after={k:max(0.0,v) for k,v in after.items() if v>1e-12}
+
+        risk_budget=float((market.metadata or {}).get("account_risk_budget",1.0) or 1.0)
+        risk_budget=max(0.0,min(1.0,risk_budget))
+        risky_keys=[k for k in after if k!="P28_CASH"]
+        risky_total=sum(after.get(k,0.0) for k in risky_keys)
+        risk_budget_scaled=False
+        if risky_total>risk_budget+1e-12 and risky_total>0:
+            scale=risk_budget/risky_total
+            for key in risky_keys:
+                after[key]=after[key]*scale
+            residual=max(0.0,1.0-sum(after.values()))
+            if "P28_CASH" in set(group.members)|set(after):
+                after["P28_CASH"]=after.get("P28_CASH",0.0)+residual
+            risk_budget_scaled=True
         after={k:max(0.0,v) for k,v in after.items() if v>1e-12}
 
         reasons={}
@@ -180,7 +197,7 @@ class TriaidCoreModule:
             reasons=reasons,
             diagnostics={
                 "interface_version":self.interface_version,
-                "implementation_version":"triaid-core-return-max@0.3.0",
+                "implementation_version":"triaid-core-return-max@0.4.0",
                 "objective":PRIMARY_OBJECTIVE,
                 "objective_constitution":OBJECTIVE_CONSTITUTION,
                 "intervention_strength":self.params.intervention_strength,
@@ -202,6 +219,9 @@ class TriaidCoreModule:
                 "score_temperature":score_temperature,
                 "cash_target":float(target.get("P28_CASH",0.0)),
                 "cash_is_fixed_template":False,
+                "max_strategy_weight_constraint":position_cap,
+                "account_risk_budget":risk_budget,
+                "risk_budget_scaled":risk_budget_scaled,
                 "risk_role":"HARD_ADMISSION_AND_STATE_THRESHOLD_CONSTRAINT_NOT_CO_EQUAL_OBJECTIVE",
             },
         )
