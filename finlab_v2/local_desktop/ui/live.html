@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TRIAID 实时研究实验台</title>
+<style>
+:root{font-family:"Segoe UI",Inter,system-ui,sans-serif;color:#dfebf9;background:#101927;--line:#2d4056;--good:#63dca1;--bad:#ff837d;--warn:#f7cc75;--muted:#99abc1}
+*{box-sizing:border-box}body{margin:0;padding:16px;min-width:900px}
+h1,h2,h3,p{margin:0}h1{font-size:21px}h2{font-size:16px}h3{font-size:13px}
+small,.muted{color:var(--muted);font-size:11px;line-height:1.6}
+.top{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:13px}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;color:#dce9fa;background:#203247;border:1px solid #456078;border-radius:8px;padding:8px 11px;cursor:pointer}
+button:focus-visible{outline:2px solid #75b5fc}
+button.selected{color:#fff;background:#265d9e;border-color:#539ff0}
+button:hover{border-color:#7c9cbc}
+.pill{display:inline-block;border:1px solid #3d526b;border-radius:999px;padding:3px 9px;font-size:11px;color:#aabbd2}
+.pill.good{color:var(--good);border-color:#286a53}.pill.bad{color:var(--bad);border-color:#823a3a}.pill.warn{color:var(--warn);border-color:#866d40}
+.markets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:13px}
+.market{background:#172337;border:1px solid var(--line);border-radius:11px;padding:13px;text-align:left;cursor:pointer;min-height:122px}
+.market.selected{outline:2px solid #4489d0}.market .name{font-size:15px;font-weight:780}.market .state{float:right;font-size:11px;color:#b8cce1}
+.market .summary{font-size:12px;line-height:1.7;margin-top:8px;white-space:pre-line;color:#d6e5f7}
+.market .age{margin-top:5px;font-size:11px;color:var(--muted)}.market .age.bad{color:var(--bad)}
+.layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:13px}
+.panel{background:#172337;border:1px solid var(--line);border-radius:11px;padding:14px;min-width:0;margin-bottom:13px}
+.panel .head{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;margin-bottom:11px}
+.panel .head p{color:var(--muted);font-size:11px;margin-top:4px;line-height:1.5}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:11px}
+.metric{border:1px solid #354a62;background:#1a2a40;border-radius:8px;padding:10px;min-width:0}
+.metric .value{font-size:19px;font-weight:750;margin-top:5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+canvas{display:block;width:100%;height:255px;background:#121f30;border:1px solid #30465e;border-radius:8px}
+.plotfoot{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);margin-top:7px}
+.tablewrap{max-height:330px;overflow:auto;border:1px solid #33485f;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12px}th,td{text-align:left;border-bottom:1px solid #273950;padding:9px 10px}
+th{position:sticky;top:0;background:#1c2d43;z-index:1;color:#aabdd2}
+td.num{text-align:right;font-variant-numeric:tabular-nums}th.num{text-align:right}
+.positive{color:var(--good)}.negative{color:var(--bad)}
+.event-list{height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+.event{width:100%;text-align:left;display:grid;grid-template-columns:68px 1fr;gap:7px;background:#1b2b40;border:1px solid #35485e;padding:10px;border-radius:8px}
+.event.selected{background:#213d58;border-color:#609ddd}
+.event time{font-size:11px;color:#94afc9}.event b{display:block;font-size:12px;margin-bottom:4px}
+.event span{font-size:11px;color:#bdd0e7;line-height:1.5;overflow-wrap:anywhere}
+.detail{white-space:pre-wrap;word-break:break-word;font:12px/1.6 "Segoe UI",sans-serif;color:#d7e8fa}
+details{margin-top:9px}summary{font-size:11px;color:#98b7d8;cursor:pointer}pre{white-space:pre-wrap;word-break:break-all;font:10px/1.5 ui-monospace,monospace;color:#9bb1ca}
+footer{color:#8ba1b9;font-size:11px;line-height:1.6;margin:4px 0 12px}
+@media(max-width:1160px){.layout{grid-template-columns:1fr}.event-list{height:300px}}
+</style>
+</head>
+<body>
+<div class="top">
+ <div><h1>TRIAID 实时研究实验台</h1><small>每次有效市场观测与 TRIAID 状态判断同步追踪 · 所有数据来自本地实际记录</small></div>
+ <div class="tools"><span class="pill" id="mode">研究模式 · 不连接交易账户</span><span class="pill" id="connection">读取中</span><button id="pause">暂停画面</button><button id="refresh">立即刷新</button></div>
+</div>
+<div class="markets" id="markets">
+ <button class="market selected" data-market="US"><span class="name">美股 US</span><span class="state" id="US-phase">读取中</span><div class="summary" id="US-summary">正在读取行情…</div><div class="age" id="US-age"></div></button>
+ <button class="market" data-market="CN"><span class="name">A股 CN</span><span class="state" id="CN-phase">读取中</span><div class="summary" id="CN-summary">正在读取行情…</div><div class="age" id="CN-age"></div></button>
+ <button class="market" data-market="HK"><span class="name">港股 HK</span><span class="state" id="HK-phase">读取中</span><div class="summary" id="HK-summary">正在读取行情…</div><div class="age" id="HK-age"></div></button>
+</div>
+<div class="layout">
+ <section>
+  <div class="panel">
+   <div class="head"><div><h2 id="chartTitle">市场实时观测</h2><p>根据本机收到的研究级行情绘制，不代表逐笔交易行情</p></div><span class="pill" id="provider">来源待确认</span></div>
+   <div class="metrics">
+    <div class="metric"><small>最新行情时间（交易所当地）</small><div id="sourceTime" class="value" style="font-size:14px">--</div></div>
+    <div class="metric"><small>距最近一次行情更新</small><div id="freshness" class="value">--</div></div>
+    <div class="metric"><small>本日 TRIAID 重算次数</small><div id="decisionCount" class="value">--</div></div>
+   </div>
+   <canvas id="plot" aria-label="按实际已收到行情绘制的价格变化线图"></canvas>
+   <div class="plotfoot"><span id="plotCaption">等待有效观测记录</span><span>数据缺失不插值，不产生模拟行情</span></div>
+  </div>
+  <div class="panel">
+   <div class="head"><div><h2>市场资产实时表现</h2><p>与数据源上一次有效观测比较，并非固定的昨日收盘涨跌幅</p></div><span id="assetCount" class="pill">--</span></div>
+   <div class="tablewrap"><table><thead><tr><th>资产</th><th class="num">最新价</th><th class="num">前次观测</th><th class="num">变化幅度</th><th class="num">成交量</th></tr></thead><tbody id="instruments"><tr><td colspan="5">等待有效数据…</td></tr></tbody></table></div>
+  </div>
+ </section>
+ <section>
+  <div class="panel">
+   <div class="head"><div><h2>TRIAID 决策与观测时间轴</h2><p>包括触发、未触发、风险确认和正式收盘结果</p></div><span id="eventCount" class="pill">--</span></div>
+   <div id="events" class="event-list" aria-live="polite"><div class="muted">加载决策记录中…</div></div>
+  </div>
+  <div class="panel">
+   <div class="head"><div><h2>选中事件的解释与原始证据</h2><p>点击时间轴的任意事件可查看触发原因和权重变化</p></div></div>
+   <div id="detail" class="detail">请选择一条记录。尚未发生的行情和收益不会被填入。</div>
+   <details><summary>展开原始证据 JSON</summary><pre id="rawEvidence">--</pre></details>
+  </div>
+ </section>
+</div>
+<footer>数据源、时间戳和交易状态必须一致；市场休市或供应商延迟时，明确显示旧数据。本界面不发出真实交易指令，正式后验仍以未来实际结果为准。</footer>
+<script>
+(function(){
+"use strict";
+const MARKETS=["US","CN","HK"], TZ={US:"America/New_York",CN:"Asia/Shanghai",HK:"Asia/Hong_Kong"};
+const st={market:"US",paused:false,busy:false,live:{},activity:{},decisions:{},history:{},lastHistTs:{}};
+const el=id=>document.getElementById(id);
+function number(v,d=2){return v===null||v===undefined||!Number.isFinite(Number(v))?"--":Number(v).toLocaleString("zh-CN",{minimumFractionDigits:d,maximumFractionDigits:d})}
+function pct(v){return v===null||v===undefined||!Number.isFinite(Number(v))?"--":(Number(v)>=0?"+":"")+(Number(v)*100).toFixed(2)+"%"}
+function fmtTime(sec,m=st.market){return sec?new Date(Number(sec)*1000).toLocaleString("zh-CN",{timeZone:TZ[m],hour12:false,month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"--"}
+function eventTime(x){const raw=x.created_at||x.observed_at||x.derived_at||x.at;return raw?new Date(raw).toLocaleTimeString("zh-CN",{timeZone:TZ[st.market],hour12:false}):"--"}
+async function get(url){const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status+" "+url);return r.json()}
+function mark(id,value){el(id).textContent=value}
+function showMarket(m){
+ st.market=m;
+ document.querySelectorAll("[data-market]").forEach(x=>x.classList.toggle("selected",x.dataset.market===m));
+ renderDetail(null);renderSelected();
+ if(!st.paused)refreshSelected();
+}
+document.querySelectorAll("[data-market]").forEach(x=>x.addEventListener("click",()=>showMarket(x.dataset.market)));
+el("pause").addEventListener("click",()=>{st.paused=!st.paused;el("pause").textContent=st.paused?"继续实时刷新":"暂停画面";if(!st.paused)refreshAll()});
+el("refresh").addEventListener("click",()=>refreshAll(true));
+function marketCard(m){
+ const x=st.live[m];if(!x)return;
+ const phase=x.session_phase||"--",age=Number(x.freshness_seconds);
+ mark(m+"-phase",phase);
+ if(!x.available){mark(m+"-summary","当前尚无可验证实时观测");mark(m+"-age","未获取到实时数据");return}
+ const rows=(x.instruments||[]).slice(0,3).map(y=>y.name+"  "+number(y.close)+"  "+pct(y.change_pct));
+ mark(m+"-summary",rows.join("\n")||"当前未返回有效资产");
+ const stale=phase==="OPEN"&&Number.isFinite(age)&&age>300;
+ mark(m+"-age","来源："+(x.provider||"--")+" · 数据延迟："+(Number.isFinite(age)?Math.floor(age)+"秒":"--"));
+ el(m+"-age").classList.toggle("bad",stale);
+}
+function rowCell(tr,text,cls){
+ const td=document.createElement("td");td.textContent=text;if(cls)td.className=cls;tr.appendChild(td)
+}
+function renderSelected(){
+ const m=st.market,x=st.live[m],a=st.activity[m]||{};
+ mark("chartTitle",({US:"美股",CN:"A股",HK:"港股"}[m])+" · 市场实时观测");
+ mark("provider",x&&x.provider?"行情来源："+x.provider:"来源待确认");
+ mark("sourceTime",x&&x.available?fmtTime(x.source_latest_ts,m):"--");
+ mark("freshness",x&&x.available&&Number.isFinite(Number(x.freshness_seconds))?Math.floor(x.freshness_seconds)+"秒":"--");
+ mark("decisionCount",a.decision_state&&a.decision_state.decision_count!==undefined?String(a.decision_state.decision_count):"--");
+ const tbody=el("instruments");tbody.replaceChildren();
+ const instruments=x&&x.available?x.instruments||[]:[];
+ mark("assetCount",instruments.length+" 个资产");
+ if(!instruments.length){const tr=document.createElement("tr");rowCell(tr,"尚无有效行情");tbody.appendChild(tr)}
+ else for(const row of instruments){
+   const tr=document.createElement("tr");
+   rowCell(tr,row.name||row.symbol||"--");
+   rowCell(tr,number(row.close,4),"num");
+   rowCell(tr,number(row.previous_close,4),"num");
+   const v=row.change_pct;
+   rowCell(tr,pct(v),"num "+(v===null||v===undefined?"":Number(v)>=0?"positive":"negative"));
+   rowCell(tr,row.volume===null||row.volume===undefined?"--":number(row.volume,0),"num");
+   tbody.appendChild(tr);
+ }
+ drawHistory();
+ renderEvents();
+}
+function drawHistory(){
+ const c=el("plot"),ctx=c.getContext("2d"),rect=c.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+ c.width=Math.max(2,Math.round(rect.width*dpr));c.height=Math.round(255*dpr);
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+ const w=rect.width,h=255,pad={l:65,r:14,t:18,b:33};
+ ctx.clearRect(0,0,w,h);ctx.strokeStyle="#31465d";ctx.fillStyle="#a6bdd5";ctx.font="11px Segoe UI";
+ for(let i=0;i<5;i++){const y=pad.t+i*(h-pad.t-pad.b)/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke()}
+ const obs=st.history[st.market]||[],latest=st.live[st.market]||{};
+ const first=latest.instruments&&latest.instruments[0];
+ const sym=first&&first.symbol;
+ const points=obs.map(row=>{
+   const v=(row.latest||{})[sym]||{};
+   return {x:Number(row.source_latest_ts),y:Number(v.close)}
+ }).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.y>0).sort((a,b)=>a.x-b.x);
+ const dedup=points.filter((p,i)=>i===0||p.x!==points[i-1].x);
+ if(dedup.length<2){mark("plotCaption","未有足够连续观测记录，走势图暂不绘制");return}
+ const min=Math.min(...dedup.map(p=>p.y)),max=Math.max(...dedup.map(p=>p.y)),extent=Math.max(max-min,Math.abs(max)*.001);
+ const lo=min-extent*.08,hi=max+extent*.08,tMin=dedup[0].x,tMax=dedup[dedup.length-1].x;
+ const xf=t=>pad.l+(t-tMin)/(tMax-tMin||1)*(w-pad.l-pad.r);
+ const yf=v=>pad.t+(hi-v)/(hi-lo)*(h-pad.t-pad.b);
+ for(let i=0;i<5;i++){ctx.fillText(number(hi-(hi-lo)*i/4,2),6,pad.t+i*(h-pad.t-pad.b)/4+4)}
+ ctx.beginPath();dedup.forEach((p,i)=>{if(i===0)ctx.moveTo(xf(p.x),yf(p.y));else ctx.lineTo(xf(p.x),yf(p.y))});
+ ctx.strokeStyle="#72b5f7";ctx.lineWidth=2;ctx.stroke();
+ ctx.fillText(fmtTime(tMin).slice(-8),pad.l,h-11);ctx.textAlign="right";ctx.fillText(fmtTime(tMax).slice(-8),w-pad.r,h-11);ctx.textAlign="left";
+ mark("plotCaption",(first.name||sym)+" · "+dedup.length+" 条实际记录 · 只绘制收到的数据点");
+}
+const TYPE_NAMES={
+ DATA_FETCH:"市场行情更新",STATE_TRANSITION:"市场状态变化",
+ TRANSITION_SKIPPED:"TRIAID 观察后未触发",TRANSITION_RESEARCH_DECISION:"TRIAID 盘中重算",
+ PREOPEN_BASELINE:"盘前基线",PREOPEN_BASELINE_STALE:"盘前基线待更新",
+ CLOSE_FINAL:"正式收盘决策",CLOSE_WAITING_FOR_NEW_DAILY_DATA:"等待完整收盘数据"
+};
+function renderEvents(){
+ const rows=(st.decisions[st.market]||[]).slice().reverse();
+ const activity=(st.activity[st.market]||{}).events||[];
+ const combined=rows.length?rows:activity.slice().reverse();
+ const out=el("events");out.replaceChildren();mark("eventCount",combined.length+" 条");
+ if(!combined.length){const empty=document.createElement("div");empty.className="muted";empty.textContent="尚无可验证事件，等待下一次行情或决策";out.appendChild(empty);return}
+ for(const e of combined.slice(0,80)){
+   const b=document.createElement("button");b.className="event";
+   const time=document.createElement("time"),info=document.createElement("div"),label=document.createElement("b"),desc=document.createElement("span");
+   time.textContent=eventTime(e);const name=e.event_type||e.kind||"EVENT";label.textContent=TYPE_NAMES[name]||name;
+   desc.textContent=(e.assessment&&e.assessment.reason)||e.message||("来源 "+(e.mode||"")+" · "+(e.source_latest_ts?fmtTime(e.source_latest_ts):""));
+   info.append(label,desc);b.append(time,info);
+   b.addEventListener("click",()=>{out.querySelectorAll("button").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");renderDetail(e)});
+   out.appendChild(b);
+ }
+}
+function renderDetail(e){
+ if(!e){mark("detail","选择一条事件，查看 TRIAID 当时观察到的变化、是否触发及依据。");mark("rawEvidence","--");return}
+ const assessment=e.assessment||{},d=e.decision||{},lines=[];
+ lines.push("事件："+(TYPE_NAMES[e.event_type||e.kind]||e.event_type||e.kind||""));
+ lines.push("时间："+eventTime(e));
+ if(e.mode)lines.push("行情模式："+e.mode);
+ if(e.source_latest_ts)lines.push("对应行情："+fmtTime(e.source_latest_ts));
+ if(assessment.reason)lines.push("判断原因："+assessment.reason);
+ if(assessment.score!==undefined)lines.push("状态变化分数："+number(assessment.score,4));
+ if(assessment.trigger!==undefined)lines.push("是否触发重算："+(assessment.trigger?"是":"否"));
+ if(assessment.confirmed_state_change!==undefined)lines.push("状态变化是否确认："+(assessment.confirmed_state_change?"已确认":"未确认"));
+ if(d.transition_regime)lines.push("TRIAID 判断的状态："+d.transition_regime);
+ if(d.allocation_change_recommended!==undefined)lines.push("是否提出调权建议："+(d.allocation_change_recommended?"是":"否"));
+ if(d.weight_change_l1_vs_reference!==undefined)lines.push("权重变化量："+number(d.weight_change_l1_vs_reference,4));
+ if(d.weights_before)lines.push("干预前权重："+Object.entries(d.weights_before).map(x=>x[0]+" "+pct(x[1])).join("、"));
+ if(d.weights_after)lines.push("干预后权重："+Object.entries(d.weights_after).map(x=>x[0]+" "+pct(x[1])).join("、"));
+ if(lines.length<4&&e.message)lines.push("事件说明："+e.message);
+ mark("detail",lines.join("\n"));mark("rawEvidence",JSON.stringify(e,null,2));
+}
+async function refreshSelected(){
+ const m=st.market;
+ try{
+   const [activity,decisions]=await Promise.all([
+     get("/api/market-data/activity/"+m+"?limit=80"),
+     get("/api/decision-scheduler/events?market_id="+m+"&limit=80")
+   ]);
+   st.activity[m]=activity;st.decisions[m]=decisions;
+   const x=st.live[m]||{},ts=x.source_latest_ts;
+   if(ts&&st.lastHistTs[m]!==ts){
+     st.history[m]=await get("/api/market-data/observations?market_id="+m+"&mode=REALTIME&limit=120");
+     st.lastHistTs[m]=ts;
+   }
+   renderSelected();
+ }catch(err){mark("connection","本地数据接口异常："+err.message);el("connection").className="pill bad"}
+}
+async function refreshAll(force){
+ if(st.paused&&!force||st.busy)return;
+ const frame=window.frameElement;if(frame&&frame.hidden&&!force)return;
+ st.busy=true;
+ try{
+   const values=await Promise.allSettled(MARKETS.map(m=>get("/api/market-data/live-indicators/"+m)));
+   values.forEach((v,i)=>{if(v.status==="fulfilled"){st.live[MARKETS[i]]=v.value;marketCard(MARKETS[i])}});
+   mark("connection",values.every(v=>v.status==="fulfilled")?"本地接口正常":"部分市场接口异常");
+   el("connection").className="pill "+(values.every(v=>v.status==="fulfilled")?"good":"warn");
+   await refreshSelected();
+ }finally{st.busy=false}
+}
+window.addEventListener("resize",()=>drawHistory());
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshAll()});
+refreshAll(true);setInterval(()=>{if(!document.hidden)refreshAll()},5000);
+})();
+</script>
+</body>
+</html>
