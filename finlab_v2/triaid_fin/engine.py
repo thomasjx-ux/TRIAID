@@ -89,7 +89,7 @@ class EvolutionLabEngine:
         self.risk_control=CrossMarketRiskControlExperiment(self.store)
         self.daily_report=DailyReportModule(
             market_ids_provider=market_ids,
-            all_runs_provider=self.all_runs,
+            all_runs_provider=self.global_runs,
             review=self.review,
             store=self.store,
             market_section_providers={
@@ -637,7 +637,18 @@ class EvolutionLabEngine:
             recovery_decision=None
             us_return_outcome=None
             hk_return_outcome=None
-            if market_id=="CN":
+            global_route_account=(
+                account_id=="GLOBAL"
+                and strategy_pool_id=="GLOBAL"
+            )
+            snapshot.metadata["global_route_account"]=global_route_account
+            if not global_route_account:
+                snapshot.metadata["experiment_mode"]="ACCOUNT_STRATEGY_POOL"
+                snapshot.metadata["experiment_design"]="Account-scoped strategy-pool research. It consumes shared market data but cannot mutate global route ledgers, lifecycle evidence, or primary-market reports."
+                snapshot.metadata["market_route"]="ACCOUNT_SCOPED_RESEARCH"
+                snapshot.metadata["primary_route_revision"]="ACCOUNT_SCOPED"
+                snapshot.metadata["account_isolation"]="GLOBAL_ROUTE_LEDGER_WRITE_BLOCKED"
+            elif market_id=="CN":
                 if evidence_eligible and daily_bar_complete:
                     recovery_outcome=self.recovery_wave_ledger.record_outcome(
                         market_id,
@@ -721,7 +732,8 @@ class EvolutionLabEngine:
                 snapshot.metadata["experiment_design"]="Use the HK return-first strategy population and TRIAID Core as the frozen decision source, expand it into HK ETF exposures, and validate HK-only realized return, execution capacity and costs under four HKD capital sleeves. The route remains research-only and produces no broker orders."
                 snapshot.metadata["market_route"]="HK_RETURN_MAXIMIZATION"
                 snapshot.metadata["hk_tradable_universe"]=list(MARKETS["HK"].assets)
-            snapshot.metadata["primary_route_revision"]=self.architecture_version
+            if global_route_account:
+                snapshot.metadata["primary_route_revision"]=self.architecture_version
             snapshot.metadata["strategy_window_weights"]=list(profile.window_weights)
 
             current_experiment=snapshot.metadata.get("experiment_mode")
@@ -731,7 +743,11 @@ class EvolutionLabEngine:
                 and r.market.market_id.upper()==market_id
                 and r.market.snapshot_id==snapshot.snapshot_id
                 and r.market.metadata.get("experiment_mode")==current_experiment
-                and str((r.market.metadata or {}).get("primary_route_revision") or "")==self.architecture_version
+                and str(r.account_id or "GLOBAL")==account_id
+                and str(r.strategy_pool_id or "GLOBAL")==strategy_pool_id
+                and str((r.market.metadata or {}).get("primary_route_revision") or "")==(
+                    self.architecture_version if global_route_account else "ACCOUNT_SCOPED"
+                )
                 and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
                 and r.strategy_group is not None
                 and r.triaid_decision is not None
@@ -770,7 +786,7 @@ class EvolutionLabEngine:
                     )
                 us_route_bootstrap=None
                 hk_route_bootstrap=None
-                if market_id=="US":
+                if global_route_account and market_id=="US":
                     us_route_bootstrap=self.us_return_max_ledger.by_snapshot(
                         snapshot.snapshot_id,
                         self.us_return_max.version,
@@ -791,7 +807,7 @@ class EvolutionLabEngine:
                         )
                     snapshot.metadata["us_return_max_decision_id"]=us_route_bootstrap.get("decision_id")
                     snapshot.metadata["us_return_max_decision_hash"]=us_route_bootstrap.get("decision_hash")
-                elif market_id=="HK":
+                elif global_route_account and market_id=="HK":
                     hk_route_bootstrap=self.hk_return_max_ledger.by_snapshot(
                         snapshot.snapshot_id,
                         self.hk_return_max.version,
@@ -842,7 +858,7 @@ class EvolutionLabEngine:
 
             resolved=[]
             prospective_observation=None
-            if evidence_eligible and daily_bar_complete:
+            if evidence_eligible and daily_bar_complete and global_route_account:
                 resolved=self._resolve_previous_period(
                     market_id,
                     prepared["previous_as_of"],
@@ -853,7 +869,7 @@ class EvolutionLabEngine:
                         prepared["latest_as_of"],
                         prepared["realized_returns_from_previous_period"],
                     )
-            if evidence_eligible:
+            if evidence_eligible and global_route_account:
                 states=self.population_state.apply(
                     market_id,
                     prepared["strategy_states"],
@@ -903,7 +919,7 @@ class EvolutionLabEngine:
             self.execute(run_id,request)
             us_route_decision=None
             hk_route_decision=None
-            if market_id=="US" and evidence_eligible:
+            if global_route_account and market_id=="US" and evidence_eligible:
                 completed_run=self.get_run(run_id)
                 us_route_decision=self.us_return_max_ledger.by_snapshot(
                     snapshot.snapshot_id,
@@ -925,7 +941,7 @@ class EvolutionLabEngine:
                     )
                 snapshot.metadata["us_return_max_decision_id"]=us_route_decision.get("decision_id")
                 snapshot.metadata["us_return_max_decision_hash"]=us_route_decision.get("decision_hash")
-            elif market_id=="HK" and evidence_eligible:
+            elif global_route_account and market_id=="HK" and evidence_eligible:
                 completed_run=self.get_run(run_id)
                 hk_route_decision=self.hk_return_max_ledger.by_snapshot(
                     snapshot.snapshot_id,
@@ -1170,6 +1186,10 @@ class EvolutionLabEngine:
         rows=[
             r for r in self.all_runs()
             if r.market.market_id.upper()==market_id
+            and (not primary_only or (
+                str(r.account_id or "GLOBAL")=="GLOBAL"
+                and str(r.strategy_pool_id or "GLOBAL")=="GLOBAL"
+            ))
             and r.strategy_group is not None
             and r.triaid_decision is not None
             and r.status in {"DECISION_READY_AWAITING_OUTCOME","VERIFIED"}
@@ -1411,6 +1431,13 @@ class EvolutionLabEngine:
         with self._lock:
             return sorted(self._runs.values(),key=lambda r:r.created_at)
 
+    def global_runs(self)->List[RunRecord]:
+        return [
+            r for r in self.all_runs()
+            if str(r.account_id or "GLOBAL")=="GLOBAL"
+            and str(r.strategy_pool_id or "GLOBAL")=="GLOBAL"
+        ]
+
     def latest_run(
         self,
         market_id:str|None=None,
@@ -1620,7 +1647,7 @@ class EvolutionLabEngine:
         return self.daily_report.all_markets(compact=compact)
 
     def curves(self,market_id:str|None=None)->List[dict]:
-        rows=self.all_runs()
+        rows=self.global_runs()
         if market_id:
             rows=[r for r in rows if r.market.market_id.upper()==market_id.upper()]
         return self.review.curves(rows)
