@@ -1380,12 +1380,17 @@ def finish(mode:str,rows:list[dict])->int:
     # filename; this is bounded and does not print complete domain payloads.
     for row in failed:
         detail=row.get("detail")
-        if isinstance(detail,dict):
+        source=detail if isinstance(detail,dict) else row
+        if isinstance(source,dict) and (
+            source.get("returncode") is not None
+            or source.get("stderr_tail")
+            or source.get("stdout_tail")
+        ):
             compact={
                 "name":row.get("name"),
-                "returncode":detail.get("returncode"),
-                "stdout_tail":detail.get("stdout_tail"),
-                "stderr_tail":detail.get("stderr_tail"),
+                "returncode":source.get("returncode"),
+                "stdout_tail":source.get("stdout_tail"),
+                "stderr_tail":source.get("stderr_tail"),
             }
             print("TRIAID_RELEASE_AUDIT_FAILED_DETAIL",json.dumps(compact,ensure_ascii=False),flush=True)
     print(
