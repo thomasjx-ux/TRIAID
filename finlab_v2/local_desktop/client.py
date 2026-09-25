@@ -30,7 +30,7 @@ def is_our_server() -> bool:
                 data.get("service") == "TRIAID_FIN_LOCAL"
                 and secrets.compare_digest(data.get("proof", ""), ping_proof())
             )
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, TypeError):
         return False
 
 
