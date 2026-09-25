@@ -12,7 +12,7 @@ class ReadThroughProjectionCache:
     are cached; errors never become a successful stale answer.
     """
 
-    version="read-through-projection-cache@1.0.0"
+    version="read-through-projection-cache@1.1.0"
 
     def __init__(self,max_entries:int=48)->None:
         self.max_entries=max(1,int(max_entries))
@@ -25,7 +25,7 @@ class ReadThroughProjectionCache:
         with self._guard:
             entry=self._entries.get(key)
             if not force and entry and monotonic()-entry[0]<ttl:
-                return deepcopy(entry[1]),True
+                return dict(entry[1]),True
             singleflight=self._locks.setdefault(key,Lock())
 
         # Requests for unrelated markets do not block one another.
@@ -33,11 +33,15 @@ class ReadThroughProjectionCache:
             with self._guard:
                 entry=self._entries.get(key)
                 if not force and entry and monotonic()-entry[0]<ttl:
-                    return deepcopy(entry[1]),True
+                    return dict(entry[1]),True
             result=build()
             integrity=(result.get("integrity") or {}) if isinstance(result,dict) else {}
             if integrity.get("passed") is True:
                 with self._guard:
+                    # Store one immutable snapshot copy, then return only a
+                    # shallow top-level copy on hits. UI routes mutate only
+                    # top-level metadata (for example read_cache), so repeated
+                    # deep copies of large projections are unnecessary.
                     self._entries[key]=(monotonic(),deepcopy(result))
                     if len(self._entries)>self.max_entries:
                         oldest=min(self._entries,key=lambda k:self._entries[k][0])
