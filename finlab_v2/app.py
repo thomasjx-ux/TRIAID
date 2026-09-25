@@ -3522,9 +3522,8 @@ async function refreshLiveWindows(){
    el('scheduleMeta').textContent='Market-page projection error: '+e.message;
   }
  }
- jsonCached('/api/market-data/strategy-context/'+m,60000)
-   .then(ctx=>{strategyMarketContext[m]=ctx;})
-   .catch(()=>{});
+ // Enrichment is requested after the formal page is rendered, not on every
+ // five-second live tick. Its own TTL is independent of live data freshness.
 }
 function renderUSIntradayState(live,events,schedulerState){
  const panel=el('usrmIntradayPanel');
@@ -3596,9 +3595,11 @@ function onMarketChange(){
  const seq=++marketSwitchSeq;
  applyMarketScope();
  renderMarketIdentity();
+ applyHomeBrief(el('market').value);
  requestAnimationFrame(()=>{
    if(seq!==marketSwitchSeq)return;
    refreshAll(true);
+   lastLiveRefreshAt[el('market').value]=Date.now();
    refreshLiveWindows();
  });
 }
@@ -3620,7 +3621,7 @@ async function pollRun(id,market){
    if(!['CREATED','FETCHING_DATA'].includes(x.status)){
     if(x.status==='PREVIEW_READY')previewRunIds[market]=id;
     clearMarketCache(market);
-    await refreshAll();
+    await refreshAll(false,true);
     return;
    }
   }catch(e){}
@@ -4491,15 +4492,20 @@ function humanCoreVersion(version){
  return s.replace(/^triaid-core-/i,'TRIAID Core · ');
 }
 function setStatusNote(id,zh,en){if(el(id))el(id).textContent=lang==='zh'?zh:en}
-async function refreshAll(preferStale=false){
+async function refreshAll(preferStale=false,forceServer=false){
  const m=el('market').value;
+ if(fullRequestPending[m]&&!forceServer)return;
  const seq=++refreshSeq;
+ fullRequestPending[m]=seq;
+ fullLastAttemptAt[m]=Date.now();
  const previewId=previewRunIds[m];
  try{
   const marketGet=preferStale?jsonCachedStale:jsonCached;
-  const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'');
+  const projectionUrl='/api/ui/market-page/'+m+'?lang='+lang+(previewId?'&run_id='+encodeURIComponent(previewId):'')+(forceServer?'&refresh=true':'');
   const page=await marketGet(projectionUrl,30000);
   if(seq!==refreshSeq||el('market').value!==m)return;
+  fullLoadedAt[m]=Date.now();
+  fullLoadedRunIds[m]=((page.sections?.strategies?.data||[]).find(x=>x.run_id)||{}).run_id||null;
   refreshValidationSummary(m,seq).catch(()=>null);
   const sections=page.sections||{};
   const s=page.core||{};
@@ -4743,7 +4749,12 @@ async function refreshAll(preferStale=false){
   el('runStatus').textContent=previewRun
     ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
     : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
- }catch(e){el('runStatus').textContent='UI data error: '+e.message;}
+  refreshStrategyContextIfDue(m);
+ }catch(e){
+  if(seq===refreshSeq&&el('market').value===m)el('runStatus').textContent='UI data error: '+e.message;
+ }finally{
+  if(fullRequestPending[m]===seq)delete fullRequestPending[m];
+ }
 }
 async function refreshRiskPanels(){
  try{
