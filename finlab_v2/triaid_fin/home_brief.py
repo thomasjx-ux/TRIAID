@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .market_registry import MARKET_REGISTRY
+from .market_registry import MARKET_REGISTRY, market_ids
 from .ui_ports import MarketPageReadPort, UiReadServices
 
 
@@ -25,14 +25,14 @@ class HomeBriefProjection:
             self.services=UiReadServices(services).market_page
 
     def full(self)->dict:
-        market_ids=tuple(MARKET_REGISTRY.market_ids)
+        enabled_markets=market_ids()
         # One in-memory history scan for all markets, not one expensive report
         # or one separate historical storage query per market.
         runs=self.services.all_runs()
         evaluated={}
         for run in runs:
             market=str(run.market.market_id).upper()
-            if market not in market_ids or run.evaluation is None:
+            if market not in enabled_markets or run.evaluation is None:
                 continue
             metadata=run.market.metadata or {}
             primary=str(MARKET_REGISTRY.get(market).metadata.get("primary_experiment_mode") or "").upper()
@@ -48,7 +48,7 @@ class HomeBriefProjection:
 
         markets={}
         errors=[]
-        for market in market_ids:
+        for market in enabled_markets:
             try:
                 spec=MARKET_REGISTRY.get(market)
                 run=self.services.latest_decision_run(market)
@@ -111,7 +111,7 @@ class HomeBriefProjection:
         return {
             "version":self.version,
             "generated_at_utc":datetime.now(timezone.utc).isoformat(),
-            "market_count":len(market_ids),
+            "market_count":len(enabled_markets),
             "markets":markets,
             "integrity":{
                 "passed":not errors,
