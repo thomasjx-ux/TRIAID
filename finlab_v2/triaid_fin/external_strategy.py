@@ -206,9 +206,12 @@ class ExternalStrategyModule:
             or existing.strategy_pool_id!=spec.strategy_pool_id
         ):
             raise ValueError("strategy_id already bound to another account/pool")
-        # Fail-safe default: a new or re-bound strategy never becomes active by registration.
+        # Registration never changes isolation state. New strategies always
+        # start in QUARANTINE; existing strategies preserve their current state.
         if existing is None:
             spec=spec.model_copy(update={"isolation_state":"QUARANTINE"})
+        else:
+            spec=spec.model_copy(update={"isolation_state":existing.isolation_state})
         self._specs[sid]=spec
         self._register_definition(spec)
         self._persist()
