@@ -206,10 +206,12 @@ class TraderShadowModule:
         return account,pool
 
     def _available_ids(self,market_id:str,account:AccountProfile,pool:StrategyPoolSpec)->tuple[str,...]:
-        internal=strategy_ids_for_market(
+        candidates=strategy_ids_for_market(market_id)
+        internal=self.account_registry.resolve_strategy_ids(
             market_id,
+            candidates,
             account_id=account.account_id,
-            strategy_pool_id=pool.pool_id,
+            pool_id=pool.pool_id,
         )
         external=self.external_strategies.strategy_ids_for_account(
             market_id,
