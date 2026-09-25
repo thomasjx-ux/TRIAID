@@ -547,6 +547,12 @@ def system_interfaces()->dict:
             "runtime_journal":runtime_services.journal.version,
             "ui_read_services":UiReadServices.version,
         },
+        "strategy_source_modules":{
+            "external_strategy":engine.external_strategies.version,
+            "isolation_rule":"QUARANTINE_AND_SHADOW_NEVER_RECEIVE_CAPITAL",
+            "fault_isolation":"PROVIDER_ACCOUNT_POOL_SCOPED",
+            "feedback":"IMMEDIATE_OPERATION_RECEIPT_PLUS_EVENT_JOURNAL",
+        },
         "report_modules":{
             "daily_report":engine.daily_report.version,
             "coverage_rule":"MARKET_REGISTRY_DRIVEN_NO_SILENT_OMISSION",
