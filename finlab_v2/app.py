@@ -667,6 +667,7 @@ def ui_market_page(
                 lambda:market_page_projection.full(market,lang,None),
                 ttl_seconds=120,
                 force=refresh,
+                copy_mode="shallow_top",
             )
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
@@ -707,6 +708,7 @@ def ui_validation_summary(market_id:str=Query(default="US"))->dict:
             ("validation-summary",market),
             lambda:validation_summary_projection.full(market),
             ttl_seconds=15,
+            copy_mode="shallow_top",
         )
         return payload
     except KeyError as exc:
@@ -719,6 +721,7 @@ def ui_risk_center()->dict:
         ("risk-center",),
         risk_center_projection.full,
         ttl_seconds=15,
+        copy_mode="shallow_top",
     )
     if not (payload.get("integrity") or {}).get("passed"):
         return JSONResponse(status_code=503,content=payload)
