@@ -7,6 +7,7 @@ from .contracts import RunRecord
 from .capital_capacity import CAPITAL_SLEEVES_CNY
 from .us_return_max import USD_CAPITAL_SLEEVES
 from .hk_return_max import HKD_CAPITAL_SLEEVES
+from .market_registry import MARKET_REGISTRY
 
 
 class ReviewModule:
@@ -23,8 +24,11 @@ class ReviewModule:
 
     @staticmethod
     def _primary_mode(market_id:str)->str:
-        market_id=str(market_id).upper()
-        return "CN_RETURN_MAX_CAPACITY" if market_id=="CN" else "US_RETURN_MAX_CAPACITY" if market_id=="US" else "HK_RETURN_MAX_CAPACITY" if market_id=="HK" else ""
+        try:
+            spec=MARKET_REGISTRY.get(str(market_id))
+        except KeyError:
+            return ""
+        return str((spec.metadata or {}).get("primary_experiment_mode") or "").upper()
 
     @classmethod
     def _primary_route(cls,run:RunRecord)->bool:
