@@ -31,6 +31,7 @@ BUILD_CASES=[
     "preopen_baseline_freshness_smoke.py",
     "n_market_multi_account_smoke.py",
     "external_strategy_module_smoke.py",
+    "homepage_swr_cache_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -202,6 +203,7 @@ def structural_checks()->list[dict]:
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
+    projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
     trader_shadow=(ROOT/"triaid_fin"/"trader_shadow.py").read_text(encoding="utf-8")
@@ -371,6 +373,17 @@ def structural_checks()->list[dict]:
         and '@router.post("/custom-strategies")' in trader_shadow_api
         and '@router.post("/custom-strategies/observe")' in trader_shadow_api
         and '"strategy_interface_catalog"' in engine,
+        None,
+    )
+    check(
+        "homepage_market_projection_uses_swr_fastpath",
+        "def _schedule_market_page_refresh" in app
+        and "STALE_WHILE_REVALIDATE" in app
+        and "ui_projection_cache.peek" in app
+        and "ui_projection_cache.refresh" in app
+        and "soft_ttl_seconds" in app
+        and "def peek" in projection_cache
+        and "def refresh" in projection_cache,
         None,
     )
     check(
