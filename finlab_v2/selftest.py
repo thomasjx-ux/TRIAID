@@ -37,7 +37,7 @@ try:
 
     assert engine.status()["strategy_registry_count"]==33
     assert engine.status()["architecture_version"]=="fin-evolution-lab@0.14.0"
-    assert engine.module_manifest["objective_constitution"]=="fin-objective-constitution@0.1.0"
+    assert engine.module_manifest["objective_constitution"]=="fin-objective-constitution@0.2.0"
     assert engine.status()["markets"]==["US","CN","HK"]
     assert engine.module_manifest["strategy_rules_HK"].startswith("strategy-rules-hk@")
     assert engine.primary_experiment_mode("HK")=="HK_RETURN_MAX_CAPACITY"
