@@ -3480,7 +3480,7 @@ function setPulse(id,on,warn=false){
 }
 async function refreshLiveWindows(){
  const m=el('market').value;
- if(liveRequestPending[m])return;
+ if(liveRequestPending[m]&&liveRequestPending[m]===liveSeq)return;
  const seq=++liveSeq;
  liveRequestPending[m]=seq;
  try{
@@ -4505,7 +4505,7 @@ function humanCoreVersion(version){
 function setStatusNote(id,zh,en){if(el(id))el(id).textContent=lang==='zh'?zh:en}
 async function refreshAll(preferStale=false,forceServer=false){
  const m=el('market').value;
- if(fullRequestPending[m]&&!forceServer)return;
+ if(fullRequestPending[m]&&!forceServer&&fullRequestPending[m]===refreshSeq)return;
  const seq=++refreshSeq;
  fullRequestPending[m]=seq;
  fullLastAttemptAt[m]=Date.now();
