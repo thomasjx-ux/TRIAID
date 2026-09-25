@@ -16,6 +16,7 @@ from .core import TriaidCoreModule
 from .evaluation import EvaluationModule
 from .execution_calibration import ExecutionCalibration
 from .evolution import EvolutionModule
+from .external_strategy import ExternalStrategyModule
 from .market_registry import MARKET_REGISTRY, evidence_market_ids, market_ids, normalize_market_id
 from .market_lab import MARKETS, market_data_auction_shadow_probe, market_data_capabilities, market_data_instrument_series, market_data_latest_quotes, market_data_product_capabilities, market_data_provider_status, market_data_snapshot, market_data_status, prepare_live_market, refresh_market_data, strategy_market_context
 from .long_cycle_hypothesis import LongCycleHypothesisExperiment
@@ -59,6 +60,11 @@ class EvolutionLabEngine:
         self.evolution=EvolutionModule(self.store)
         self.strategy_evolution=StrategyEvolutionModule(self.store)
         self.strategy_population=StrategyPopulationModule()
+        self.external_strategies=ExternalStrategyModule(
+            self.store,
+            self.strategy_population,
+            self.account_registry,
+        )
         self.policy_triage=PolicyTriageModule()
         self._apply_strategy_profiles()
         self.population_state=PopulationStateTracker(self.store,self.strategy_population)
@@ -167,6 +173,21 @@ class EvolutionLabEngine:
         row=register_account(account,replace=True,persist=True)
         return row.model_dump(mode="json")
 
+    def external_strategy_status(self,account_id:str|None=None)->dict:
+        return self.external_strategies.status(account_id)
+
+    def external_strategy_feedback(self,limit:int=100,account_id:str|None=None)->list[dict]:
+        return self.external_strategies.feedback(limit,account_id)
+
+    def register_external_strategy(self,spec)->dict:
+        return self.external_strategies.register(spec)
+
+    def observe_external_strategy(self,observation)->dict:
+        return self.external_strategies.ingest(observation)
+
+    def set_external_strategy_isolation(self,strategy_id:str,target_state:str)->dict:
+        return self.external_strategies.promote(strategy_id,target_state)
+
     def refresh_core(self)->None:
         params=self.evolution.active()
         self.core=TriaidCoreModule(params)
@@ -185,6 +206,7 @@ class EvolutionLabEngine:
             "official_trading_calendar_sync":TRADING_CALENDAR_SYNC_VERSION,
             "market_observation":self.observations.version if hasattr(self,"observations") else "market-observation@0.1.0",
             "strategy_population":self.strategy_population.version,
+            "external_strategy":self.external_strategies.version,
             "policy_triage":self.policy_triage.version if hasattr(self,"policy_triage") else "policy-triage@unknown",
             "population_state":self.population_state.version if hasattr(self,"population_state") else "population-state@0.1.0",
             "strategy_evolution":self.strategy_evolution.version,
@@ -430,6 +452,7 @@ class EvolutionLabEngine:
                 previous_group=previous_group,
                 base_cost_bps=float(request.market.metadata.get("base_cost_bps",2.0) or 2.0),
                 experiment_mode=request.market.metadata.get("experiment_mode"),
+                max_weight_override=(request.account.max_strategy_weight if request.account else None),
             )
             decision=self.core.decide(request.market,group,request.strategy_states)
             policy_triage_snapshot=self.policy_triage.snapshot(
@@ -603,6 +626,8 @@ class EvolutionLabEngine:
             snapshot.metadata["strategy_pool_id"]=strategy_pool_id
             snapshot.metadata["account_capital"]=account.capital
             snapshot.metadata["account_objective"]=account.objective
+            snapshot.metadata["account_risk_budget"]=account.risk_budget
+            snapshot.metadata["account_max_strategy_weight"]=account.max_strategy_weight
 
             phase=str(snapshot.metadata.get("session_phase") or "").upper()
             daily_bar_complete=bool(snapshot.metadata.get("daily_bar_complete"))
@@ -840,6 +865,17 @@ class EvolutionLabEngine:
                     market_id,
                     prepared["strategy_states"],
                 )
+            # External/trader strategies are added only after the internal
+            # lifecycle engine runs. Their QUARANTINE/SHADOW state is controlled
+            # exclusively by ExternalStrategyModule and cannot be auto-promoted.
+            external_states=self.external_strategies.states_for_account(
+                market_id,
+                account_id,
+                strategy_pool_id,
+            )
+            states=list(states)+list(external_states)
+            snapshot.metadata["external_strategy_count"]=len(external_states)
+            snapshot.metadata["external_strategy_isolation_enforced"]=True
             request=RunRequest(
                 market=snapshot,
                 strategy_states=states,
