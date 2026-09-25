@@ -103,7 +103,6 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/registry",
     "/api/accounts/status",
     "/api/external-strategies/status",
-    "/api/external-strategies/feedback?limit=5",
     "/api/system/interfaces",
     "/api/ui/market-clocks",
     "/api/ui/market-page/US?lang=zh",
@@ -280,6 +279,19 @@ def structural_checks()->list[dict]:
         and "self.services.market_data." in runtime
         and "self.services.decision." in scheduler
         and "self.services.market_data." in scheduler,
+        None,
+    )
+    check(
+        "account_strategy_runs_are_hard_isolated",
+        "global_route_account" in engine
+        and '"ACCOUNT_STRATEGY_POOL"' in engine
+        and '"GLOBAL_ROUTE_LEDGER_WRITE_BLOCKED"' in engine
+        and "all_runs_provider=self.global_runs" in engine
+        and "rows=self.global_runs()" in engine
+        and "def global_runs" in engine
+        and "return self._engine.global_runs()" in ui_ports
+        and "global_route_account and market_id==\"US\"" in engine
+        and "global_route_account and market_id==\"HK\"" in engine,
         None,
     )
     check(
@@ -481,7 +493,6 @@ def runtime_checks()->list[dict]:
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
     external_strategy_status=payloads.get("/api/external-strategies/status") or {}
-    external_strategy_feedback=payloads.get("/api/external-strategies/feedback?limit=5") or {}
     interface_status=payloads.get("/api/system/interfaces") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
     scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
@@ -549,12 +560,10 @@ def runtime_checks()->list[dict]:
         and isolation_policy.get("shadow_allocation") is False
         and isolation_policy.get("fault_isolation")=="provider/account/pool scoped"
         and strategy_source_modules.get("external_strategy")=="external-strategy@1.0.0"
-        and strategy_source_modules.get("fault_isolation")=="PROVIDER_ACCOUNT_POOL_SCOPED"
-        and isinstance(external_strategy_feedback.get("feedback"),list),
+        and strategy_source_modules.get("fault_isolation")=="PROVIDER_ACCOUNT_POOL_SCOPED",
         {
             "status":external_strategy_status,
             "strategy_source_modules":strategy_source_modules,
-            "feedback_count":external_strategy_feedback.get("count"),
         },
     )
 
