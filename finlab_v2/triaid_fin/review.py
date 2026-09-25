@@ -11,7 +11,7 @@ from .market_registry import MARKET_REGISTRY
 
 
 class ReviewModule:
-    version="review@0.7.0"
+    version="review@0.8.0"
 
     @staticmethod
     def _evidence_eligible(run:RunRecord)->bool:
@@ -105,17 +105,53 @@ class ReviewModule:
                 -float(evaluation.baseline_contributions.get(sid,0.0))
                 for sid in ids
             }
+            realized_returns={
+                str(sid):float(value)
+                for sid,value in evaluation.strategy_realized_returns.items()
+            }
+            ranked_realized=sorted(
+                realized_returns.items(),
+                key=lambda item:item[1],
+                reverse=True,
+            )
+            best_strategy_id,best_strategy_return=(
+                ranked_realized[0] if ranked_realized else (None,None)
+            )
+            triaid_realized=float(evaluation.triaid_return or 0.0)
+            baseline_realized=float(evaluation.baseline_return or 0.0)
             payload.update({
-                "baseline_realized_return":float(evaluation.baseline_return or 0.0),
-                "triaid_realized_return":float(evaluation.triaid_return or 0.0),
+                "baseline_realized_return":baseline_realized,
+                "triaid_realized_return":triaid_realized,
                 "realized_excess_return":float(evaluation.excess_return or 0.0),
                 "trading_cost":float(evaluation.trading_cost or 0.0),
-                "strategy_realized_returns":dict(evaluation.strategy_realized_returns),
+                "strategy_realized_returns":realized_returns,
                 "contribution_deltas":dict(sorted(
                     contribution_deltas.items(),
                     key=lambda item:abs(item[1]),
                     reverse=True,
                 )),
+                "hindsight_best_strategy_id":best_strategy_id,
+                "hindsight_best_strategy_return":best_strategy_return,
+                "triaid_gap_to_hindsight_best":(
+                    best_strategy_return-triaid_realized
+                    if best_strategy_return is not None else None
+                ),
+                "baseline_gap_to_hindsight_best":(
+                    best_strategy_return-baseline_realized
+                    if best_strategy_return is not None else None
+                ),
+                "hindsight_best_baseline_weight":(
+                    float(group_weights.get(best_strategy_id,0.0))
+                    if best_strategy_id is not None else None
+                ),
+                "hindsight_best_triaid_weight":(
+                    float(triaid_weights.get(best_strategy_id,0.0))
+                    if best_strategy_id is not None else None
+                ),
+                "hindsight_semantics":(
+                    "Best realized strategy is an ex-post opportunity ceiling only; "
+                    "it was not knowable at decision time."
+                ),
             })
         return payload
 
