@@ -33,6 +33,7 @@ BUILD_CASES=[
     "external_strategy_module_smoke.py",
     "homepage_swr_cache_smoke.py",
     "economic_evolution_smoke.py",
+    "value_frontier_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -208,6 +209,7 @@ def structural_checks()->list[dict]:
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
+    value_frontier=(ROOT/"triaid_fin"/"value_frontier.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -391,6 +393,17 @@ def structural_checks()->list[dict]:
         and "soft_ttl_seconds" in app
         and "def peek" in projection_cache
         and "def refresh" in projection_cache,
+        None,
+    )
+    check(
+        "value_frontier_candidate_is_return_first_and_shadow_only",
+        "class ValueFrontierAllocator" in value_frontier
+        and "MAXIMIZE_REALIZABLE_NET_RETURN_SUBJECT_TO_HARD_CONSTRAINTS" in value_frontier
+        and "GREEDY_NET_RETURN_RANK_WITH_POSITION_CAP_AND_RISK_BUDGET" in economic_evolution
+        and "uses_frozen_t0_information_only" in economic_evolution
+        and "reads_realized_t1_to_choose_weights" in economic_evolution
+        and "SHADOW_ONLY_PENDING_PROSPECTIVE_VALIDATION" in economic_evolution
+        and '"production_core_changed": False' in economic_evolution,
         None,
     )
     check(
