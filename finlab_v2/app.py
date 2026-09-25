@@ -552,10 +552,13 @@ def system_interfaces()->dict:
         "strategy_source_modules":{
             "external_strategy":engine.external_strategies.version,
             "trader_shadow":engine.trader_shadow.version,
-            "isolation_rule":"QUARANTINE_AND_SHADOW_NEVER_RECEIVE_CAPITAL",
+            "strategy_interface_catalog":engine.trader_shadow.strategy_interfaces.version,
+            "global_allocation_rule":"ONLY_ACTIVE_EXTERNAL_STRATEGIES_CAN_RECEIVE_GLOBAL_OR_REAL_ALLOCATION",
+            "shadow_simulation_rule":"SHADOW_STRATEGIES_WITH_STANDARDIZED_STATE_MAY_RECEIVE_SIMULATED_WEIGHT_ONLY_INSIDE_TRADER_SHADOW",
             "fault_isolation":"PROVIDER_ACCOUNT_POOL_SCOPED",
             "feedback":"IMMEDIATE_OPERATION_RECEIPT_PLUS_EVENT_JOURNAL",
             "trader_shadow_policy":"ONE_SUBMISSION_GENERATES_TRADER_ASSISTED_AUTO_ROUTES_WITHOUT_GLOBAL_EVIDENCE_MUTATION",
+            "open_catalog_policy":"EXPOSE_ALL_REGISTERED_STRATEGIES_AND_REGISTERABLE_STRATEGY_INTERFACES",
         },
         "report_modules":{
             "daily_report":engine.daily_report.version,
