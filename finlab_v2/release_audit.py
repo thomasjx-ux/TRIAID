@@ -35,7 +35,7 @@ BUILD_CASES=[
     "homepage_swr_cache_smoke.py",
     "economic_evolution_smoke.py",
     "value_frontier_smoke.py",
-    "value_frontier_research_smoke.py",
+    "triaid_fin/value_frontier_shadow_v2_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -212,7 +212,7 @@ def structural_checks()->list[dict]:
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
     economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
     value_frontier=(ROOT/"triaid_fin"/"value_frontier.py").read_text(encoding="utf-8")
-    value_frontier_research=(ROOT/"triaid_fin"/"value_frontier_research.py").read_text(encoding="utf-8")
+    value_frontier_shadow_v2=(ROOT/"triaid_fin"/"value_frontier_shadow_v2.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -423,13 +423,15 @@ def structural_checks()->list[dict]:
         None,
     )
     check(
-        "value_frontier_research_is_non_mutating",
-        "class ValueFrontierResearchCore" in value_frontier_research
-        and 'mode":"RESEARCH_ONLY"' in value_frontier_research.replace(" ","")
-        and "production_mutation_allowed=False" in value_frontier_research.replace(" ","")
-        and "ValueFrontierAllocator.allocate(" in value_frontier_research
-        and "uses_frozen_t0_information_only" in value_frontier_research
-        and "reads_realized_t1_to_choose_weights" in value_frontier_research,
+        "value_frontier_shadow_v2_is_non_mutating_and_cost_aware",
+        "VERSION = \"value-frontier-shadow@0.2.0\"" in value_frontier_shadow_v2
+        and 'mode=\"SHADOW_ONLY\"' in value_frontier_shadow_v2
+        and "production_mutation: bool = False" in value_frontier_shadow_v2
+        and "frozen_t0_only: bool = True" in value_frontier_shadow_v2
+        and "reads_t1_for_allocation: bool = False" in value_frontier_shadow_v2
+        and "modeled_execution_cost" in value_frontier_shadow_v2
+        and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" in value_frontier_shadow_v2
+        and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
         None,
     )
     check(
