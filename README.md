@@ -2,6 +2,10 @@
 
 TRIAID is an open research framework for modeling dynamic states, transitions, and intervention-relevant structure in complex systems.
 
+## Constitutional objective
+
+TRIAID is governed by a cross-domain value-maximization constitution: maximize long-horizon, realizable, evidence-supported value under explicit real-world constraints. Risk and safety are constraints and protection mechanisms, not terminal objectives; non-intervention must carry an explicit opportunity-cost comparison rather than being treated as inherently safer or better. See [TRIAID_CONSTITUTION.md](TRIAID_CONSTITUTION.md).
+
 ## Independent replication challenge
 
 The frozen constructed-domain C7 replication challenge is now open in [replication/](replication/README.md).
