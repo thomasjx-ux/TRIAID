@@ -34,6 +34,8 @@ from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 from triaid_fin.projection_repository import VerifiedProjectionRepository
 from triaid_fin.outcome_resolver import OutcomeResolver
 from triaid_fin.validation_projection import ValidationSummaryProjection
+from triaid_fin.home_brief import HomeBriefProjection
+from triaid_fin.projection_cache import ReadThroughProjectionCache
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -55,6 +57,8 @@ market_page_projection=MarketPageProjection(
 )
 risk_center_projection=RiskCenterProjection(ui_read_services.risk)
 validation_summary_projection=ValidationSummaryProjection(outcome_resolver)
+home_brief_projection=HomeBriefProjection(ui_read_services.market_page)
+ui_projection_cache=ReadThroughProjectionCache()
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -620,6 +624,12 @@ def experiment_outcome_latest(market_id:str)->dict:
     }
 
 
+@app.get("/api/ui/home-brief")
+def ui_home_brief()->dict:
+    """Small, read-only first-paint payload; never resolves or publishes evidence."""
+    return home_brief_projection.full()
+
+
 @app.get("/api/ui/core")
 def ui_core_status()->dict:
     return {
@@ -631,17 +641,46 @@ def ui_core_status()->dict:
 @app.get("/api/ui/market-page/{market_id}")
 def ui_market_page(
     market_id:str,
+    background_tasks:BackgroundTasks,
     lang:str=Query(default="zh",pattern="^(zh|en)$"),
     run_id:str|None=None,
+    refresh:bool=Query(default=False),
 )->dict:
     try:
-        payload=market_page_projection.full(market_id,lang,run_id)
+        market=normalize_market_id(market_id)
+        if run_id:
+            # Never cache manual previews as formal market-page evidence.
+            payload=market_page_projection.full(market,lang,run_id)
+            cache_hit=False
+        else:
+            # Changing a frozen run bypasses the old cache immediately. Live
+            # prices still use the independent uncached /live read model.
+            latest=engine.latest_decision_run(market)
+            fingerprint=(
+                latest.run_id,
+                latest.status,
+                latest.evaluation.status if latest.evaluation else None,
+            ) if latest else ("NO_FORMAL_RUN",)
+            key=("market-page",market,lang,fingerprint)
+            payload,cache_hit=ui_projection_cache.read(
+                key,
+                lambda:market_page_projection.full(market,lang,None),
+                ttl_seconds=25,
+                force=refresh,
+            )
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
-        try:
-            outcome_resolver.resolve_market(payload.get("market_id") or market_id)
-        except Exception:
-            pass
+        if not cache_hit and not run_id:
+            # Outcome resolution is idempotent and belongs off the page
+            # response critical path. The separate validation endpoint also
+            # resolves any pending outcomes independently.
+            background_tasks.add_task(outcome_resolver.resolve_market,market)
+        payload["read_cache"]={
+            "hit":cache_hit,
+            "ttl_seconds":25 if not run_id else 0,
+            "live_read_model_separate":True,
+            "formal_evidence_date":((payload.get("sections") or {}).get("daily") or {}).get("as_of"),
+        }
         return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
