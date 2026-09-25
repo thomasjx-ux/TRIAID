@@ -47,7 +47,7 @@ checks={
     "intraday_without_frozen_run_is_explicit":"当日监控 · 等待收盘冻结" in app and "正式日线决策要等完整收盘数据后冻结；不是系统停止" in app,
     "intraday_candidates_not_mislabeled_frozen":"显示当前盘中候选策略群" in app and "当前候选" in app,
     "posterior_copy_requires_real_frozen_run":"当前仅盘中监控，正式决策尚未冻结。" in app and "尚无可验证的正式决策或后验结果。" in app,
-    "initial_clock_and_brief_render_without_double_full":"refreshHomeBrief()" in app and "setTimeout(()=>{if(!document.hidden)refreshAll(true)},150)" in app and "if(!hadClock)refreshAll(true)" not in app,
+    "initial_clock_and_brief_render_without_double_full":"refreshHomeBrief()" in app and "setTimeout(()=>{if(!document.hidden)refreshAll(true)},1400)" in app and "if(!hadClock)refreshAll(true)" not in app,
 }
 
 failed=[name for name,ok in checks.items() if not ok]
