@@ -32,6 +32,7 @@ BUILD_CASES=[
     "n_market_multi_account_smoke.py",
     "external_strategy_module_smoke.py",
     "homepage_swr_cache_smoke.py",
+    "economic_evolution_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -110,6 +111,9 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/system/interfaces",
     "/api/ui/market-clocks",
     "/api/ui/home-brief",
+    "/api/evolution/economic-value?market_id=US",
+    "/api/evolution/economic-value?market_id=CN",
+    "/api/evolution/economic-value?market_id=HK",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
@@ -203,6 +207,7 @@ def structural_checks()->list[dict]:
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
+    economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -386,6 +391,17 @@ def structural_checks()->list[dict]:
         and "soft_ttl_seconds" in app
         and "def peek" in projection_cache
         and "def refresh" in projection_cache,
+        None,
+    )
+    check(
+        "economic_evolution_is_read_only_and_cost_aligned",
+        "class EconomicEvolutionModule" in economic_evolution
+        and "PER_ROUTE_FULL_WEIGHT_TURNOVER_TIMES_FROZEN_BASE_COST_BPS" in economic_evolution
+        and "BEST_FIXED_SINGLE_AND_CAPPED_SINGLE_DIAGNOSTICS_NOT_BCRP_OPTIMIZER" in economic_evolution
+        and "PROSPECTIVE_SHADOW_HOLDOUT_VS_UNCHANGED_PARENT" in economic_evolution
+        and "EconomicEvolutionModule()" in daily_report
+        and 'summary["trading_analysis"]["economic_evolution"]' in daily_report
+        and '@app.get("/api/evolution/economic-value")' in app,
         None,
     )
     check(
@@ -581,6 +597,10 @@ def runtime_checks()->list[dict]:
     risk_control=payloads.get("/api/risk-control/latest") or {}
     risk_projection_payload=payloads.get("/api/ui/risk-center") or {}
     daily_report_payload=payloads.get("/api/ui/daily-report?compact=true") or {}
+    economic_payloads={
+        market:payloads.get(f"/api/evolution/economic-value?market_id={market}") or {}
+        for market in ("US","CN","HK")
+    }
     validation_payloads={
         market:payloads.get(f"/api/ui/validation-summary?market_id={market}") or {}
         for market in ("US","CN","HK")
@@ -673,6 +693,22 @@ def runtime_checks()->list[dict]:
         },
     )
 
+    for market in ("US","CN","HK"):
+        economic=economic_payloads.get(market) or {}
+        check(
+            f"{market}_economic_evolution_read_model",
+            economic.get("version")=="economic-evolution@1.0.0"
+            and economic.get("market_id")==market
+            and economic.get("objective")=="MAXIMIZE_LONG_HORIZON_REALIZABLE_NET_COMPOUND_GROWTH"
+            and economic.get("status") in {
+                "WAITING_FOR_MATCHED_FORMAL_OUTCOMES",
+                "EARLY_EVIDENCE_NOT_DECISION_GRADE",
+                "EVALUABLE_DESCRIPTIVE_EVIDENCE",
+                "COST_MODEL_UNAVAILABLE",
+                "INVALID_MODELED_NET_RETURN",
+            },
+            economic,
+        )
     for market in ("US","CN","HK"):
         validation=validation_payloads.get(market) or {}
         selected_validation=validation.get("selected_market") or {}
