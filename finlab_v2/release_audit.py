@@ -452,7 +452,7 @@ def structural_checks()->list[dict]:
         and "jsonCachedStale('/api/ui/risk-center',10000)" in app,
         None,
     )
-    refresh_start=app.find("async function refreshAll(preferStale=false)")
+    refresh_start=app.find("async function refreshAll(preferStale=false,forceServer=false)")
     refresh_block=app[refresh_start:refresh_start+18000] if refresh_start>=0 else ""
     check(
         "market_page_frontend_no_legacy_multi_api_fanout",
@@ -1376,6 +1376,18 @@ def finish(mode:str,rows:list[dict])->int:
         "completed_at_unix":time.time(),
     }
     write_receipt(receipt)
+    # CI must identify the exact failing smoke instead of only listing its
+    # filename; this is bounded and does not print complete domain payloads.
+    for row in failed:
+        detail=row.get("detail")
+        if isinstance(detail,dict):
+            compact={
+                "name":row.get("name"),
+                "returncode":detail.get("returncode"),
+                "stdout_tail":detail.get("stdout_tail"),
+                "stderr_tail":detail.get("stderr_tail"),
+            }
+            print("TRIAID_RELEASE_AUDIT_FAILED_DETAIL",json.dumps(compact,ensure_ascii=False),flush=True)
     print(
         "TRIAID_RELEASE_AUDIT_"+("PASS" if receipt["passed"] else "FAIL"),
         json.dumps(
