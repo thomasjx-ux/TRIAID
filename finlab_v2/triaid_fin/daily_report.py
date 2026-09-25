@@ -5,6 +5,7 @@ from typing import Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from .daily_experiment_intelligence import build_cross_market_learning, build_market_intelligence
+from .economic_evolution import EconomicEvolutionModule
 from .market_registry import MARKET_REGISTRY
 from .trading_calendar import official_session_phase, trading_day_info
 
@@ -34,6 +35,7 @@ class DailyReportModule:
         self._market_ids_provider = market_ids_provider
         self._all_runs_provider = all_runs_provider
         self._review = review
+        self._economic_evolution = EconomicEvolutionModule()
         self._store = store
         self._now_provider = now_provider
         self._market_section_providers = {
@@ -393,6 +395,15 @@ class DailyReportModule:
                 timing,
                 intelligence,
             )
+            economic_evolution = self._economic_evolution.report(
+                all_rows,
+                market_key,
+                primary_mode=str(
+                    MARKET_REGISTRY.get(market_key).metadata.get("primary_experiment_mode") or ""
+                ) or None,
+            )
+            summary["economic_evolution"] = economic_evolution
+            summary["trading_analysis"]["economic_evolution"] = economic_evolution
 
         # Cross-market learning deliberately uses completed/formal cutoffs, not
         # whichever market happens to be open at request time.
