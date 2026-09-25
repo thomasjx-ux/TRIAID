@@ -1129,6 +1129,22 @@ def economic_evolution_value(market_id: str | None = None) -> dict:
     }
 
 
+@app.get("/api/evolution/value-frontier-shadow")
+def value_frontier_shadow(market_id: str | None = None) -> dict:
+    """Read-only T0 shadow comparison against the current production Core."""
+    if market_id is not None:
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404,detail=str(exc)) from exc
+        return engine.value_frontier_shadow_preview(market)
+    return {
+        "version":"value-frontier-shadow@0.2.0",
+        "markets":{market:engine.value_frontier_shadow_preview(market) for market in market_ids()},
+        "production_mutation":False,
+    }
+
+
 @app.get("/api/evolution")
 def evolution_status() -> dict:
     return engine.evolution_status()
