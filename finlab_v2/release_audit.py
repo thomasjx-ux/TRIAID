@@ -115,8 +115,11 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/market-clocks",
     "/api/ui/home-brief",
     "/api/evolution/economic-value?market_id=US",
+    "/api/evolution/value-frontier-shadow?market_id=US",
     "/api/evolution/economic-value?market_id=CN",
+    "/api/evolution/value-frontier-shadow?market_id=CN",
     "/api/evolution/economic-value?market_id=HK",
+    "/api/evolution/value-frontier-shadow?market_id=HK",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
@@ -432,6 +435,15 @@ def structural_checks()->list[dict]:
         and "modeled_execution_cost" in value_frontier_shadow_v2
         and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" in value_frontier_shadow_v2
         and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
+        None,
+    )
+    check(
+        "value_frontier_shadow_preview_is_read_only_and_api_exposed",
+        "def value_frontier_shadow_preview" in engine
+        and "allocate_shadow(" in engine
+        and '"production_mutation":False' in engine.replace(" ","")
+        and '@app.get("/api/evolution/value-frontier-shadow")' in app
+        and "engine.value_frontier_shadow_preview" in app,
         None,
     )
     check(
