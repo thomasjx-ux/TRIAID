@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from unittest.mock import patch
 
 from triaid_fin.contracts import BilingualText, StrategyGroup, StrategyState, TriaidDecision
 from triaid_fin.market_lab import MarketPanel, MarketSpec
@@ -125,7 +126,7 @@ assert tie_set==["P00_BUY_HOLD","P09_SHOCK_GUARD"]
 assert tie_winner.strategy_id=="P00_BUY_HOLD"
 
 decision=route.decide(panel,group,generic,states,"OPEN")
-assert decision["route_version"]=="us-return-max-route@0.5.0"
+assert decision["route_version"]=="us-return-max-route@0.6.0"
 assert decision["decision_status"]=="PROVISIONAL_INTRADAY"
 assert decision["objective"]=="MAXIMIZE_REALIZABLE_NET_RETURN"
 assert decision["risk_used_as_secondary_objective"] is False
@@ -157,6 +158,42 @@ assert abs(decision["return_first_population_projected_annualized_expected_net_r
 assert decision["generic_core_control_weights"]==generic.weights_after
 assert decision["projected_annualized_expected_net_return"] > decision["generic_core_projected_annualized_expected_net_return"]
 assert set(decision["target_asset_weights"]).issubset(set(spec.assets))
+assert decision["execution_target_source"]=="FULL_FROZEN_STRATEGY_MIX"
+expected_assets=route._asset_targets(
+    panel,len(panel.ts)-1,decision["target_strategy_weights"]
+)
+assert all(
+    abs(float(decision["target_asset_weights"].get(a,0.0))-float(expected_assets.get(a,0.0)))<1e-12
+    for a in spec.assets
+)
+
+# Regression: when hard cap forces a 4-member group with different underlying
+# positions, the execution sleeve must price the WHOLE frozen mix, not winner.
+forced_positions={
+    "P18_XMOM20":[1.0,0.0,0.0,0.0,0.0],
+    "P25_BALANCED":[0.0,1.0,0.0,0.0,0.0],
+    "P04_TREND50":[0.0,0.0,1.0,0.0,0.0],
+    "P00_BUY_HOLD":[0.0,0.0,0.0,1.0,0.0],
+}
+with patch("triaid_fin.us_return_max.policy_positions",return_value=forced_positions):
+    forced=route.decide(panel,group,generic,states,"OPEN")
+assert forced["selected_strategy_count"]==4
+for sid,w in forced["target_strategy_weights"].items():
+    if sid=="P28_CASH":
+        continue
+    idx=list(forced_positions).index(sid)
+    asset=spec.assets[idx]
+    assert abs(forced["target_asset_weights"].get(asset,0.0)-float(w))<1e-12
+winner_asset=spec.assets[list(forced_positions).index(forced["selected_strategy_id"])]
+assert forced["target_asset_weights"].get(winner_asset,0.0)<1.0
+for sleeve in forced["capital_capacity"]["sleeves"]:
+    capital=float(sleeve["starting_capital_usd"])
+    for product in sleeve["products"]:
+        symbol=product["symbol"]
+        assert abs(
+            float(product["target_notional_usd"])
+            -capital*float(forced["target_asset_weights"][symbol])
+        )<1e-6
 assert decision["capital_capacity"]["capital_sleeves_usd"]==[100000,1000000,10000000,100000000]
 assert decision["capital_capacity"]["base_cost_bps"]==1.5
 assert decision["capital_capacity"]["impact_coefficient_bps"]==45.0
@@ -205,6 +242,14 @@ o2=ledger.record_outcome(
 assert o2["recorded"] is True
 
 review=ledger.review_decision(frozen)
+assert review["execution_target_consistency"]=="VERIFIED_FULL_FROZEN_MIX"
+assert review["capital_sleeves"]["execution_target_consistency"]=="VERIFIED_FULL_FROZEN_MIX"
+legacy=deepcopy(frozen)
+legacy.pop("execution_target_source",None)
+legacy["route_version"]="us-return-max-route@0.5.0"
+legacy_review=ledger.review_decision(legacy)
+assert legacy_review["execution_target_consistency"]=="LEGACY_MULTI_STRATEGY_TARGET_UNVERIFIED"
+assert "comparison_caveat" in legacy_review["capital_sleeves"]
 assert review["observation_days"]==2
 expected_route_day1=sum(float(w)*strategy_day1[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
 expected_route_day2=sum(float(w)*strategy_day2[sid] for sid,w in decision["target_strategy_weights"].items() if sid!="P28_CASH")
@@ -232,7 +277,7 @@ assert small_real["total_execution_cost_usd"] < large_real["total_execution_cost
 integrity=ledger.verify_integrity()
 assert integrity["passed"] is True
 report=ledger.daily_report()
-assert report["route_version"]=="us-return-max-route@0.5.0"
+assert report["route_version"]=="us-return-max-route@0.6.0"
 assert report["integrity"]["passed"] is True
 
 print("TRIAID_US_RETURN_MAX_SMOKE_PASS")
