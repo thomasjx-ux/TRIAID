@@ -3480,7 +3480,9 @@ function setPulse(id,on,warn=false){
 }
 async function refreshLiveWindows(){
  const m=el('market').value;
+ if(liveRequestPending[m])return;
  const seq=++liveSeq;
+ liveRequestPending[m]=seq;
  try{
   const page=await jsonCached('/api/ui/market-page/'+m+'/live',2000);
   if(seq!==liveSeq||el('market').value!==m)return;
@@ -3528,6 +3530,8 @@ async function refreshLiveWindows(){
    el('indexMeta').textContent='Market-page projection error: '+e.message;
    el('scheduleMeta').textContent='Market-page projection error: '+e.message;
   }
+ }finally{
+  if(liveRequestPending[m]===seq)delete liveRequestPending[m];
  }
  // Enrichment is requested after the formal page is rendered, not on every
  // five-second live tick. Its own TTL is independent of live data freshness.
