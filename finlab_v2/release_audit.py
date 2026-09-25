@@ -287,6 +287,15 @@ def structural_checks()->list[dict]:
         None,
     )
     check(
+        "daily_report_is_market_phase_aware",
+        "_content_profile" in daily_report
+        and "MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT" in daily_report
+        and "FORMAL_COMPLETED_SESSION_CUTOFFS_ONLY" in daily_report
+        and "formal_and_live_layers_separated" in daily_report
+        and "same_clock_time_does_not_imply_same_market_maturity" in daily_report,
+        None,
+    )
+    check(
         "ui_capability_ports_present",
         "class MarketPageReadPort" in ui_ports
         and "class RiskReadPort" in ui_ports
@@ -446,6 +455,7 @@ def runtime_checks()->list[dict]:
     risk_warning=payloads.get("/api/risk-warning/latest") or {}
     risk_control=payloads.get("/api/risk-control/latest") or {}
     risk_projection_payload=payloads.get("/api/ui/risk-center") or {}
+    daily_report_payload=payloads.get("/api/ui/daily-report?compact=true") or {}
     validation_payloads={
         market:payloads.get(f"/api/ui/validation-summary?market_id={market}") or {}
         for market in ("US","CN","HK")
@@ -582,6 +592,78 @@ def runtime_checks()->list[dict]:
         for row in clock_rows if isinstance(row,dict)
     }
     check("market_clock_base_market_coverage",base_markets.issubset(set(clock_map)),sorted(clock_map))
+
+    daily_reports=daily_report_payload.get("reports") or {}
+    daily_timing=daily_report_payload.get("market_timing") or {}
+    daily_alignment=daily_report_payload.get("timing_alignment") or {}
+    daily_integrity=daily_report_payload.get("integrity") or {}
+    check(
+        "daily_report_phase_aware_contract",
+        daily_report_payload.get("version")=="daily-report@1.1.0"
+        and daily_integrity.get("passed") is True
+        and base_markets.issubset(set(daily_reports))
+        and base_markets.issubset(set(daily_timing))
+        and daily_alignment.get("cross_market_learning_basis")=="FORMAL_COMPLETED_SESSION_CUTOFFS_ONLY"
+        and daily_alignment.get("alignment_rule")=="DO_NOT_FORCE_MARKETS_IN_DIFFERENT_SESSION_PHASES_OR_LOCAL_DATES_INTO_ONE_MATURITY_STATE",
+        {
+            "version":daily_report_payload.get("version"),
+            "integrity":daily_integrity,
+            "timing_alignment":daily_alignment,
+        },
+    )
+    allowed_profiles={
+        "CALENDAR_DEGRADED",
+        "NON_TRADING_DAY_LATEST_FINAL",
+        "PREOPEN_BRIEF",
+        "LIVE_INTRADAY_UPDATE",
+        "MIDSESSION_BREAK_UPDATE",
+        "POSTCLOSE_SETTLING",
+        "FINAL_DAILY",
+        "OFF_SESSION_LATEST_FINAL",
+        "UNKNOWN_SESSION_STATE",
+    }
+    for market in sorted(base_markets):
+        report=daily_reports.get(market) or {}
+        timing=daily_timing.get(market) or {}
+        report_timing=report.get("report_timing") or {}
+        formal_date=timing.get("formal_evidence_date")
+        working_date=timing.get("working_report_date")
+        check(
+            f"{market}_daily_report_timing_contract",
+            timing.get("market_id")==market
+            and timing.get("timezone")==expected_timezones.get(market)
+            and timing.get("content_profile") in allowed_profiles
+            and bool(timing.get("data_maturity"))
+            and timing.get("timing_rule")=="MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT"
+            and report_timing==timing
+            and (report.get("report_contract") or {}).get("formal_and_live_layers_separated") is True,
+            timing,
+        )
+        check(
+            f"{market}_daily_report_formal_cutoff_not_future_of_working_date",
+            not (formal_date and working_date) or str(formal_date)<=str(working_date),
+            {"formal_evidence_date":formal_date,"working_report_date":working_date},
+        )
+        phase=str(timing.get("session_phase") or "").upper()
+        expected_profile={
+            "PREOPEN":"PREOPEN_BRIEF",
+            "OPEN":"LIVE_INTRADAY_UPDATE",
+            "BREAK":"MIDSESSION_BREAK_UPDATE",
+        }.get(phase)
+        if expected_profile:
+            check(
+                f"{market}_daily_report_active_phase_profile",
+                timing.get("content_profile")==expected_profile
+                and timing.get("working_report_is_formal") is False,
+                timing,
+            )
+        if phase=="POSTCLOSE" and not timing.get("close_finalized") and not timing.get("current_session_formal"):
+            check(
+                f"{market}_daily_report_postclose_not_prematurely_final",
+                timing.get("content_profile")=="POSTCLOSE_SETTLING"
+                and timing.get("data_maturity")=="CLOSE_PENDING",
+                timing,
+            )
     forecast_markets=volatility_forecast.get("markets") or {}
     forecast_errors=volatility_forecast.get("errors") or {}
     check(
