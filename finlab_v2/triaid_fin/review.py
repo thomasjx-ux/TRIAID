@@ -474,11 +474,97 @@ class ReviewModule:
             })
 
         capitalized=cls._capitalized_report(current,previous,change,comparison)
+        selector_weights=cls._group_weights(current)
+        triaid_weights=cls._decision_after(current)
+        overlay_ids=sorted(set(selector_weights)|set(triaid_weights))
+        overlay_rows=[]
+        for strategy_id in overlay_ids:
+            before=float(selector_weights.get(strategy_id,0.0))
+            after=float(triaid_weights.get(strategy_id,0.0))
+            overlay_rows.append({
+                "strategy_id":strategy_id,
+                "baseline_weight":before,
+                "triaid_weight":after,
+                "weight_delta":after-before,
+                "reason":cls._reason(current,strategy_id),
+            })
+        overlay_rows.sort(key=lambda row:abs(row["weight_delta"]),reverse=True)
+
+        hindsight_best_id=realized.get("hindsight_best_strategy_id")
+        hindsight_best_return=realized.get("hindsight_best_strategy_return")
+        triaid_gap_to_best=realized.get("triaid_gap_to_hindsight_best")
+        baseline_gap_to_best=realized.get("baseline_gap_to_hindsight_best")
+        decision=current.triaid_decision
+        trading_fusion={
+            "market_context":{
+                "market_id":current.market.market_id,
+                "as_of":current.market.as_of,
+                "regime":market_regime,
+                "run_status":current.status,
+                "objective":"MAXIMIZE_REALIZABLE_NET_RETURN",
+            },
+            "baseline_portfolio":{
+                "selector_weights":dict(selector_weights),
+                "selected_strategy_ids":[
+                    sid for sid,weight in selector_weights.items()
+                    if float(weight)>1e-12
+                ],
+                "state_return_estimate":(
+                    cls._weighted_state_estimate(current,selector_weights)
+                    if selector_weights else None
+                ),
+                "selection_change_vs_previous":{
+                    "added":change.get("added",[]),
+                    "removed":change.get("removed",[]),
+                    "top_weight_movements":review_points,
+                },
+            },
+            "triaid_intervention":{
+                "core_version":decision.core_version if decision else None,
+                "weights_before":dict(decision.weights_before) if decision else dict(selector_weights),
+                "weights_after":dict(decision.weights_after) if decision else dict(selector_weights),
+                "weight_deltas":overlay_rows,
+                "intervention_l1":change.get("triaid_overlay_l1_change"),
+                "intervention_changed":change.get("triaid_overlay_changed"),
+                "diagnostics":dict(decision.diagnostics) if decision else {},
+                "discipline":"TRIAID may change allocation only through the frozen decision layer; realized results are evaluated later.",
+            },
+            "trade_translation":{
+                "currency":capitalized.get("currency"),
+                "capital_sleeves":capitalized.get("capital_sleeves"),
+                "capital_rows":capitalized.get("rows"),
+                "purpose":"Translate TRIAID weight changes into actual capital reallocation, turnover, cost and P&L equivalents.",
+            },
+            "realized_profit_analysis":{
+                "status":realized.get("outcome_status"),
+                "baseline_realized_return":realized.get("baseline_realized_return"),
+                "triaid_realized_return":realized.get("triaid_realized_return"),
+                "realized_excess_return":realized_gap,
+                "trading_cost":realized.get("trading_cost"),
+                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:10],
+                "capitalized":capitalized,
+            },
+            "opportunity_cost":{
+                "hindsight_best_strategy_id":hindsight_best_id,
+                "hindsight_best_strategy_return":hindsight_best_return,
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "hindsight_best_baseline_weight":realized.get("hindsight_best_baseline_weight"),
+                "hindsight_best_triaid_weight":realized.get("hindsight_best_triaid_weight"),
+                "semantics":realized.get("hindsight_semantics"),
+            },
+            "next_trade_plan":{
+                **outlook,
+                "replacement_candidates":change.get("excluded_strategies",[])[:10],
+                "decision_rule":"Change the portfolio only when prospective net-return advantage remains after switching cost and hard feasibility constraints.",
+            },
+        }
 
         return {
             "report_type":"INVESTMENT_STRATEGY_DAILY",
             "market_id":current.market.market_id,
             "as_of":current.market.as_of,
+            "trading_fusion":trading_fusion,
             "strategy_thesis":{
                 "objective":"Maximize realizable net return subject to hard feasibility constraints.",
                 "current_leaders":leaders,
@@ -499,7 +585,11 @@ class ReviewModule:
                 "triaid_realized_return":realized.get("triaid_realized_return"),
                 "realized_excess_return":realized_gap,
                 "trading_cost":realized.get("trading_cost"),
-                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:5],
+                "hindsight_best_strategy_id":hindsight_best_id,
+                "hindsight_best_strategy_return":hindsight_best_return,
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "largest_contribution_differences":list((realized.get("contribution_deltas") or {}).items())[:10],
                 "note":"Realized performance is kept separate from model/state estimates.",
                 "capitalized":capitalized,
             },
