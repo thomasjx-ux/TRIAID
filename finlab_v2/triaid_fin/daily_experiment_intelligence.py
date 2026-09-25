@@ -7,6 +7,7 @@ from .contracts import RunRecord
 from .capital_capacity import CAPITAL_SLEEVES_CNY
 from .us_return_max import USD_CAPITAL_SLEEVES
 from .hk_return_max import HKD_CAPITAL_SLEEVES
+from .market_registry import MARKET_REGISTRY
 
 
 VERSION = "daily-experiment-intelligence@0.1.0"
@@ -22,12 +23,11 @@ def _as_float(value, default=None):
 
 
 def _primary_mode(market_id: str) -> str:
-    market = str(market_id).upper()
-    return {
-        "US": "US_RETURN_MAX_CAPACITY",
-        "CN": "CN_RETURN_MAX_CAPACITY",
-        "HK": "HK_RETURN_MAX_CAPACITY",
-    }.get(market, "")
+    try:
+        spec = MARKET_REGISTRY.get(str(market_id))
+    except KeyError:
+        return ""
+    return str((spec.metadata or {}).get("primary_experiment_mode") or "").upper()
 
 
 def _official_primary_runs(runs: Iterable[RunRecord], market_id: str) -> list[RunRecord]:
@@ -438,7 +438,7 @@ def build_cross_market_learning(
     events: list[dict] | None = None,
 ) -> dict:
     rows = []
-    for market in ("US", "CN", "HK"):
+    for market in MARKET_REGISTRY.ids():
         day = session_dates.get(market)
         if not day:
             continue
