@@ -2659,6 +2659,78 @@ function uiTipUseGuide(id){
   ? '该项目尚未配置专用用途说明；这是UI文案缺陷，不应依赖这段提示做判断。'
   : 'This item lacks a dedicated usage explanation; treat that as a UI copy defect and do not rely on this tooltip for a decision.';
 }
+
+const SECTION_TITLE_TIPS={
+ zh:{
+  title:'TRIAID FIN 的总入口。这里把真实市场数据、策略选择、TRIAID干预、真实后验和Core进化连成同一条实验链。怎么看：先选市场，再沿页面从状态→决策→实证→风险→进化往下读。',
+  homeSummaryTitle:'首页摘要用于第一次快速判断“当前市场是什么状态、TRIAID正在做什么、最近验证有没有增值、三市场风险如何”。怎么看：先读这里决定是否需要继续展开后面的详细证据。',
+  selectedMarketName:'当前页面所选市场。怎么看：先确认市场、交易阶段和数据日期一致，再读取策略、收益和风险；不同市场的数据不要直接混在一起比较。',
+  dailyExperimentTitle:'把当天冻结决策、真实后验、策略调整和下一交易日验证放在同一张复盘链里。怎么看：重点找“今天为什么赢/输、哪条规则需要保留或修正”。',
+  deiAttributionTitle:'拆解 TRIAID 当天的增量来自哪里、拖累来自哪里。怎么看：先看主要正负贡献，再核对这些贡献是否来自可重复的策略选择，而不是单日偶然。',
+  deiTransitionTitle:'记录盘中 State → Transition 的触发证据。怎么看：确认状态变化是否真的达到调度阈值，以及变化发生前后策略调整是否有明确因果链。',
+  deiTriageTitle:'展示政策与宏观信号经过 Triage 后哪些进入当前决策、哪些被压低或排除。怎么看：重点看政策信号是否改变了状态判断和风险约束，而不是只看新闻本身。',
+  deiCounterfactualTitle:'把已发生结果放回当时冻结条件，重放“如果不这样调会怎样”。怎么看：用于定位错失收益和错误干预，但不能用后验结果反向改写当时的T0决策。',
+  deiNextTitle:'把当天复盘转成下一交易日可检验假设。怎么看：关注明确的验证条件、失效条件和需要观察的数据，不把它当成保证性的涨跌预测。',
+  deiCrossMarketTitle:'把 US、A股、港股的已验证经验放到同一层比较。怎么看：只迁移结构性规律，不直接复制另一市场的权重、容量或收益结论。',
+  hkStrategyTitle:'港股主路线当前冻结的策略层配置。怎么看：比较策略排序、冻结权重和后续真实结果，确认港股自己的选择逻辑是否创造增量。',
+  hkAssetTitle:'把港股策略权重展开到底层ETF/资产。怎么看：核对策略层和资产层敞口是否一致，避免“策略看起来分散、底层其实集中”。',
+  hkCapitalTitle:'港股四档资金规模下的容量与执行可行性实验。怎么看：看不同资金量下的成交天数、成本和可实现收益是否仍然成立。',
+  hkRealizedTitle:'港股上一轮冻结方案在真实后验价格与成交量下的模拟执行结果。怎么看：把理论收益和执行成本放在一起看，判断收益是不是实际可实现。',
+  hkDailyTitle:'港股上一轮冻结配置的理论持仓后验路径。怎么看：沿交易日看累计收益和对照差异，判断优势是否持续而不是来自单日跳变。',
+  riskWarningTitle:'US、A股、港股联合风险层的总入口。怎么看：先看总风险等级和主要驱动，再看缺失确认项；风险中心用于约束价值创造，不是自动把系统切成防守模式。',
+  riskDriversTitle:'当前风险判断最主要的支持证据。怎么看：优先处理对总风险贡献最大的驱动，再检查它是否有跨市场或宏观确认。',
+  riskBlockersTitle:'当前还缺哪些证据，导致风险结论不能进一步升级。怎么看：它是“为什么现在不能更激进下结论”的清单，不是额外风险分数。',
+  riskThreeMarketTitle:'分别展示 US、A股、港股当前状态及其联动。怎么看：比较风险是否同时出现、是否只有单市场异常，以及传导方向是否一致。',
+  riskDynamicsTitle:'把风险从宏观/政策状态连接到市场价格与跨市场传导。怎么看：沿链条看哪一环已经激活、哪一环仍缺证据，避免只凭单个指标做判断。',
+  riskMacroTitle:'集中展示利率、政策、信用和流动性状态。怎么看：寻找能够解释当前市场变化的宏观驱动，并确认它们是否达到历史异常水平。',
+  riskTermTitle:'显示 Fed Funds / SOFR 等期限曲线中的真实合约定价。怎么看：重点看近端与远端隐含利率变化及曲线方向，用于识别政策预期重定价。',
+  riskHistoryTableTitle:'把当前风险结构放回历史危机与正常控制样本中检验。怎么看：按样本数、命中/误报、Lift、p/q和稳健性读取，不把单个历史相似事件当成确定预测。',
+  riskControlTitle:'三市场风险约束的 Shadow 实验。怎么看：只评估候选约束是否改善长期价值；未通过前瞻验证前，不直接修改生产权重。',
+  riskHistoricalTitle:'风险规则在历史样本中的支持程度。怎么看：确认规则是否有足够样本和稳定区分度，避免为少数事件过拟合。',
+  riskProspectiveTitle:'风险规则在未来新增样本中的验证状态。怎么看：优先级高于历史回测；只有持续前瞻有效才允许升级规则。',
+  riskEscalationTitle:'风险约束进一步收紧需要满足的明确条件。怎么看：只有触发条件成立才升级，不能因为主观担心而提前防守。',
+  riskDeescalationTitle:'风险约束解除或降低需要满足的条件。怎么看：确认风险证据真正消退后恢复价值追求，避免防守状态长期固化成不作为。'
+ },
+ en:{
+  title:'Main entry to TRIAID FIN, linking real market data, strategy selection, TRIAID intervention, realized validation and Core evolution. Read top-to-bottom: state → decision → evidence → risk → evolution.',
+  homeSummaryTitle:'Fast first-pass view of market state, current TRIAID action, latest realized value result and linked three-market risk. Use it to decide what detail needs inspection.',
+  selectedMarketName:'The market currently selected for this page. Verify market, session and data date before reading strategy, return or risk outputs; do not mix market scopes.',
+  dailyExperimentTitle:'Connects the day’s frozen decision, realized posterior, strategy changes and next-session test in one review chain. Use it to identify why TRIAID helped or hurt and what rule should change.',
+  deiAttributionTitle:'Breaks down where TRIAID created or lost value today. Focus on the largest positive/negative contributors and whether they reflect repeatable selection rather than one-day noise.',
+  deiTransitionTitle:'Shows evidence for intraday State → Transition triggers. Verify the threshold was actually met and that any resulting intervention has a traceable state-change rationale.',
+  deiTriageTitle:'Shows which policy/macro signals survived triage into the current decision. Focus on whether a signal changed state or constraints, not on headlines alone.',
+  deiCounterfactualTitle:'Replays feasible alternatives under the frozen decision context. Use it to identify missed value or harmful intervention without rewriting the original T0 decision from hindsight.',
+  deiNextTitle:'Turns today’s review into falsifiable next-session hypotheses. Read the explicit validation and failure conditions; it is not a guaranteed directional forecast.',
+  deiCrossMarketTitle:'Compares validated learning across US, CN and HK. Transfer structural lessons only; do not copy another market’s weights, capacity or returns directly.',
+  hkStrategyTitle:'Frozen strategy-level configuration for the HK primary route. Compare ranking, weights and later realized results to test whether HK-specific selection creates value.',
+  hkAssetTitle:'Expands HK strategy weights into underlying ETFs/assets. Reconcile strategy and asset exposure to detect hidden concentration.',
+  hkCapitalTitle:'Capacity and execution-feasibility experiment across four HKD capital tiers. Check whether execution days, cost and realizable edge survive as capital increases.',
+  hkRealizedTitle:'Simulated execution of the prior frozen HK plan using realized prices and volume. Judge theoretical edge together with execution cost.',
+  hkDailyTitle:'Daily posterior path of the prior frozen HK allocation. Inspect persistence versus the control rather than one-day jumps.',
+  riskWarningTitle:'Top-level joint risk view across US, CN and HK. Read overall pressure and main drivers first, then missing confirmations; risk constrains value creation rather than replacing it with permanent defense.',
+  riskDriversTitle:'Strongest evidence supporting the current risk assessment. Prioritize the largest contributors and seek cross-market or macro confirmation.',
+  riskBlockersTitle:'Evidence still missing before the risk conclusion can be escalated. This explains why confidence cannot rise yet; it is not another risk score.',
+  riskThreeMarketTitle:'Shows current US, CN and HK states together. Compare whether stress is synchronized, isolated, or transmitting across markets.',
+  riskDynamicsTitle:'Connects macro/policy states to market and cross-market transmission. Follow which links are active and which remain unconfirmed.',
+  riskMacroTitle:'Rates, policy, credit and liquidity state evidence. Look for drivers that explain current market behavior and are historically abnormal.',
+  riskTermTitle:'Real contract pricing across Fed Funds / SOFR term curves. Focus on front-vs-back implied-rate changes and curve shape to read policy repricing.',
+  riskHistoryTableTitle:'Tests the current risk structure against historical event and control samples. Read sample size, hit/false-positive rates, lift, p/q and robustness rather than treating one analog as a forecast.',
+  riskControlTitle:'Shadow experiment for three-market risk constraints. It tests whether candidate constraints improve long-horizon value and does not change production weights before prospective validation.',
+  riskHistoricalTitle:'Historical support for the risk rule. Check sample depth and stable discrimination rather than fitting a few crisis episodes.',
+  riskProspectiveTitle:'Prospective validation status of the risk rule. This outranks historical replay; promotion requires continued forward evidence.',
+  riskEscalationTitle:'Explicit conditions required before risk constraints tighten. Escalate only when the declared evidence is met, not from vague concern.',
+  riskDeescalationTitle:'Conditions required to relax risk constraints. Restore value-seeking behavior once evidence subsides so defense does not harden into permanent inaction.'
+ }
+};
+function applySectionTitleTooltips(){
+ Object.entries(SECTION_TITLE_TIPS[lang]||{}).forEach(([id,tip])=>{
+  const node=el(id); if(!node)return;
+  node.classList.add('has-tip','tip-mark');
+  node.dataset.tip=tip;
+  node.setAttribute('aria-label',(node.textContent||'').trim()+' — '+tip);
+ });
+}
+
 function applyUiTooltips(){
  Object.entries(UI_TIPS[lang]||{}).forEach(([id,tip])=>{
   const node=el(id); if(!node)return;
@@ -2955,6 +3027,7 @@ function applyText(){
  Object.entries(headerTips).forEach(([id,key])=>{if(el(id))el(id).dataset.tip=tips[key]});
  applyTableHeaderTooltips();
  applyUiTooltips();
+ applySectionTitleTooltips();
  applyFlowLabels();
  if(el('selectedMarketKicker'))el('selectedMarketKicker').textContent=lang==='zh'?'当前市场':'Selected market';
  if(el('marketSectionNote'))el('marketSectionNote').textContent=lang==='zh'
