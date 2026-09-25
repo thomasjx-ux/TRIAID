@@ -95,6 +95,7 @@ class AccountProfile(BaseModel):
     capital: Optional[float] = Field(default=None, gt=0.0, allow_inf_nan=False)
     allowed_markets: List[str] = Field(default_factory=list)
     risk_budget: float = Field(default=1.0, gt=0.0, le=1.0, allow_inf_nan=False)
+    max_strategy_weight: Optional[float] = Field(default=None, gt=0.0, le=1.0, allow_inf_nan=False)
     max_drawdown_constraint: Optional[float] = Field(default=None, ge=-1.0, le=0.0, allow_inf_nan=False)
     liquidity_constraint: Dict[str, Any] = Field(default_factory=dict)
     objective: str = "MAXIMIZE_NET_RETURN"
