@@ -91,7 +91,7 @@ HK_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.6.0"
+    version = "strategy-population@0.7.0"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -117,6 +117,16 @@ class StrategyPopulationModule:
             switch_uncertainty_fraction=float(getattr(profile,"switch_uncertainty_fraction",0.25)),
             switch_guard_enabled=bool(getattr(profile,"switch_guard_enabled",True)),
         )
+
+    @staticmethod
+    def _family(strategy_id: str) -> str:
+        if strategy_id in FAMILIES:
+            return FAMILIES[strategy_id]
+        if strategy_id.startswith("EXT::"):
+            # External strategies remain independent unless their return histories
+            # prove redundant through the existing correlation check.
+            return f"external:{strategy_id}"
+        return "unknown"
 
     def config_for(self, market_id: str) -> PopulationConfig:
         key = market_id.upper()
@@ -193,6 +203,8 @@ class StrategyPopulationModule:
         cards = []
         market_key=market_id.upper() if market_id else None
         for item in self.definitions():
+            if item.strategy_id.startswith("EXT::"):
+                continue
             support={m.upper() for m in item.market_support}
             if (
                 market_key
@@ -331,8 +343,8 @@ class StrategyPopulationModule:
         for state in feasible:
             if len(selected)>=max_members:
                 break
-            family=FAMILIES.get(state.strategy_id,"unknown")
-            if sum(1 for s in selected if FAMILIES.get(s.strategy_id,"unknown")==family)>=cfg.family_cap:
+            family=self._family(state.strategy_id)
+            if sum(1 for s in selected if self._family(s.strategy_id)==family)>=cfg.family_cap:
                 family_rejections.append(state.strategy_id)
                 continue
 
@@ -521,8 +533,14 @@ class StrategyPopulationModule:
         previous_group: StrategyGroup | None = None,
         base_cost_bps: float = 2.0,
         experiment_mode: str | None = None,
+        max_weight_override: float | None = None,
     ) -> StrategyGroup:
         cfg=self.config_for(market_id)
+        if max_weight_override is not None:
+            cfg=replace(
+                cfg,
+                max_weight=max(1e-9,min(1.0,float(max_weight_override))),
+            )
         states=list(states)
         mode=str(experiment_mode or "").upper()
         if market_id.upper()=="CN" and mode=="CN_WORST_POOL_RESCUE":
@@ -602,7 +620,7 @@ class StrategyPopulationModule:
                     en=f"{definition.name.en if definition else sid} is retained because the candidate group does not offer enough net improvement after switching cost and uncertainty.",
                 )
             else:
-                family=FAMILIES.get(sid,"unknown")
+                family=self._family(sid)
                 diversification_on=cfg.redundancy_penalty>0 or cfg.near_duplicate_corr<=1.0 or cfg.family_cap<max_members
                 if diversification_on:
                     zh_reason=f"并通过相关性、{family} 家族集中度、风险、流动性和容量约束后仍有正的群组边际价值。"
