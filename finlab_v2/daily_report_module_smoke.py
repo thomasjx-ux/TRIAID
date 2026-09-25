@@ -7,7 +7,7 @@ from triaid_fin.market_registry import MARKET_REGISTRY, MarketSpec, market_ids
 engine=EvolutionLabEngine()
 expected=list(market_ids())
 
-assert engine.daily_report.version=="daily-report@1.1.0"
+assert engine.daily_report.version=="daily-report@1.2.0"
 assert engine.module_manifest["daily_report"]==engine.daily_report.version
 
 payload=engine.daily_reports(compact=True)
@@ -26,9 +26,22 @@ for market in expected:
     assert module["enabled_markets"]==expected
     assert module["coverage_rule"]=="MARKET_REGISTRY_DRIVEN_NO_SILENT_OMISSION"
     assert module["timing_rule"]=="MARKET_LOCAL_CALENDAR_AND_SESSION_PHASE_CONTROL_REPORT_CONTENT"
-    assert report["report_contract"]["report_type"]=="INVESTMENT_STRATEGY_DAILY"
+    assert report["report_contract"]["report_type"]=="TRIAID_TRADING_ANALYSIS_DAILY"
     assert report["report_contract"]["market_phase_aware"] is True
     assert report["report_contract"]["formal_and_live_layers_separated"] is True
+    assert report["report_contract"]["trading_analysis_is_primary"] is True
+    assert report["report_contract"]["operations_in_body"] is False
+    trading=report["trading_analysis"]
+    assert trading["report_type"]=="TRIAID_TRADING_ANALYSIS_DAILY"
+    assert trading["market_id"]==market
+    assert trading["reporting_policy"]["primary_subject"]=="TRADING_AND_ECONOMIC_VALUE"
+    assert trading["reporting_policy"]["operations_in_body"] is False
+    assert "baseline_portfolio" in trading
+    assert "triaid_intervention" in trading
+    assert "trade_translation" in trading
+    assert "realized_profit_analysis" in trading
+    assert "opportunity_cost" in trading
+    assert "next_trade_plan" in trading
     timing=report["report_timing"]
     assert timing["market_id"]==market
     assert timing["content_profile"]
