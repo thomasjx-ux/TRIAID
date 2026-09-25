@@ -291,6 +291,10 @@ class ReviewModule:
         realized_triaid=latest_realized.get("triaid_realized_return")
         realized_excess=latest_realized.get("realized_excess_return")
         trading_cost=latest_realized.get("trading_cost")
+        hindsight_best_strategy_id=latest_realized.get("hindsight_best_strategy_id")
+        hindsight_best_strategy_return=latest_realized.get("hindsight_best_strategy_return")
+        triaid_gap_to_best=latest_realized.get("triaid_gap_to_hindsight_best")
+        baseline_gap_to_best=latest_realized.get("baseline_gap_to_hindsight_best")
 
         rows=[]
         for capital in sleeves:
@@ -369,6 +373,22 @@ class ReviewModule:
                 "trading_cost_rate":trading_cost,
                 "trading_cost_amount":(
                     capital*trading_cost if trading_cost is not None else None
+                ),
+                "hindsight_best_strategy_id":hindsight_best_strategy_id,
+                "hindsight_best_strategy_return":hindsight_best_strategy_return,
+                "hindsight_best_strategy_pnl":(
+                    capital*hindsight_best_strategy_return
+                    if hindsight_best_strategy_return is not None else None
+                ),
+                "triaid_gap_to_hindsight_best":triaid_gap_to_best,
+                "triaid_opportunity_gap_amount":(
+                    capital*triaid_gap_to_best
+                    if triaid_gap_to_best is not None else None
+                ),
+                "baseline_gap_to_hindsight_best":baseline_gap_to_best,
+                "baseline_opportunity_gap_amount":(
+                    capital*baseline_gap_to_best
+                    if baseline_gap_to_best is not None else None
                 ),
             }
             rows.append(row)
