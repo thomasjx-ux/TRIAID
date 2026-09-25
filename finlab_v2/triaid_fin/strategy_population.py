@@ -91,7 +91,7 @@ HK_CONFIG = PopulationConfig(
 
 
 class StrategyPopulationModule:
-    version = "strategy-population@0.7.0"
+    version = "strategy-population@0.8.0"
 
     def __init__(self) -> None:
         self._registry: Dict[str, StrategyDefinition] = {}
@@ -324,12 +324,14 @@ class StrategyPopulationModule:
         cfg: PopulationConfig,
         states: List[StrategyState],
         max_members: int,
+        allow_shadow_simulation: bool = False,
     ) -> tuple[Dict[str,float],dict]:
+        allowed_lifecycles={"active","reduced","shadow"} if allow_shadow_simulation else {"active","reduced"}
         feasible=[
             s for s in states
             if s.strategy_id!="P28_CASH"
             and s.eligible
-            and s.lifecycle in {"active","reduced"}
+            and s.lifecycle in allowed_lifecycles
             and not s.hard_failure
             and s.liquidity_ok and s.capacity_ok and s.risk_ok and s.concentration_ok
         ]
@@ -380,7 +382,7 @@ class StrategyPopulationModule:
                 }
 
         weights,remaining=self._allocate_scores_with_cap(allocation_scores,cfg.max_weight)
-        cash=next((s for s in states if s.strategy_id=="P28_CASH" and s.eligible and s.lifecycle in {"active","reduced"}),None)
+        cash=next((s for s in states if s.strategy_id=="P28_CASH" and s.eligible and s.lifecycle in allowed_lifecycles),None)
         if cash is not None:
             weights["P28_CASH"]=remaining if weights else 1.0
 
@@ -399,6 +401,8 @@ class StrategyPopulationModule:
             "uncertainty_used_as_additive_penalty":False,
             "primary_objective":PRIMARY_OBJECTIVE,
             "cash_semantics":"RESIDUAL_ONLY_WHEN_RISK_CAPACITY_OR_MEMBER_LIMITS_PREVENT_FULL_ALLOCATION",
+            "shadow_simulation_enabled":bool(allow_shadow_simulation),
+            "allowed_lifecycles":sorted(allowed_lifecycles),
         }
         return weights,diagnostics
 
@@ -534,6 +538,7 @@ class StrategyPopulationModule:
         base_cost_bps: float = 2.0,
         experiment_mode: str | None = None,
         max_weight_override: float | None = None,
+        allow_shadow_simulation: bool = False,
     ) -> StrategyGroup:
         cfg=self.config_for(market_id)
         if max_weight_override is not None:
@@ -546,7 +551,12 @@ class StrategyPopulationModule:
         if market_id.upper()=="CN" and mode=="CN_WORST_POOL_RESCUE":
             return self._adversarial_loss_group(cfg,states,max_members)
         state_map={s.strategy_id:s for s in states}
-        candidate_weights,diagnostics=self._candidate_group(cfg,states,max_members)
+        candidate_weights,diagnostics=self._candidate_group(
+            cfg,
+            states,
+            max_members,
+            allow_shadow_simulation=allow_shadow_simulation,
+        )
 
         use_previous=False
         if not cfg.switch_guard_enabled:
@@ -558,7 +568,9 @@ class StrategyPopulationModule:
                     sid not in state_map
                     or not state_map[sid].eligible
                     or state_map[sid].hard_failure
-                    or state_map[sid].lifecycle not in {"active","reduced"}
+                    or state_map[sid].lifecycle not in (
+                        {"active","reduced","shadow"} if allow_shadow_simulation else {"active","reduced"}
+                    )
                     or not state_map[sid].risk_ok
                     or not state_map[sid].capacity_ok
                     or not state_map[sid].liquidity_ok
