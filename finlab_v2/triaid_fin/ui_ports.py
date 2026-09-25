@@ -42,6 +42,21 @@ class MarketPageReadPort:
         return self._engine.evolution_status()
 
 
+class DailyReportReadPort:
+    """Read-only daily-report module capability port."""
+
+    version="daily-report-read-port@1.0.0"
+
+    def __init__(self,engine)->None:
+        self._engine=engine
+
+    def summary(self,market_id:str|None=None,compact:bool=False)->dict:
+        return self._engine.daily_summary(market_id,compact=compact)
+
+    def all_markets(self,compact:bool=True)->dict:
+        return self._engine.daily_reports(compact=compact)
+
+
 class RiskReadPort:
     """Read-only risk center capability port."""
 
@@ -124,6 +139,7 @@ class UiReadServices:
 
     def __init__(self,engine)->None:
         self.market_page=MarketPageReadPort(engine)
+        self.daily_report=DailyReportReadPort(engine)
         self.risk=RiskReadPort(engine)
         self.outcome=OutcomeReadPort(engine)
 
@@ -136,7 +152,10 @@ class UiReadServices:
         return self.market_page.architecture_version
 
     def daily_summary(self,market_id:str,compact:bool=True)->dict:
-        return self.market_page.daily_summary(market_id,compact)
+        return self.daily_report.summary(market_id,compact)
+
+    def daily_reports(self,compact:bool=True)->dict:
+        return self.daily_report.all_markets(compact)
 
     def strategy_cards(self,lang:str,market_id:str)->list[dict]:
         return self.market_page.strategy_cards(lang,market_id)
@@ -170,6 +189,7 @@ class UiReadServices:
             "version":self.version,
             "ports":{
                 "market_page":self.market_page.version,
+                "daily_report":self.daily_report.version,
                 "risk":self.risk.version,
                 "outcome":self.outcome.version,
             },
