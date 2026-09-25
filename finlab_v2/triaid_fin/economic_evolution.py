@@ -5,6 +5,7 @@ from typing import Iterable
 
 from .contracts import RunRecord
 from .market_registry import MARKET_REGISTRY
+from .value_frontier import ValueFrontierAllocator
 
 
 class EconomicEvolutionModule:
@@ -15,7 +16,7 @@ class EconomicEvolutionModule:
     Report modeled portfolio-level turnover separately from broker execution.
     """
 
-    version = "economic-evolution@1.0.0"
+    version = "economic-evolution@1.1.0"
     minimum_decision_grade_sessions = 20
 
     @staticmethod
@@ -186,10 +187,13 @@ class EconomicEvolutionModule:
 
         daily = []
         prev = None
+        frontier_prev = None
         baseline_net = []
         triaid_net = []
+        frontier_net = []
         baseline_gross = []
         triaid_gross = []
+        frontier_gross = []
         oracle_gross = []
         for run, outcomes in valid:
             ev = run.evaluation
@@ -215,15 +219,41 @@ class EconomicEvolutionModule:
                 }
             base_weights = dict(run.strategy_group.weights)
             tri_weights = dict(run.triaid_decision.weights_after)
+            risk_budget=float((run.market.metadata or {}).get("account_risk_budget",1.0) or 1.0)
+            position_cap=self._cap(run) or 0.28
+            frontier=ValueFrontierAllocator.allocate(
+                run.strategy_states,
+                risk_budget=risk_budget,
+                position_cap=position_cap,
+                allow_shadow=False,
+            )
+            frontier_weights=dict(frontier.weights)
+            frontier_needed={
+                sid for sid,weight in frontier_weights.items()
+                if sid!="P28_CASH" and float(weight)>1e-12
+            }
+            if not frontier_needed.issubset(outcomes):
+                skipped.append({
+                    "decision_date":run.market.as_of,
+                    "reason":"missing_value_frontier_strategy_outcomes",
+                })
+                continue
             base_turnover = self._turnover(prev[0], base_weights) if prev else 0.0
             tri_turnover = self._turnover(prev[1], tri_weights) if prev else 0.0
+            frontier_turnover = self._turnover(frontier_prev,frontier_weights) if frontier_prev else 0.0
             base_cost = base_turnover * bps / 10000.0
             tri_cost = tri_turnover * bps / 10000.0
+            frontier_cost = frontier_turnover * bps / 10000.0
             base_gross = float(ev.baseline_return)
             tri_before_account_cost = float(ev.triaid_return) + float(ev.trading_cost)
+            frontier_before_cost=sum(
+                float(weight)*(0.0 if sid=="P28_CASH" else float(outcomes[sid]))
+                for sid,weight in frontier_weights.items()
+            )
             base_after_modeled_cost = base_gross - base_cost
             tri_after_modeled_cost = tri_before_account_cost - tri_cost
-            if base_after_modeled_cost <= -1.0 or tri_after_modeled_cost <= -1.0:
+            frontier_after_modeled_cost = frontier_before_cost - frontier_cost
+            if base_after_modeled_cost <= -1.0 or tri_after_modeled_cost <= -1.0 or frontier_after_modeled_cost <= -1.0:
                 return {
                     "version": self.version,
                     "market_id": market,
@@ -242,11 +272,17 @@ class EconomicEvolutionModule:
                 "reported_overlay_cost": float(ev.trading_cost),
                 "baseline_full_turnover_proxy": base_turnover,
                 "triaid_full_turnover_proxy": tri_turnover,
+                "value_frontier_full_turnover_proxy":frontier_turnover,
                 "baseline_modeled_cost": base_cost,
                 "triaid_modeled_cost": tri_cost,
+                "value_frontier_modeled_cost":frontier_cost,
                 "baseline_net_proxy": base_after_modeled_cost,
                 "triaid_net_proxy": tri_after_modeled_cost,
+                "value_frontier_net_proxy":frontier_after_modeled_cost,
                 "net_proxy_difference": tri_after_modeled_cost - base_after_modeled_cost,
+                "value_frontier_minus_triaid_net_proxy":frontier_after_modeled_cost-tri_after_modeled_cost,
+                "value_frontier_weights":frontier_weights,
+                "value_frontier_ranked_strategy_ids":frontier.ranked_strategy_ids,
                 "hindsight_daily_gross_ceiling": oracle,
                 "best_daily_observed_strategy_ids": [
                     sid for sid, ret in outcomes.items() if abs(ret - oracle) < 1e-12
@@ -256,21 +292,27 @@ class EconomicEvolutionModule:
             })
             baseline_net.append(base_after_modeled_cost)
             triaid_net.append(tri_after_modeled_cost)
+            frontier_net.append(frontier_after_modeled_cost)
             baseline_gross.append(base_gross)
             triaid_gross.append(tri_before_account_cost)
+            frontier_gross.append(frontier_before_cost)
             oracle_gross.append(oracle)
             prev = (base_weights, tri_weights)
+            frontier_prev=frontier_weights
 
         baseline_growth = self._growth(baseline_net)
         triaid_growth = self._growth(triaid_net)
+        frontier_growth = self._growth(frontier_net)
         baseline_gross_growth = self._growth(baseline_gross)
         triaid_gross_growth = self._growth(triaid_gross)
+        frontier_gross_growth = self._growth(frontier_gross)
         oracle_growth = self._growth(oracle_gross)
         numerator = triaid_gross_growth - baseline_gross_growth
         denominator = oracle_growth - baseline_gross_growth
         opportunity_capture = numerator / denominator if denominator > 1e-8 else None
         base_dd = self._max_drawdown(baseline_net)
         tri_dd = self._max_drawdown(triaid_net)
+        frontier_dd = self._max_drawdown(frontier_net)
         return {
             "version": self.version,
             "market_id": market,
@@ -292,10 +334,15 @@ class EconomicEvolutionModule:
             "net_compound_growth_proxy": {
                 "baseline": baseline_growth,
                 "triaid": triaid_growth,
+                "value_frontier_candidate":frontier_growth,
                 "triaid_minus_baseline": triaid_growth - baseline_growth,
+                "value_frontier_minus_triaid":frontier_growth-triaid_growth,
+                "value_frontier_minus_baseline":frontier_growth-baseline_growth,
                 "baseline_max_drawdown": base_dd,
                 "triaid_max_drawdown": tri_dd,
+                "value_frontier_max_drawdown":frontier_dd,
                 "drawdown_difference": tri_dd - base_dd,
+                "value_frontier_drawdown_minus_triaid":frontier_dd-tri_dd,
                 "baseline_loss_sessions": sum(x < 0 for x in baseline_net),
                 "triaid_loss_sessions": sum(x < 0 for x in triaid_net),
                 "negative_baseline_sessions_improved": sum(b < 0 and t > b for b, t in zip(baseline_net, triaid_net)),
@@ -324,6 +371,20 @@ class EconomicEvolutionModule:
                     "NO_AUTOMATIC_CORE_PROMOTION_FROM_HINDSIGHT_DIAGNOSTICS",
                 ],
                 "production_core_changed": False,
+                "candidate_allocator":ValueFrontierAllocator.version,
+                "candidate_status":"SHADOW_ONLY_PENDING_PROSPECTIVE_VALIDATION",
+            },
+            "value_frontier_candidate": {
+                "version":ValueFrontierAllocator.version,
+                "objective":"MAXIMIZE_REALIZABLE_NET_RETURN_SUBJECT_TO_HARD_CONSTRAINTS",
+                "uses_frozen_t0_information_only":True,
+                "reads_realized_t1_to_choose_weights":False,
+                "allocation_rule":"GREEDY_NET_RETURN_RANK_WITH_POSITION_CAP_AND_RISK_BUDGET",
+                "gross_compound_growth":frontier_gross_growth,
+                "net_compound_growth_proxy":frontier_growth,
+                "net_minus_current_triaid":frontier_growth-triaid_growth,
+                "max_drawdown":frontier_dd,
+                "promotion_policy":"PROSPECTIVE_SHADOW_HOLDOUT_REQUIRED_BEFORE_PRODUCTION",
             },
             "frontier_baseline": {
                 "reference": "Cover 1991 Universal Portfolios: best constant rebalanced portfolio (BCRP) is an ex-post growth benchmark.",
