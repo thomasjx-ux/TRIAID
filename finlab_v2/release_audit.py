@@ -30,6 +30,7 @@ BUILD_CASES=[
     "transition_triage_gate_smoke.py",
     "preopen_baseline_freshness_smoke.py",
     "n_market_multi_account_smoke.py",
+    "external_strategy_module_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
     "tushare_auction_smoke.py",
@@ -101,6 +102,8 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/market-data/status",
     "/api/market-data/registry",
     "/api/accounts/status",
+    "/api/external-strategies/status",
+    "/api/external-strategies/feedback?limit=5",
     "/api/system/interfaces",
     "/api/ui/market-clocks",
     "/api/ui/market-page/US?lang=zh",
@@ -196,6 +199,9 @@ def structural_checks()->list[dict]:
     runtime_ports=(ROOT/"triaid_fin"/"runtime_ports.py").read_text(encoding="utf-8")
     ui_ports=(ROOT/"triaid_fin"/"ui_ports.py").read_text(encoding="utf-8")
     daily_report=(ROOT/"triaid_fin"/"daily_report.py").read_text(encoding="utf-8")
+    external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
+    external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
+    contracts=(ROOT/"triaid_fin"/"contracts.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
@@ -274,6 +280,22 @@ def structural_checks()->list[dict]:
         and "self.services.market_data." in runtime
         and "self.services.decision." in scheduler
         and "self.services.market_data." in scheduler,
+        None,
+    )
+    check(
+        "external_strategy_isolation_boundary",
+        "class ExternalStrategyModule" in external_strategy
+        and '"QUARANTINE"' in external_strategy
+        and '"SHADOW"' in external_strategy
+        and '"ACTIVE"' in external_strategy
+        and "states_for_account" in external_strategy
+        and "QUARANTINE_OR_SHADOW_NEVER_RECEIVES_CAPITAL" in external_strategy
+        and "class ExternalStrategySpec" in external_strategy
+        and "class ExternalStrategyObservation" in external_strategy
+        and "build_external_strategy_router" in external_strategy_api
+        and "build_external_strategy_router(engine)" in app
+        and "max_strategy_weight" in contracts
+        and '"external_strategy"' in engine,
         None,
     )
     check(
@@ -458,6 +480,8 @@ def runtime_checks()->list[dict]:
     market_status=payloads.get("/api/market-data/status") or {}
     market_registry=payloads.get("/api/market-data/registry") or {}
     account_registry=payloads.get("/api/accounts/status") or {}
+    external_strategy_status=payloads.get("/api/external-strategies/status") or {}
+    external_strategy_feedback=payloads.get("/api/external-strategies/feedback?limit=5") or {}
     interface_status=payloads.get("/api/system/interfaces") or {}
     market_clocks=payloads.get("/api/ui/market-clocks") or {}
     scheduler_status=payloads.get("/api/decision-scheduler/status") or {}
@@ -513,6 +537,25 @@ def runtime_checks()->list[dict]:
         and ((interface_status.get("ui_projections") or {}).get("validation_summary")
              =="validation-summary-projection@1.0.0"),
         interface_status,
+    )
+
+    strategy_source_modules=interface_status.get("strategy_source_modules") or {}
+    isolation_policy=external_strategy_status.get("isolation_policy") or {}
+    check(
+        "external_strategy_runtime_contract",
+        external_strategy_status.get("version")=="external-strategy@1.0.0"
+        and isolation_policy.get("default")=="QUARANTINE"
+        and isolation_policy.get("quarantine_allocation") is False
+        and isolation_policy.get("shadow_allocation") is False
+        and isolation_policy.get("fault_isolation")=="provider/account/pool scoped"
+        and strategy_source_modules.get("external_strategy")=="external-strategy@1.0.0"
+        and strategy_source_modules.get("fault_isolation")=="PROVIDER_ACCOUNT_POOL_SCOPED"
+        and isinstance(external_strategy_feedback.get("feedback"),list),
+        {
+            "status":external_strategy_status,
+            "strategy_source_modules":strategy_source_modules,
+            "feedback_count":external_strategy_feedback.get("count"),
+        },
     )
 
     for market in ("US","CN","HK"):
