@@ -76,6 +76,9 @@ sid=registered["strategy"]["strategy_id"]
 assert sid=="EXT::ALPHA_DESK::MOMENTUM_01"
 assert registered["strategy"]["isolation_state"]=="QUARANTINE"
 assert registered["strategy"]["allocation_eligible"] is False
+reregistered=module.register(spec.model_copy(update={"isolation_state":"ACTIVE"}))
+assert reregistered["strategy"]["isolation_state"]=="QUARANTINE"
+assert all(card["strategy_id"]!=sid for card in population.strategy_cards("en","US"))
 
 good=ExternalStrategyObservation(
     provider_id="ALPHA_DESK",
