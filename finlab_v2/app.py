@@ -665,7 +665,7 @@ def ui_market_page(
             payload,cache_hit=ui_projection_cache.read(
                 key,
                 lambda:market_page_projection.full(market,lang,None),
-                ttl_seconds=25,
+                ttl_seconds=120,
                 force=refresh,
             )
         if not (payload.get("integrity") or {}).get("passed"):
@@ -677,7 +677,7 @@ def ui_market_page(
             background_tasks.add_task(outcome_resolver.resolve_market,market)
         payload["read_cache"]={
             "hit":cache_hit,
-            "ttl_seconds":25 if not run_id else 0,
+            "ttl_seconds":120 if not run_id else 0,
             "live_read_model_separate":True,
             "formal_evidence_date":((payload.get("sections") or {}).get("daily") or {}).get("as_of"),
         }
@@ -702,14 +702,24 @@ def ui_market_page_live(market_id:str)->dict:
 @app.get("/api/ui/validation-summary")
 def ui_validation_summary(market_id:str=Query(default="US"))->dict:
     try:
-        return validation_summary_projection.full(market_id)
+        market=normalize_market_id(market_id)
+        payload,_=ui_projection_cache.read(
+            ("validation-summary",market),
+            lambda:validation_summary_projection.full(market),
+            ttl_seconds=15,
+        )
+        return payload
     except KeyError as exc:
         raise HTTPException(status_code=404,detail=str(exc)) from exc
 
 
 @app.get("/api/ui/risk-center")
 def ui_risk_center()->dict:
-    payload=risk_center_projection.full()
+    payload,_=ui_projection_cache.read(
+        ("risk-center",),
+        risk_center_projection.full,
+        ttl_seconds=15,
+    )
     if not (payload.get("integrity") or {}).get("passed"):
         return JSONResponse(status_code=503,content=payload)
     return payload
@@ -4816,7 +4826,11 @@ function toggleLang(){
  lang=lang==='zh'?'en':'zh';
  applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
  renderVolatilityForecast();applyHomeBrief(el('market').value);
- refreshAll(true);refreshLiveWindows();refreshRiskPanels();
+ // Language switches can reuse the compact brief immediately; stagger heavier
+ // reads instead of issuing all projection requests in one burst.
+ refreshLiveWindows();
+ setTimeout(()=>refreshAll(true),250);
+ setTimeout(()=>refreshRiskPanels(),500);
 }
 function refreshFullIfDue(){
  if(document.hidden)return;
@@ -4851,10 +4865,14 @@ document.querySelectorAll('[data-clock-market]').forEach(node=>{
  });
 });
 applyText();applyMarketScope();renderMarketIdentity();tickMarketClocks();
-refreshMarketClocks();refreshHomeBrief();refreshLiveIfDue(true);
-setTimeout(()=>{if(!document.hidden)refreshAll(true)},150);
-setTimeout(()=>{if(!document.hidden)refreshRiskPanels()},800);
-setTimeout(()=>{if(!document.hidden)refreshVolatilityForecast()},1700);
+// Fast-path first paint: clocks + compact brief render immediately. Expensive
+// full projections are intentionally staggered so refresh does not make the
+// server compute market page, live view, risk and validation at the same time.
+refreshMarketClocks();refreshHomeBrief();
+setTimeout(()=>{if(!document.hidden)refreshLiveIfDue(true)},250);
+setTimeout(()=>{if(!document.hidden)refreshRiskPanels()},900);
+setTimeout(()=>{if(!document.hidden)refreshAll(true)},1400);
+setTimeout(()=>{if(!document.hidden)refreshVolatilityForecast()},2200);
 setInterval(tickMarketClocks,1000);
 setInterval(refreshMarketClocks,15000);
 setInterval(refreshHomeBrief,30000);
