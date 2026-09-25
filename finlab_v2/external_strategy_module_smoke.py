@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from triaid_fin.account_registry import AccountRegistry
-from triaid_fin.contracts import AccountProfile, StrategyPoolSpec, StrategyState
+from triaid_fin.contracts import AccountProfile, MarketSnapshot, StrategyGroup, StrategyPoolSpec, StrategyState
+from triaid_fin.core import TriaidCoreModule
 from triaid_fin.external_strategy import (
     ExternalStrategyModule,
     ExternalStrategyObservation,
@@ -138,6 +139,42 @@ assert frozen["strategy"]["isolation_state"]=="FROZEN"
 f=module.ingest(good)
 assert f["normalized_state"]["lifecycle"]=="frozen"
 assert f["allocation_eligible"] is False
+
+# Core consumes the account-aware group cap and total risk budget without
+# knowing anything about trader/provider implementations.
+class Params:
+    version="test-core"
+    intervention_strength=1.0
+
+state_2=active_state.model_copy(update={
+    "strategy_id":"EXT::ALPHA_DESK::MOMENTUM_02",
+    "expected_net_return":0.17,
+})
+group=StrategyGroup(
+    group_version="test",
+    config_version="test",
+    market_id="US",
+    members=[active_state.strategy_id,state_2.strategy_id],
+    weights={active_state.strategy_id:0.5,state_2.strategy_id:0.5},
+    reasons={},
+    diagnostics={"max_strategy_weight_constraint":0.55},
+)
+decision=TriaidCoreModule(Params()).decide(
+    MarketSnapshot(
+        market_id="US",
+        as_of="2026-09-24",
+        snapshot_id="test",
+        regime="risk_on",
+        metadata={"account_risk_budget":0.60},
+    ),
+    group,
+    [active_state,state_2],
+)
+risky_total=sum(decision.weights_after.values())
+assert risky_total<=0.6000000001
+assert max(decision.weights_after.values())<=0.55+1e-12
+assert decision.diagnostics["account_risk_budget"]==0.60
+assert decision.diagnostics["risk_budget_scaled"] is True
 
 feedback=module.feedback(100,"TRADER_A")
 events=[row["event"] for row in feedback]
