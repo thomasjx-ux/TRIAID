@@ -204,6 +204,7 @@ def structural_checks()->list[dict]:
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
     trader_shadow=(ROOT/"triaid_fin"/"trader_shadow.py").read_text(encoding="utf-8")
     trader_shadow_api=(ROOT/"triaid_fin"/"trader_shadow_api.py").read_text(encoding="utf-8")
+    strategy_interfaces=(ROOT/"triaid_fin"/"strategy_interfaces.py").read_text(encoding="utf-8")
     contracts=(ROOT/"triaid_fin"/"contracts.py").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
@@ -327,6 +328,23 @@ def structural_checks()->list[dict]:
         and "build_trader_shadow_router(engine)" in app
         and "trader_shadow.resolve_market" in engine
         and '"trader_shadow"' in engine,
+        None,
+    )
+    check(
+        "open_strategy_interface_catalog_contract",
+        "class StrategyInterfaceCatalog" in strategy_interfaces
+        and "fixed_pool_is_not_the_boundary" in strategy_interfaces
+        and "unknown_strategy_can_enter_via_trader_custom_adapter" in strategy_interfaces
+        and "no_fabricated_strategy_state" in strategy_interfaces
+        and "class TraderCustomStrategyRegistration" in trader_shadow
+        and "class TraderCustomStrategyObservation" in trader_shadow
+        and "register_custom_strategy" in trader_shadow
+        and "observe_custom_strategy" in trader_shadow
+        and "FIRST_OBSERVATION_AUTO_PROMOTES_QUARANTINE_TO_SHADOW_ONLY" in trader_shadow
+        and "allow_shadow_simulation=True" in trader_shadow
+        and '@router.post("/custom-strategies")' in trader_shadow_api
+        and '@router.post("/custom-strategies/observe")' in trader_shadow_api
+        and '"strategy_interface_catalog"' in engine,
         None,
     )
     check(
@@ -590,7 +608,7 @@ def runtime_checks()->list[dict]:
     trader_shadow_policy=trader_shadow_status.get("automation_policy") or {}
     check(
         "trader_shadow_runtime_contract",
-        trader_shadow_status.get("version")=="trader-shadow@1.0.0"
+        trader_shadow_status.get("version")=="trader-shadow@1.1.0"
         and trader_shadow_policy.get("auto_create_shadow_account") is True
         and trader_shadow_policy.get("full_strategy_pool_default") is True
         and trader_shadow_policy.get("weights_optional_equal_weight_default") is True
@@ -598,7 +616,15 @@ def runtime_checks()->list[dict]:
         and trader_shadow_policy.get("formal_next_period_outcome_auto_resolved") is True
         and trader_shadow_policy.get("broker_execution") is False
         and trader_shadow_policy.get("global_evidence_mutation") is False
-        and strategy_source_modules.get("trader_shadow")=="trader-shadow@1.0.0",
+        and trader_shadow_policy.get("open_strategy_interface_catalog") is True
+        and trader_shadow_policy.get("custom_strategy_adapter") is True
+        and trader_shadow_policy.get("first_observation_auto_enters_shadow") is True
+        and trader_shadow_policy.get("shadow_strategy_simulation") is True
+        and trader_shadow_policy.get("active_required_for_global_allocation") is True
+        and strategy_source_modules.get("trader_shadow")=="trader-shadow@1.1.0"
+        and strategy_source_modules.get("strategy_interface_catalog")=="strategy-interface-catalog@1.0.0"
+        and strategy_source_modules.get("open_catalog_policy")=="EXPOSE_ALL_REGISTERED_STRATEGIES_AND_REGISTERABLE_STRATEGY_INTERFACES"
+        and strategy_source_modules.get("shadow_simulation_rule")=="SHADOW_STRATEGIES_WITH_STANDARDIZED_STATE_MAY_RECEIVE_SIMULATED_WEIGHT_ONLY_INSIDE_TRADER_SHADOW",
         {
             "status":trader_shadow_status,
             "strategy_source_modules":strategy_source_modules,
