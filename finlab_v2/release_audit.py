@@ -20,6 +20,7 @@ BASE=os.getenv("TRIAID_POSTDEPLOY_SMOKE_BASE","http://127.0.0.1:8080").rstrip("/
 
 BUILD_CASES=[
     "selftest.py",
+    "unified_constitution_smoke.py",
     "backend_audit_regression.py",
     "manual_preview_isolation_smoke.py",
     "bootstrap_persistence_guard_smoke.py",
@@ -217,12 +218,27 @@ def structural_checks()->list[dict]:
     trader_shadow_api=(ROOT/"triaid_fin"/"trader_shadow_api.py").read_text(encoding="utf-8")
     strategy_interfaces=(ROOT/"triaid_fin"/"strategy_interfaces.py").read_text(encoding="utf-8")
     contracts=(ROOT/"triaid_fin"/"contracts.py").read_text(encoding="utf-8")
+    global_constitution=(ROOT/"triaid_constitution.py").read_text(encoding="utf-8")
+    finance_objective=(ROOT/"triaid_fin"/"objective.py").read_text(encoding="utf-8")
+    constitution_doc=(ROOT.parent/"TRIAID_CONSTITUTION.md").read_text(encoding="utf-8")
     projection_repository=(ROOT/"triaid_fin"/"projection_repository.py").read_text(encoding="utf-8")
     outcome_resolver=(ROOT/"triaid_fin"/"outcome_resolver.py").read_text(encoding="utf-8")
     validation_projection=(ROOT/"triaid_fin"/"validation_projection.py").read_text(encoding="utf-8")
     home_brief_source=(ROOT/"triaid_fin"/"home_brief.py").read_text(encoding="utf-8")
     projection_cache_source=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     post=(ROOT/"postdeploy_runtime_smoke.py").read_text(encoding="utf-8")
+    check(
+        "unified_value_constitution_is_release_blocking",
+        "MAXIMIZE_LONG_HORIZON_REALIZABLE_EVIDENCE_SUPPORTED_VALUE" in global_constitution
+        and "DEFENSIVENESS_IS_NOT_SUCCESS_BY_ITSELF" in global_constitution
+        and "INACTION_HAS_OPPORTUNITY_COST_AND_REQUIRES_EVIDENCE" in global_constitution
+        and "objective_class_override_allowed" in global_constitution
+        and "inherits_global_constitution" in finance_objective
+        and "defensiveness_is_terminal_objective" in finance_objective
+        and "TRIAID Constitution — Unified Value Maximization Discipline" in constitution_doc
+        and "Anti-inaction rule" in constitution_doc,
+        None,
+    )
     check("build_gate_single_orchestrator","release_audit.py build" in gate,gate)
     check(
         "first_paint_market_brief_is_memory_only",
