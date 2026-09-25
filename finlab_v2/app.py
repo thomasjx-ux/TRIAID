@@ -7,6 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -59,6 +60,46 @@ risk_center_projection=RiskCenterProjection(ui_read_services.risk)
 validation_summary_projection=ValidationSummaryProjection(outcome_resolver)
 home_brief_projection=HomeBriefProjection(ui_read_services.market_page)
 ui_projection_cache=ReadThroughProjectionCache()
+
+_market_page_cache_guard=Lock()
+_market_page_cache_fingerprints={}
+_market_page_cache_refreshing=set()
+
+def _market_page_fingerprint(market:str):
+    latest=engine.latest_decision_run(market)
+    return (
+        latest.run_id,
+        latest.status,
+        latest.evaluation.status if latest.evaluation else None,
+    ) if latest else ("NO_FORMAL_RUN",)
+
+def _refresh_market_page_cache(key,market:str,lang:str,fingerprint)->None:
+    try:
+        payload,_=ui_projection_cache.refresh(
+            key,
+            lambda:market_page_projection.full(market,lang,None),
+            copy_mode="shallow_top",
+        )
+        if (payload.get("integrity") or {}).get("passed") is True:
+            with _market_page_cache_guard:
+                _market_page_cache_fingerprints[key]=fingerprint
+    finally:
+        with _market_page_cache_guard:
+            _market_page_cache_refreshing.discard(key)
+
+def _schedule_market_page_refresh(background_tasks:BackgroundTasks,key,market:str,lang:str,fingerprint)->bool:
+    with _market_page_cache_guard:
+        if key in _market_page_cache_refreshing:
+            return False
+        _market_page_cache_refreshing.add(key)
+    background_tasks.add_task(
+        _refresh_market_page_cache,
+        key,
+        market,
+        lang,
+        fingerprint,
+    )
+    return True
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -648,37 +689,67 @@ def ui_market_page(
 )->dict:
     try:
         market=normalize_market_id(market_id)
+        stale_served=False
+        revalidating=False
+        cache_age_seconds=None
         if run_id:
-            # Never cache manual previews as formal market-page evidence.
+            # Manual previews are never shared through the formal snapshot cache.
             payload=market_page_projection.full(market,lang,run_id)
             cache_hit=False
         else:
-            # Changing a frozen run bypasses the old cache immediately. Live
-            # prices still use the independent uncached /live read model.
-            latest=engine.latest_decision_run(market)
-            fingerprint=(
-                latest.run_id,
-                latest.status,
-                latest.evaluation.status if latest.evaluation else None,
-            ) if latest else ("NO_FORMAL_RUN",)
-            key=("market-page",market,lang,fingerprint)
-            payload,cache_hit=ui_projection_cache.read(
+            fingerprint=_market_page_fingerprint(market)
+            key=("market-page-swr",market,lang)
+            cached,cache_age_seconds=ui_projection_cache.peek(
                 key,
-                lambda:market_page_projection.full(market,lang,None),
-                ttl_seconds=120,
-                force=refresh,
                 copy_mode="shallow_top",
             )
+            with _market_page_cache_guard:
+                cached_fingerprint=_market_page_cache_fingerprints.get(key)
+            fingerprint_changed=(
+                cached is not None
+                and cached_fingerprint is not None
+                and cached_fingerprint!=fingerprint
+            )
+            age_expired=(
+                cached is not None
+                and cache_age_seconds is not None
+                and cache_age_seconds>=300.0
+            )
+
+            if cached is not None and not refresh:
+                # Fast path: a verified prior snapshot is always better than
+                # making first paint wait for the 5-8s full projection rebuild.
+                payload=cached
+                cache_hit=True
+                stale_served=bool(fingerprint_changed or age_expired)
+                if stale_served:
+                    revalidating=_schedule_market_page_refresh(
+                        background_tasks,key,market,lang,fingerprint
+                    )
+            else:
+                payload,cache_hit=ui_projection_cache.read(
+                    key,
+                    lambda:market_page_projection.full(market,lang,None),
+                    ttl_seconds=300,
+                    force=refresh,
+                    copy_mode="shallow_top",
+                )
+                if (payload.get("integrity") or {}).get("passed") is True:
+                    with _market_page_cache_guard:
+                        _market_page_cache_fingerprints[key]=fingerprint
+
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
         if not cache_hit and not run_id:
-            # Outcome resolution is idempotent and belongs off the page
-            # response critical path. The separate validation endpoint also
-            # resolves any pending outcomes independently.
+            # Outcome resolution belongs off the page response critical path.
             background_tasks.add_task(outcome_resolver.resolve_market,market)
         payload["read_cache"]={
             "hit":cache_hit,
-            "ttl_seconds":120 if not run_id else 0,
+            "stale_served":stale_served,
+            "revalidating":revalidating,
+            "age_seconds":round(cache_age_seconds,3) if cache_age_seconds is not None else None,
+            "soft_ttl_seconds":300 if not run_id else 0,
+            "strategy":"STALE_WHILE_REVALIDATE" if not run_id else "NO_SHARED_CACHE_FOR_PREVIEW",
             "live_read_model_separate":True,
             "formal_evidence_date":((payload.get("sections") or {}).get("daily") or {}).get("as_of"),
         }

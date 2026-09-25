@@ -12,7 +12,7 @@ class ReadThroughProjectionCache:
     are cached; errors never become a successful stale answer.
     """
 
-    version="read-through-projection-cache@1.1.0"
+    version="read-through-projection-cache@1.2.0"
 
     def __init__(self,max_entries:int=48)->None:
         self.max_entries=max(1,int(max_entries))
@@ -52,6 +52,23 @@ class ReadThroughProjectionCache:
                         oldest=min(self._entries,key=lambda k:self._entries[k][0])
                         del self._entries[oldest]
             return result,False
+
+    def peek(self,key,*,copy_mode:str="deep"):
+        with self._guard:
+            entry=self._entries.get(key)
+            if not entry:
+                return None,None
+            age=max(0.0,monotonic()-entry[0])
+            return self._copy_for_caller(entry[1],copy_mode),age
+
+    def refresh(self,key,build,*,copy_mode:str="deep"):
+        return self.read(
+            key,
+            build,
+            ttl_seconds=0.0,
+            force=True,
+            copy_mode=copy_mode,
+        )
 
     def invalidate(self,prefix:tuple=())->None:
         with self._guard:
