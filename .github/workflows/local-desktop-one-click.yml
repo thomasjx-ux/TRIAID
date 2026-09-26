@@ -62,10 +62,12 @@ jobs:
           $exe=Join-Path $pwd 'dist\TRIAID-FIN-Desktop\TRIAID-FIN-Desktop.exe'
           if (-not (Test-Path $exe)) { throw 'Frozen desktop executable missing' }
           $env:TRIAID_LOCAL_HOME=Join-Path $env:RUNNER_TEMP ('fin-desktop-frozen-' + [guid]::NewGuid().ToString('N'))
-          & $exe --self-test
-          if ($LASTEXITCODE -ne 0) {
+          # Windowed executables may launch asynchronously via PowerShell's call operator.
+          # Start-Process -Wait is essential: a printed PASS is not proof of exit status.
+          $self=Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($self.ExitCode -ne 0) {
             Get-Content (Join-Path $env:TRIAID_LOCAL_HOME 'logs\frozen-launch.log') -ErrorAction SilentlyContinue
-            throw 'Frozen executable failed authenticated API and UI-resource self-test'
+            throw "Frozen executable failed authenticated API and UI-resource self-test: $($self.ExitCode)"
           }
           Write-Host 'TRIAID_FROZEN_WINDOWS_API_SELF_TEST_PASS'
       - name: Obtain and verify Microsoft WebView2 bootstrapper
@@ -107,10 +109,11 @@ jobs:
           $exe=Join-Path $fresh 'TRIAID-FIN-Desktop.exe'
           if (-not (Test-Path $exe)) { throw 'Installed app executable missing' }
           $env:TRIAID_LOCAL_HOME=Join-Path $env:RUNNER_TEMP ('fin-desktop-installed-' + [guid]::NewGuid().ToString('N'))
-          & $exe --self-test
-          if ($LASTEXITCODE -ne 0) {
+          # This test exercises the installed EXE, not the Python toolcache or checkout tree.
+          $self=Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($self.ExitCode -ne 0) {
             Get-Content (Join-Path $env:TRIAID_LOCAL_HOME 'logs\frozen-launch.log') -ErrorAction SilentlyContinue
-            throw 'Installed desktop executable failed frozen API self-test'
+            throw "Installed desktop executable failed frozen API self-test: $($self.ExitCode)"
           }
           Write-Host 'TRIAID_ONE_CLICK_INSTALL_AND_FROZEN_API_PASS'
       - name: Stamp source revision and SHA-256 integrity
