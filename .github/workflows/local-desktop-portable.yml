@@ -1,0 +1,210 @@
+name: TRIAID FIN Desktop Portable One-Click ZIP
+
+on:
+  push:
+    branches:
+      - research/local-desktop-lab
+    paths:
+      - finlab_v2/local_desktop/**
+      - finlab_v2/requirements-desktop.txt
+      - .github/workflows/local-desktop-portable.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-windows:
+    name: Official Python bundled, Windows executable and background smoke
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      TRIAID_DATA_AUTOMATION: "0"
+      TRIAID_DECISION_AUTOMATION: "0"
+      TRIAID_CALENDAR_SYNC: "0"
+      TRIAID_LONG_RESEARCH_BOOTSTRAP: "0"
+      TRIAID_STARTUP_MAINTENANCE: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Prepare stage and pinned source revision
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -Path finlab_v2 -Destination (Join-Path $stage 'finlab_v2') -Recurse -Force
+          $fin = Join-Path $stage 'finlab_v2'
+          Get-ChildItem $fin -Directory -Filter '__pycache__' -Recurse | Remove-Item -Recurse -Force
+          Get-ChildItem $fin -Directory -Filter 'runtime_data' -Recurse | Remove-Item -Recurse -Force
+          Get-ChildItem $fin -File -Filter '*.pyc' -Recurse | Remove-Item -Force
+          $revision = (git rev-parse HEAD).Trim()
+          [System.IO.File]::WriteAllText((Join-Path $fin 'local_desktop\BUILD_REVISION'), $revision)
+          $manifest = [ordered]@{
+            build_revision = $revision
+            python_distribution = 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip'
+            market_coverage = @('US','CN','HK')
+            os = 'Windows 10/11 x64'
+            automatic_execution = $false
+          }
+          $manifest | ConvertTo-Json | Out-File (Join-Path $stage 'PACKAGE-MANIFEST.json') -Encoding utf8
+          Write-Host "STAGE=$stage REVISION=$revision"
+
+      - name: Bundle official embedded Python and full desktop dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          $runtime = Join-Path $stage 'Runtime'
+          New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+          $pythonZip = Join-Path $env:RUNNER_TEMP 'python-3.12.10-embed-amd64.zip'
+          Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip' -OutFile $pythonZip
+          Expand-Archive -Path $pythonZip -DestinationPath $runtime -Force
+          foreach ($binary in @('python.exe','pythonw.exe')) {
+            $path = Join-Path $runtime $binary
+            $signature = Get-AuthenticodeSignature -FilePath $path
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Python Software Foundation*') {
+              throw "Bundled official Python Authenticode verification failed: $binary; status $($signature.Status)"
+            }
+            Write-Host "OFFICIAL_PYTHON_SIGNED=$binary"
+          }
+          $site = Join-Path $runtime 'Lib\site-packages'
+          New-Item -ItemType Directory -Path $site -Force | Out-Null
+          python -m pip install --disable-pip-version-check --no-compile --target $site -r finlab_v2/requirements-desktop.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled Python dependencies failed installation' }
+          # Embedded Python is intentionally isolated from system Python and user site-packages.
+          $pth = @('python312.zip','.','Lib\site-packages','..\finlab_v2','import site')
+          [System.IO.File]::WriteAllLines((Join-Path $runtime 'python312._pth'),[string[]]$pth)
+          $source = Join-Path $stage 'finlab_v2'
+          Push-Location $source
+          try {
+            & (Join-Path $runtime 'python.exe') -c "import sys,fastapi,webview,tzdata;from zoneinfo import ZoneInfo;assert ZoneInfo('America/New_York');print('OFFICIAL_EMBEDDED_PYTHON_AND_MODULES_OK',sys.version)"
+            if ($LASTEXITCODE -ne 0) { throw 'Standalone Python failed imports' }
+          } finally { Pop-Location }
+
+      - name: Include signed Microsoft WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          $webview = Join-Path $stage 'MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $webview -MaximumRedirection 8
+          $signature = Get-AuthenticodeSignature -FilePath $webview
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Microsoft*') {
+            throw 'WebView2 bootstrapper is not validly signed by Microsoft'
+          }
+          Write-Host "MICROSOFT_WEBVIEW2_SIGNATURE_VALID"
+
+      - name: Add double-click launcher and safety instructions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          $launcher = @'
+          @echo off
+          setlocal
+          if not exist "%~dp0Runtime\pythonw.exe" (
+            echo Package is incomplete: official Python runtime not found. Re-extract the original ZIP.
+            pause
+            exit /b 1
+          )
+          cd /d "%~dp0finlab_v2"
+          start "" "%~dp0Runtime\pythonw.exe" "%~dp0finlab_v2\local_desktop\portable_start.pyw"
+          '@
+          [System.IO.File]::WriteAllText((Join-Path $stage 'Start_FIN_Desktop.cmd'),$launcher,[System.Text.Encoding]::ASCII)
+          $guide = @'
+          TRIAID FIN Desktop · 便携双击版 / Windows 10/11 64位
+
+          1. 先将整个 ZIP 解压到固定的文件夹，例如 D:\TRIAID-FIN。
+          2. 双击 Start_FIN_Desktop.cmd，稍等，程序会打开完整桌面版。
+          3. 第一次启动若缺少 WebView2，可选择由微软官方安装器完成安装，需联网。
+          4. 可以选择登录后自动运行研究后台；关闭前端窗口不代表终止后台。
+          5. 无需预装 Python，无需安装 pip，无需 PowerShell。
+
+          安全提示：本包仅使用 Python 官网原版签名的运行文件和微软签名的
+          WebView2 安装器，不包含自制的安装程序 EXE。所有依赖随包提供。
+          但这不保证杀毒软件一定放行，也不代表已经通过安全认证。
+          遇到病毒告警不要关闭防护，请保存检测名称以供复核。
+          建议先使用测试数据；实际连续运行及断电恢复仍需在你的电脑验收。
+
+          数据保存在当前 Windows 用户的 LOCALAPPDATA\TRIAID_FIN_Local\data；
+          不依赖 Railway 或 Supabase。严禁通过修改文件名规避安全拦截。
+          '@
+          [System.IO.File]::WriteAllText(
+            (Join-Path $stage '请先阅读-双击启动说明.txt'), $guide,
+            (New-Object System.Text.UTF8Encoding($true))
+          )
+
+      - name: Exercise portable runtime, real backend and double-click entrypoint
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          $runtime = Join-Path $stage 'Runtime'
+          $python = Join-Path $runtime 'python.exe'
+          $pythonw = Join-Path $runtime 'pythonw.exe'
+          $finlab = Join-Path $stage 'finlab_v2'
+          $env:TRIAID_LOCAL_TEST_MODE = '1'
+          $env:TRIAID_LOCAL_HOME = Join-Path $env:RUNNER_TEMP ('fin-portable-test-' + [guid]::NewGuid().ToString('N'))
+          Push-Location $finlab
+          try {
+            & $python -m local_desktop.smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled desktop unit test failed' }
+            & $python -m local_desktop.integration_smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled authenticated API test failed' }
+            & $python -m local_desktop.process_smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled real restart/lock test failed' }
+            & $python local_desktop_parity_smoke.py
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled full UI parity failed' }
+            $marker = Join-Path $env:RUNNER_TEMP 'portable-console-self-test.json'
+            & $python 'local_desktop\portable_start.pyw' --self-test $marker
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $marker)) {
+              throw 'Portable starter self-test failed'
+            }
+            $guiMarker = Join-Path $env:RUNNER_TEMP 'portable-pythonw-self-test.json'
+            $launcher = Join-Path $finlab 'local_desktop\portable_start.pyw'
+            $p = Start-Process -FilePath $pythonw -ArgumentList @($launcher,'--self-test',$guiMarker) -PassThru -Wait
+            if ($p.ExitCode -ne 0 -or -not (Test-Path $guiMarker)) {
+              throw 'Double-click GUI Python interpreter self-test failed'
+            }
+            Write-Host 'TRIAID_PORTABLE_SIGNED_PYTHON_FULL_BACKEND_PASS'
+          } finally { Pop-Location }
+
+      - name: Create downloadable verified ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'TRIAID-FIN-Portable'
+          $revision = (git rev-parse HEAD).Trim()
+          New-Item -Path 'dist' -ItemType Directory -Force | Out-Null
+          $name = 'TRIAID-FIN-Desktop-Portable-' + $revision.Substring(0,12) + '.zip'
+          $zip = Join-Path $pwd ('dist\' + $name)
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $entries = $archive.Entries.FullName
+            foreach ($required in @('Start_FIN_Desktop.cmd','Runtime/python.exe','Runtime/pythonw.exe','finlab_v2/app.py','finlab_v2/local_desktop/portable_start.pyw','MicrosoftEdgeWebview2Setup.exe')) {
+              if ($entries -notcontains $required) {
+                throw "ZIP missing required component: $required"
+              }
+            }
+            Write-Host "ZIP_ARCHIVE_ENTRIES=$($archive.Entries.Count)"
+          } finally { $archive.Dispose() }
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText(($zip+'.sha256'), $hash+'  '+$name+[Environment]::NewLine)
+          Write-Host "TRIAID_PORTABLE_ZIP=$zip SHA256=$hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TRIAID-FIN-Desktop-Portable-ReadyToRun
+          path: |
+            dist/TRIAID-FIN-Desktop-Portable-*.zip
+            dist/TRIAID-FIN-Desktop-Portable-*.zip.sha256
+          retention-days: 30
+          if-no-files-found: error
