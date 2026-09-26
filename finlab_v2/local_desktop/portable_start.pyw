@@ -100,7 +100,7 @@ def start_supervisor() -> None:
             "creationflags": subprocess.CREATE_NO_WINDOW,
         }
         subprocess.Popen(
-            [str(RUNTIME / "pythonw.exe"), "-m", "local_desktop.supervisor"],
+            [str(RUNTIME / "python.exe"), "-m", "local_desktop.supervisor"],
             **kwargs,
         )
     deadline = time.monotonic() + 40
@@ -137,7 +137,7 @@ def maybe_enable_startup() -> None:
         target = startup / "TRIAID FIN Background.cmd"
         # cmd special characters in extracted paths are not safe to interpolate.
         paths = (str(RUNTIME / "pythonw.exe"), str(FINLAB))
-        if any(ch in p for p in paths for ch in '&|<>!^%"'):
+        if any(ch in p for p in paths for ch in '&|<>!^%"') or any(ord(ch) > 127 for p in paths for ch in p):
             message(
                 "当前解压路径含特殊字符，未配置自动启动；"
                 "可以继续双击启动。请解压到简单英文路径后再设置。"
