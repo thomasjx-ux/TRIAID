@@ -78,11 +78,17 @@ jobs:
         run: python -m pip install -r finlab_v2/requirements-desktop.txt
       - name: Windows UI parity, storage recovery and authenticated API checks
         working-directory: finlab_v2
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           python -m local_desktop.smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Windows desktop unit smoke failed' }
           python -m local_desktop.integration_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Windows desktop integration smoke failed' }
           python local_desktop_contract_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows desktop architecture audit failed' }
           python local_desktop_parity_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows UI/API parity audit failed' }
       - name: Build revision-pinned Windows ZIP and offline wheelhouse
         if: github.event_name == 'push'
         shell: pwsh
