@@ -1,7 +1,7 @@
 """Static packaging contract for a self-contained per-user Windows setup."""
 from pathlib import Path
 
-root=Path(__file__).resolve().parent
+root=Path(__file__).resolve().parent.parent
 source=(root/"local_desktop/frozen_entry.py").read_text(encoding="utf-8")
 iss=(root/"local_desktop/setup.iss").read_text(encoding="utf-8")
 client=(root/"local_desktop/client.py").read_text(encoding="utf-8")
