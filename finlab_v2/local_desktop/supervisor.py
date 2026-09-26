@@ -28,7 +28,8 @@ def main()->int:
     signal.signal(signal.SIGINT,_stop)
     if hasattr(signal,"SIGTERM"):
         signal.signal(signal.SIGTERM,_stop)
-    root=Path(__file__).resolve().parent.parent
+    root=(Path(sys.executable).resolve().parent if getattr(sys,"frozen",False)
+          else Path(__file__).resolve().parent.parent)
     logfile=log_dir()/"supervisor.log"
     delay=2
     while not STOP:
@@ -45,7 +46,8 @@ def main()->int:
         log=log_dir()/"server.log"
         with log.open("ab") as output:
             process=subprocess.Popen(
-                [sys.executable,"-m","local_desktop.server"],
+                ([sys.executable,"--server"] if getattr(sys,"frozen",False)
+                 else [sys.executable,"-m","local_desktop.server"]),
                 cwd=str(root),stdin=subprocess.DEVNULL,
                 stdout=output,stderr=subprocess.STDOUT,
                 creationflags=(subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0),
