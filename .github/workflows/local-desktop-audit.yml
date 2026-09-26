@@ -1,4 +1,4 @@
-name: TRIAID Local Desktop Smoke
+name: TRIAID Local Desktop Verification and Windows Bundle
 
 on:
   push:
@@ -6,34 +6,117 @@ on:
       - research/local-desktop-lab
     paths:
       - finlab_v2/local_desktop/**
+      - finlab_v2/local_desktop_contract_smoke.py
+      - finlab_v2/local_desktop_parity_smoke.py
+      - finlab_v2/local_desktop_parity_manifest.json
+      - finlab_v2/LOCAL_DESKTOP_ARCHITECTURE.md
       - finlab_v2/requirements-desktop.txt
+      - finlab_v2/triaid_fin/storage_backend.py
+      - finlab_v2/release_audit.py
       - .github/workflows/local-desktop-audit.yml
   pull_request:
     paths:
       - finlab_v2/local_desktop/**
+      - finlab_v2/local_desktop_contract_smoke.py
+      - finlab_v2/local_desktop_parity_smoke.py
+      - finlab_v2/local_desktop_parity_manifest.json
       - finlab_v2/requirements-desktop.txt
+      - finlab_v2/triaid_fin/storage_backend.py
       - .github/workflows/local-desktop-audit.yml
 
+permissions:
+  contents: read
+
 jobs:
-  local-desktop:
+  linux-full-core-audit:
+    name: Full legacy and local audit (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       TRIAID_STORAGE_BACKEND: file
       TRIAID_DATA_AUTOMATION: "0"
       TRIAID_CALENDAR_SYNC: "0"
       TRIAID_LONG_RESEARCH_BOOTSTRAP: "0"
+      TRIAID_STARTUP_MAINTENANCE: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install backend and test dependencies
+      - name: Install backend/test dependencies
         run: |
           python -m pip install -r finlab_v2/requirements.txt
           python -m pip install httpx==0.28.1
-      - name: Validate local bootstrap, secret separation and UI-preservation contract
+      - name: Local independent-start durability and security checks
         working-directory: finlab_v2
-        run: python -m local_desktop.smoke
-      - name: End-to-end HTTP parity and local access controls
+        run: |
+          python -m local_desktop.smoke
+          python -m local_desktop.integration_smoke
+          python local_desktop_contract_smoke.py
+          python local_desktop_parity_smoke.py
+      - name: Complete FIN core release audit
         working-directory: finlab_v2
-        run: python -m local_desktop.integration_smoke
+        run: python release_audit.py build
+
+  windows-desktop:
+    name: Native Windows dependency and API tests
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      TRIAID_STORAGE_BACKEND: file
+      TRIAID_DATA_AUTOMATION: "0"
+      TRIAID_CALENDAR_SYNC: "0"
+      TRIAID_LONG_RESEARCH_BOOTSTRAP: "0"
+      TRIAID_STARTUP_MAINTENANCE: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Install Windows desktop and test dependencies
+        run: python -m pip install -r finlab_v2/requirements-desktop.txt
+      - name: Windows UI parity, storage recovery and authenticated API checks
+        working-directory: finlab_v2
+        run: |
+          python -m local_desktop.smoke
+          python -m local_desktop.integration_smoke
+          python local_desktop_contract_smoke.py
+          python local_desktop_parity_smoke.py
+      - name: Build revision-pinned Windows ZIP and offline wheelhouse
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $stage=Join-Path $env:RUNNER_TEMP 'triaid-fin-desktop-stage'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          $fin=Join-Path $stage 'finlab_v2'
+          Copy-Item -Path finlab_v2 -Destination $fin -Recurse -Force
+          Get-ChildItem -Path $fin -Directory -Filter __pycache__ -Recurse | Remove-Item -Recurse -Force
+          Get-ChildItem -Path $fin -File -Filter *.pyc -Recurse | Remove-Item -Force
+          Get-ChildItem -Path $fin -Directory -Filter runtime_data -Recurse | Remove-Item -Recurse -Force
+          $revision=(git rev-parse HEAD).Trim()
+          [System.IO.File]::WriteAllText((Join-Path $fin 'local_desktop\BUILD_REVISION'),$revision)
+          $wheels=Join-Path $fin 'vendor\wheels'
+          New-Item -ItemType Directory -Path $wheels -Force | Out-Null
+          python -m pip download --disable-pip-version-check -r finlab_v2/requirements-desktop.txt --dest $wheels
+          if ($LASTEXITCODE -ne 0) { throw 'Windows offline wheel download failed' }
+          $checksums=Get-ChildItem -Path $wheels -File | Sort-Object Name | ForEach-Object {
+            (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name
+          }
+          [System.IO.File]::WriteAllLines((Join-Path $fin 'vendor\WHEEL_SHA256SUMS.txt'),[string[]]$checksums)
+          $zip='dist\TRIAID-FIN-Desktop-Windows-' + $revision.Substring(0,12) + '.zip'
+          Compress-Archive -Path $fin -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [System.IO.File]::WriteAllText($zip+'.sha256',$hash+'  '+[IO.Path]::GetFileName($zip))
+          Write-Host "PACKAGED $zip SHA256=$hash"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: TRIAID-FIN-Desktop-Windows
+          path: |
+            dist/TRIAID-FIN-Desktop-Windows-*.zip
+            dist/TRIAID-FIN-Desktop-Windows-*.zip.sha256
+          retention-days: 30
+          if-no-files-found: error

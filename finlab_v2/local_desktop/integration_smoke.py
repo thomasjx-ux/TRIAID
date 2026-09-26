@@ -40,6 +40,13 @@ async def check() -> None:
                 assert "httponly" in granted.headers["set-cookie"].lower()
                 assert "samesite=strict" in granted.headers["set-cookie"].lower()
 
+                disk = await c.get("/desktop/storage-health")
+                assert disk.status_code == 200, disk.text
+                assert disk.json()["backend"] == "file"
+                assert disk.json()["local_disk_probe"]["status"] in (
+                    "PENDING_SECOND_START", "VERIFIED_AFTER_RESTART",
+                )
+
                 original = await c.get("/")
                 assert original.status_code == 200, original.text[:200]
                 assert "TRIAID" in original.text

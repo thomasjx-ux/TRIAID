@@ -1,19 +1,23 @@
 """Desktop-only FastAPI composition. The original dashboard and APIs are untouched."""
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import secrets
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from .config import COOKIE_NAME, HOST, PORT, ping_proof, session_secret, valid_session
 
 if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE") != "1":
     raise RuntimeError("Local desktop routes must never be imported by the cloud runtime.")
 
-from app import app  # noqa: E402 - must import only after desktop runtime configuration
+from app import app, decision_scheduler, engine, market_automation  # noqa: E402
 
 UI_ROOT = Path(__file__).parent / "ui"
 EXPECTED_ORIGIN = f"http://{HOST}:{PORT}"
@@ -81,3 +85,48 @@ def desktop_shell() -> str:
 @app.get("/desktop/live", response_class=HTMLResponse, include_in_schema=False)
 def desktop_live() -> str:
     return (UI_ROOT / "live.html").read_text(encoding="utf-8")
+
+
+@app.get("/desktop/storage-health", include_in_schema=False)
+def local_storage_health() -> dict:
+    state = engine.store.backend.status()
+    return {
+        "backend": state.get("backend"),
+        "durability": state.get("durability"),
+        "root": state.get("root"),
+        "local_disk_probe": state.get("local_disk_probe"),
+    }
+
+
+@app.get("/desktop/events", include_in_schema=False)
+async def local_research_events():
+    """Low-latency invalidation signals; existing UI projection APIs remain authoritative."""
+    async def events():
+        fingerprint = None
+        last_heartbeat = time.monotonic()
+        while True:
+            refreshes = tuple(sorted(
+                (str(k), float(v)) for k, v in market_automation.last_refresh.items()
+            ))
+            summary = decision_scheduler.status().get("markets") or {}
+            decisions = tuple(sorted(
+                (str(m), int(row.get("decision_count") or 0))
+                for m, row in summary.items()
+            ))
+            updated = (refreshes, decisions)
+            if updated != fingerprint:
+                fingerprint = updated
+                payload = {
+                    "type": "DATA_OR_DECISION_UPDATE",
+                    "server_utc": datetime.now(timezone.utc).isoformat(),
+                }
+                yield "event: update\ndata: " + json.dumps(payload) + "\n\n"
+                last_heartbeat = time.monotonic()
+            elif time.monotonic() - last_heartbeat >= 15:
+                yield ": heartbeat\n\n"
+                last_heartbeat = time.monotonic()
+            await asyncio.sleep(1.0)
+    return StreamingResponse(
+        events(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )

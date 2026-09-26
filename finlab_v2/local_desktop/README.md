@@ -1,49 +1,104 @@
-# TRIAID FIN Local Desktop — development branch
+# TRIAID FIN Local Desktop — full-function research workstation
 
-This branch adds a single-user native desktop wrapper around the COMPLETE existing finlab_v2 application. The legacy application and original HTML are not copied or rewritten. The desktop workbench embeds the original home route and adds a second local-only real-time research view.
+This is a separate, **single-user local product** built on the most recently
+merged, reviewed FIN core. It does not require Railway or Supabase. The complete
+original three-market UI runs alongside an additional local realtime research
+workbench. The backend remains alive when the desktop window is closed.
 
-**Status: development scaffold.** This commit is not an audited release and the complete three-market regression suite has not yet passed on a Windows PC. Railway production is not altered by this branch.
+## Windows 10/11 installation (Python 3.12, x64)
 
-## Deployment design
+1. Use a release ZIP from the **TRIAID Local Desktop** GitHub Actions build;
+   verify the SHA-256 file shipped with that ZIP.
+2. Extract the archive to a private local folder, keeping the finlab_v2 folder.
+3. Verify Windows Edge WebView2 Runtime is installed.
+4. Open PowerShell from finlab_v2 and run:
+   .\local_desktop\install.ps1
+5. Launch the "TRIAID FIN Desktop" shortcut created on your desktop.
 
-- Runtime: the original FastAPI/TRIAID engine and every existing API, strategy, market page, risk module and experiment.
-- Desktop shell: pywebview 6.2.1 using Microsoft Edge WebView2 on Windows. The original dashboard loads from the untouched root route, retaining all original UI elements. The additional Live Lab is a separate view.
-- Scheduler: one local Uvicorn worker independently runs the existing US/CN/HK market automation, official calendar sync and decision scheduler.
-- Storage: dedicated local file backend under the signed-in user's data directory. The cloud Supabase endpoint and token are explicitly discarded by the local launcher.
-- Security: 127.0.0.1 only; exact Host and Origin checks; session cookie is HttpOnly and SameSite Strict; no public ports, no embedded cloud admin credentials, no injected Python-to-JavaScript API bridge. All existing API requests require the local session. The local admin header is added by the trusted HTTP server rather than exposed in browser JavaScript.
-- Process lifecycle: the backend starts independently from the desktop shell. Closing the UI does not terminate data collection or experiments.
+The installer creates a per-user virtual environment, installs direct-version
+pinned dependencies from the bundled offline Windows wheelhouse if available,
+runs desktop/API security and UI-parity tests, and creates a data durability
+checkpoint. It also installs a per-user login-startup supervisor (unless
+-NoAutostart is passed). No administrator rights or public listener is needed.
 
-## First-time development startup
+This is a development ZIP, NOT a code-signed Windows installer. Never disable
+Windows protections or give administrator credentials to install this package.
+Before sensitive use, confirm package origin, verify hashes and enable
+BitLocker/full-disk encryption.
 
-On Windows use Python 3.12 and install the Microsoft Edge WebView2 Runtime, then from finlab_v2:
+## Developer startup
 
+From finlab_v2 with Python 3.12:
     python -m pip install -r requirements-desktop.txt
     python -m local_desktop.smoke
+    python -m local_desktop.integration_smoke
+    python -m local_desktop.durability
     python -m local_desktop.client
 
-On a supported Linux desktop, install the pywebview GTK/WebKit runtime prerequisites before starting the native UI. For headless operation run:
+Background/headless runtime:
+    python -m local_desktop.supervisor
 
-    python -m local_desktop.server
+The GUI and background runtime have separate lifecycles. The first GUI launch
+also starts the background server if it is absent. Never start multiple server
+instances for the same data directory.
 
-The first client launch starts the local backend if necessary and reads its signed health proof. The current authenticated server uses port 8765, changeable with TRIAID_DESKTOP_PORT before starting both client and server. Run only one backend per data directory. A different service occupying the expected port is treated as an error.
+## Current UI
 
-For unattended Windows operation, set a per-user Task Scheduler task at logon that starts python -m local_desktop.server with working directory finlab_v2. Do not run the backend as a privileged service or expose the port outside loopback.
+- "完整原版界面": original unmodified FIN V2 page: all US/CN/HK market pages,
+  strategies, tooltip content, risk and evolution modules, daily reports,
+  experiments, controls, tables and visualizations.
+- "实时研究实验台": live indicators, actual observed price curves, source
+  timestamp and freshness, asset table, select-and-inspect market/TRIAID
+  timeline, original event evidence.
+- The research screen listens to local server-sent **invalidation signals**.
+  A periodic fallback checks for stale data. A browser refresh is NOT an
+  exchange tick: data freshness still depends on each provider's permission,
+  source publication and TRIAID's separate decision frequency.
 
-## Design constraints
+## Security
 
-1. Keep the original app.py and its UI as the compatibility baseline; never trade away existing interaction for the Live Lab.
-2. Add new visualizations through independent route/view modules instead of adding more tightly coupled business logic to app.py.
-3. Data refresh does not equal TRIAID decision, and research decisions never imply broker execution.
-4. Every market datum and research result must retain source time, version, experiment mode and completeness. Do not invent realtime values from browser refreshes.
-5. Freeze a commit and pass local end-to-end smoke, offline replay, official-calendar checks, restart recovery, permission checks and full legacy UI checks before labeling a local release.
-6. The existing file backend's cloud mount durability probe currently labels local PC directories EPHEMERAL; introduce a separately validated local-disk durability probe before production use. Do not misreport a successful write as proof of power-loss recovery.
-7. GPT analysis requires an authorized outbound report/export connector. The local runtime does not inject files directly into a ChatGPT conversation.
-8. The historical GitHub repository is publicly visible. Store no keys, private credentials, unreleased proprietary implementation, or real data in this branch. Move private-only source to a private repository before adding it.
+The server listens only on 127.0.0.1 and requires an OS-user-scoped local
+session for every original endpoint. It validates Host and Origin, blocks
+foreign-site requests, and adds the existing admin token only inside the
+trusted server. There is no JavaScript-to-Python native bridge. Cloud tokens
+and Railway deployment identity are stripped before app import. All experiment
+data and generated session tokens stay under the user's local data folder.
+The repository remains publicly visible: never add proprietary algorithms,
+API keys, real account data or personal secrets here.
 
-## Research screens
+## Persistence and operational limits
 
-- Full original workbench: entire legacy dashboard, all US/CN/HK pages, all tables/tooltips, risk and evolution views, bilingual existing controls.
-- Live Lab: current observations from all three markets, local-exchange timestamps, source freshness, selected-market recorded price curve, actual instruments, a selectable TRIAID/market event timeline with original evidence.
-- Next phase: validated low-latency event push, deeper risk-factor/time-aligned visualization, export/backup/restore user controls, packaging and performance profiling.
+Each server start verifies the local data directory. The first installation
+and subsequent server start must pass the two-independent-start marker test.
+The local file backend flushes critical writes to disk. This establishes
+process-restart persistence only; it does NOT certify survival of sudden
+power loss or successful off-device backup restoration. Disk encryption,
+independent encrypted backups, a UPS, and a restoration drill remain required.
 
-This package does not silently change the Railway deployment or enable automated trading.
+Windows login startup is not pre-login system-service startup. An unattended
+machine must remain logged in or use a separately audited operating-system
+service configuration. The server supervisor retries after crashes; network
+outages and unavailable provider feeds remain explicit, not silently filled.
+
+The existing official market calendars and release contract apply. The
+2026 US/CN/HK calendars are present; later-year HK synchronization still needs
+an independently verified official-feed adapter. Do not guess unknown holiday
+dates. Data refresh, observation, TRIAID intervention and broker execution
+remain strictly separate; broker execution remains disabled.
+
+## Release gate
+
+The desktop is **not certified** merely because source exists. Release checks:
+- pinned source revision from latest approved main core;
+- Linux full original regression/release audit;
+- Windows security, local-storage, API integration and UI-parity smoke tests;
+- single-instance background operation and restart demonstration;
+- three-market calendar, live-source and risk/strategy function checks;
+- long-duration PC run, power-loss recovery and encrypted backup restore
+  before replacing any continuous production evidence chain.
+
+The GitHub Actions ZIP includes a SHA-256 sidecar and source revision file.
+The source package and generated GitHub Actions artifact are NOT digitally signed.
+
+GPT analysis is a separate, explicitly authorized export/connector workflow.
+The local runtime cannot push directly into an arbitrary ChatGPT conversation.

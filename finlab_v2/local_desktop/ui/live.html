@@ -49,7 +49,7 @@ footer{color:#8ba1b9;font-size:11px;line-height:1.6;margin:4px 0 12px}
 <body>
 <div class="top">
  <div><h1>TRIAID 实时研究实验台</h1><small>每次有效市场观测与 TRIAID 状态判断同步追踪 · 所有数据来自本地实际记录</small></div>
- <div class="tools"><span class="pill" id="mode">研究模式 · 不连接交易账户</span><span class="pill" id="connection">读取中</span><button id="pause">暂停画面</button><button id="refresh">立即刷新</button></div>
+ <div class="tools"><span class="pill" id="mode">研究模式 · 不连接交易账户</span><span class="pill" id="connection">读取中</span><span class="pill" id="transport">连接事件流…</span><button id="pause">暂停画面</button><button id="refresh">立即刷新</button></div>
 </div>
 <div class="markets" id="markets">
  <button class="market selected" data-market="US"><span class="name">美股 US</span><span class="state" id="US-phase">读取中</span><div class="summary" id="US-summary">正在读取行情…</div><div class="age" id="US-age"></div></button>
@@ -242,7 +242,20 @@ async function refreshAll(force){
 }
 window.addEventListener("resize",()=>drawHistory());
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshAll()});
-refreshAll(true);setInterval(()=>{if(!document.hidden)refreshAll()},5000);
+refreshAll(true);
+// Push-based invalidation does not invent prices or trigger research decisions.
+// The periodic fallback checks source freshness when no new events arrive.
+if(typeof EventSource==="function"){
+ const stream=new EventSource("/desktop/events");
+ stream.onopen=()=>{mark("transport","事件推送已连接");el("transport").className="pill good"};
+ stream.addEventListener("update",()=>{if(!st.paused&&!document.hidden)refreshAll()});
+ stream.onerror=()=>{mark("transport","事件流重连中 · 保留定时刷新");el("transport").className="pill warn"};
+ window.addEventListener("pagehide",()=>stream.close());
+}else{
+ mark("transport","本机不支持事件流 · 定时刷新");
+ el("transport").className="pill warn";
+}
+setInterval(()=>{if(!document.hidden)refreshAll()},15000);
 })();
 </script>
 </body>

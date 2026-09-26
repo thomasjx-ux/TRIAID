@@ -93,6 +93,13 @@ class FileStorageBackend:
 
     @property
     def persistent(self)->bool:
+        if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1":
+            expected=os.environ.get("TRIAID_LOCAL_STORAGE_PROBE_ROOT","")
+            return bool(
+                os.environ.get("TRIAID_LOCAL_STORAGE_RESTART_VERIFIED")=="1"
+                and expected
+                and str(self.root.resolve())==str(Path(expected).resolve())
+            )
         details=self._mount_details()
         expected=details["expected_mount"]
         resolved=details["root_resolved"]
@@ -103,6 +110,8 @@ class FileStorageBackend:
 
     @property
     def durability(self)->str:
+        if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1":
+            return "PERSISTENT" if self.persistent else "UNVERIFIED_LOCAL_DISK"
         return "PERSISTENT" if self.persistent else "EPHEMERAL"
 
     def _load_persistence_probe(self)->dict:
@@ -116,7 +125,9 @@ class FileStorageBackend:
             previous=None
         previous_deployment=(previous or {}).get("deployment_id")
         confirmed=bool(
-            (previous or {}).get("confirmed_across_deployments")
+            (os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1"
+             and os.environ.get("TRIAID_LOCAL_STORAGE_RESTART_VERIFIED")=="1")
+            or (previous or {}).get("confirmed_across_deployments")
             or (
                 deployment_id
                 and previous_deployment
@@ -142,7 +153,9 @@ class FileStorageBackend:
             previous=None
         previous_deployment=(previous or {}).get("deployment_id")
         confirmed=bool(
-            (previous or {}).get("confirmed_across_deployments")
+            (os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1"
+             and os.environ.get("TRIAID_LOCAL_STORAGE_RESTART_VERIFIED")=="1")
+            or (previous or {}).get("confirmed_across_deployments")
             or (
                 deployment_id
                 and previous_deployment
@@ -180,14 +193,28 @@ class FileStorageBackend:
         path=self.path(name)
         tmp=path.with_suffix(path.suffix+".tmp")
         with self._lock:
-            tmp.write_text(text,encoding="utf-8")
-            tmp.replace(path)
+            if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1":
+                with tmp.open("w",encoding="utf-8") as handle:
+                    handle.write(text)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                tmp.replace(path)
+                if os.name!="nt":
+                    fd=os.open(str(path.parent),os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+                    try: os.fsync(fd)
+                    finally: os.close(fd)
+            else:
+                tmp.write_text(text,encoding="utf-8")
+                tmp.replace(path)
 
     def append_line(self,name:str,line:str)->None:
         path=self.path(name)
         with self._lock:
             with path.open("a",encoding="utf-8") as handle:
                 handle.write(line+"\n")
+                if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1":
+                    handle.flush()
+                    os.fsync(handle.fileno())
 
     def read_text(self,name:str)->str:
         path=self.path(name)
@@ -236,6 +263,14 @@ class FileStorageBackend:
             "durability":self.durability,
             "persistent":self.persistent,
             "volume":mount,
+            "local_disk_probe":(
+                {
+                    "status":os.environ.get("TRIAID_LOCAL_STORAGE_PROBE_STATUS","UNVERIFIED"),
+                    "verified_across_starts":self.persistent,
+                    "power_loss_recovery_tested":False,
+                    "independent_backup_tested":False,
+                } if os.environ.get("TRIAID_LOCAL_DESKTOP_MODE")=="1" else None
+            ),
             "persistence_probe":{
                 "deployment_id":self._probe.get("deployment_id"),
                 "previous_deployment_id":self._probe.get("previous_deployment_id"),

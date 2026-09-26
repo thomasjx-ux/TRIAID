@@ -1,0 +1,16 @@
+# Local TRIAID credentials and experiment data must never be committed.
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/.env
+**/.env.*
+!**/.env.example
+**/runtime_data/
+**/.desktop-session
+**/.local-durability-probe.json
+**/*.pem
+**/*.key
+**/BUILD_REVISION
+finlab_v2/vendor/
+finlab_v2/dist/

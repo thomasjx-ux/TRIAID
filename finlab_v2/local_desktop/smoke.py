@@ -1,8 +1,11 @@
 """Fast, offline checks for local-only bootstrap, credentials and preserved UI."""
 from __future__ import annotations
 
+import json
 import os
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +48,47 @@ class LocalDesktopSmoke(unittest.TestCase):
                 self.assertNotIn("TRIAID_SUPABASE_PERSISTENCE_URL", os.environ)
                 self.assertEqual(os.environ["TRIAID_LOCAL_DESKTOP_MODE"], "1")
 
+    def test_disk_probe_persists_across_independent_python_starts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "TRIAID_LOCAL_HOME": tmp}
+            first = subprocess.run(
+                [sys.executable, "-m", "local_desktop.durability"],
+                cwd=str(FINLAB), env=env, text=True,
+                capture_output=True, check=True,
+            )
+            second = subprocess.run(
+                [sys.executable, "-m", "local_desktop.durability"],
+                cwd=str(FINLAB), env=env, text=True,
+                capture_output=True, check=True,
+            )
+            a = json.loads(first.stdout)
+            b = json.loads(second.stdout)
+            self.assertEqual(a["status"], "PENDING_SECOND_START")
+            self.assertEqual(b["status"], "VERIFIED_AFTER_RESTART")
+            self.assertFalse(b["power_loss_recovery_tested"])
+            self.assertFalse(b["independent_backup_tested"])
+
+    def test_local_file_backend_survives_reopen(self):
+        from .durability import verify
+        from triaid_fin.storage_backend import FileStorageBackend
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "data"
+            verify(root, "boot-one")
+            proof = verify(root, "boot-two")
+            with patch.dict(os.environ, {
+                "TRIAID_LOCAL_DESKTOP_MODE": "1",
+                "TRIAID_LOCAL_STORAGE_RESTART_VERIFIED": "1",
+                "TRIAID_LOCAL_STORAGE_PROBE_ROOT": proof["root"],
+                "TRIAID_LOCAL_STORAGE_PROBE_STATUS": proof["status"],
+            }):
+                store = FileStorageBackend(str(root))
+                self.assertTrue(store.persistent)
+                store.atomic_write_text("durability-test.json", '{"ok":true}')
+                store.append_line("durability-test.jsonl", '{"event":1}')
+                restored = FileStorageBackend(str(root))
+                self.assertEqual(restored.read_text("durability-test.json"), '{"ok":true}')
+                self.assertEqual(restored.read_lines("durability-test.jsonl"), ['{"event":1}'])
+
     def test_full_original_ui_is_embedded_not_reimplemented(self):
         html = (HERE / "ui" / "shell.html").read_text(encoding="utf-8")
         self.assertIn('<iframe id="classic" src="/"', html)
@@ -59,6 +103,7 @@ class LocalDesktopSmoke(unittest.TestCase):
         self.assertIn("/api/market-data/observations", html)
         self.assertIn("source_latest_ts", html)
         self.assertNotIn("Math.random(", html)
+        self.assertIn('new EventSource("/desktop/events")', html)
 
     def test_loopback_only_and_separate_backend_process(self):
         server = (HERE / "server.py").read_text(encoding="utf-8")
