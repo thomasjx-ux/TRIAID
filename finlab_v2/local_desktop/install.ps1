@@ -33,69 +33,7 @@ try {
   if (Test-Path $WheelRoot) {
     if (-not (Test-Path $Manifest)) { throw 'Bundled wheelhouse has no SHA-256 manifest' }
     foreach ($line in Get-Content $Manifest) {
-      if ($line -notmatch '^([0-9a-fA-F]{64})  ([^\\/]+)
-
-  # The audit runs against isolated temporary data, never the user's research records.
-  $OldHome = $env:TRIAID_LOCAL_HOME
-  $OldAutomation = $env:TRIAID_DATA_AUTOMATION
-  $OldCalendar = $env:TRIAID_CALENDAR_SYNC
-  $OldBootstrap = $env:TRIAID_LONG_RESEARCH_BOOTSTRAP
-  $env:TRIAID_LOCAL_HOME = Join-Path $env:TEMP ("triaid-local-audit-" + [guid]::NewGuid().ToString('N'))
-  $env:TRIAID_DATA_AUTOMATION = '0'
-  $env:TRIAID_CALENDAR_SYNC = '0'
-  $env:TRIAID_LONG_RESEARCH_BOOTSTRAP = '0'
-  try {
-    & $Py -m local_desktop.smoke
-    if ($LASTEXITCODE -ne 0) { throw 'Desktop security smoke failed' }
-    & $Py -m local_desktop.integration_smoke
-    if ($LASTEXITCODE -ne 0) { throw 'Desktop HTTP integration smoke failed' }
-    & $Py -m local_desktop.process_smoke
-    if ($LASTEXITCODE -ne 0) { throw 'Desktop background-process/restart smoke failed' }
-    & $Py local_desktop_contract_smoke.py
-    if ($LASTEXITCODE -ne 0) { throw 'Desktop architecture audit failed' }
-    & $Py local_desktop_parity_smoke.py
-    if ($LASTEXITCODE -ne 0) { throw 'Desktop UI/API parity audit failed' }
-  } finally {
-    Remove-Item Env:\TRIAID_LOCAL_HOME -ErrorAction SilentlyContinue
-    if ($null -ne $OldHome) { $env:TRIAID_LOCAL_HOME = $OldHome }
-    Remove-Item Env:\TRIAID_DATA_AUTOMATION -ErrorAction SilentlyContinue
-    if ($null -ne $OldAutomation) { $env:TRIAID_DATA_AUTOMATION = $OldAutomation }
-    Remove-Item Env:\TRIAID_CALENDAR_SYNC -ErrorAction SilentlyContinue
-    if ($null -ne $OldCalendar) { $env:TRIAID_CALENDAR_SYNC = $OldCalendar }
-    Remove-Item Env:\TRIAID_LONG_RESEARCH_BOOTSTRAP -ErrorAction SilentlyContinue
-    if ($null -ne $OldBootstrap) { $env:TRIAID_LONG_RESEARCH_BOOTSTRAP = $OldBootstrap }
-  }
-
-  # Installer preflight records the first independent durability checkpoint.
-  & $Py -m local_desktop.durability
-  if ($LASTEXITCODE -ne 0) { throw 'Local data-directory durability preflight failed' }
-
-  $Shell = New-Object -ComObject WScript.Shell
-  $Desktop = [Environment]::GetFolderPath('DesktopDirectory')
-  $AppLink = $Shell.CreateShortcut((Join-Path $Desktop 'TRIAID FIN Desktop.lnk'))
-  $AppLink.TargetPath = $Pyw
-  $AppLink.Arguments = '-m local_desktop.client'
-  $AppLink.WorkingDirectory = $FinLab
-  $AppLink.Description = 'TRIAID FIN: full research workbench'
-  $AppLink.Save()
-
-  if (-not $NoAutostart) {
-    $Startup = [Environment]::GetFolderPath('Startup')
-    $ServerLink = $Shell.CreateShortcut((Join-Path $Startup 'TRIAID FIN Research Server.lnk'))
-    $ServerLink.TargetPath = $Pyw
-    $ServerLink.Arguments = '-m local_desktop.supervisor'
-    $ServerLink.WorkingDirectory = $FinLab
-    $ServerLink.Description = 'Keep the private research backend running after login'
-    $ServerLink.Save()
-    Start-Process -FilePath $Pyw -ArgumentList '-m local_desktop.supervisor' -WorkingDirectory $FinLab
-  }
-  Write-Host "TRIAID FIN Desktop installed. Open the desktop shortcut." -ForegroundColor Green
-  if ($NoAutostart) { Write-Warning 'Background auto-start was disabled by request.' }
-  Write-Host "Personal data: $HomeDir"
-} finally {
-  Pop-Location
-}
-) {
+      if (-not ($line -match '^([0-9a-fA-F]{64})  ([^\\/]+)$')) {
         throw 'Malformed wheelhouse checksum manifest'
       }
       $Expected = $Matches[1].ToUpperInvariant()
@@ -124,6 +62,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Desktop security smoke failed' }
     & $Py -m local_desktop.integration_smoke
     if ($LASTEXITCODE -ne 0) { throw 'Desktop HTTP integration smoke failed' }
+    & $Py -m local_desktop.process_smoke
+    if ($LASTEXITCODE -ne 0) { throw 'Desktop background-process/restart smoke failed' }
     & $Py local_desktop_contract_smoke.py
     if ($LASTEXITCODE -ne 0) { throw 'Desktop architecture audit failed' }
     & $Py local_desktop_parity_smoke.py
