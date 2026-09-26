@@ -4356,7 +4356,7 @@ function renderUSReturnMax(report){
  }
  panel.className='prospective-panel show';
  const d=report.latest_decision||{};
- const review=report.previous_decision_review||null;
+ const review=report.previous_decision_review||report.latest_decision_review||null;
  const integrity=report.integrity||{};
  el('usReturnMaxStatus').textContent=(d.decision_status||'-')+' · '+(integrity.passed?'HASH PASS':'HASH FAIL');
  el('usReturnMaxMeta').textContent=(d.decision_id||'-')+' · '+(lang==='zh'?'冻结 ':'Frozen ')+(d.frozen_at||'-')+' · '+(lang==='zh'?'排序信号：多周期年化状态收益估计':'Ranking signal: multi-window annualized state-return estimate');
@@ -4364,9 +4364,17 @@ function renderUSReturnMax(report){
  el('usrmGeneric').textContent=fmtPct(d.generic_core_projected_annualized_expected_net_return);
  el('usrmSpy').textContent=fmtPct(d.buy_hold_projected_annualized_expected_net_return);
  el('usrmRisk').textContent=fmtPct(1-Number(d.cash_residual_weight||0));
+ const frozenCap=Number(d.max_strategy_weight_constraint);
+ const capLabel=Number.isFinite(frozenCap)?fmtPct(frozenCap):(lang==='zh'?'按冻结规则':'per frozen rule');
+ const legacyMix=review?.execution_target_consistency==='LEGACY_MULTI_STRATEGY_TARGET_UNVERIFIED';
  el('usReturnMaxNote').textContent=lang==='zh'
-  ? '美股主路线不使用A股反转恢复逻辑，而是在所有 ACTIVE 策略中严格选择当前多周期年化状态收益估计最高者。该指标由21/63/126/252日已实现策略净收益按固定权重年化汇总，不等于标的未来涨跌预测。数值并列时依次用更低执行成本、风险、不确定性和固定策略ID打破平局，再展开成 SPY/QQQ/IWM/TLT/GLD 的目标头寸。四档美元资金规模共享同一冻结决策，只让资金规模改变模拟成交容量和冲击成本；系统不发送券商订单。'
-  : 'The US route follows the same TRIAID FIN constitution as every supported market: maximize realizable net return as the only optimization objective. Liquidity, capacity, concentration and risk are feasibility constraints, while switching and execution costs are deducted as real costs. The return signal uses realized 21/63/126/252-day strategy net returns under frozen weights and is not an underlying-price forecast. Exact net-score ties use lower execution cost and deterministic strategy ID only. Four USD capital tiers apply the same objective with capital-specific capacity and impact checks, and no broker orders are sent.';
+  ? '美股 Return-Max 先用决策时已知的多周期状态收益估计，扣除预计切换成本，对满足准入条件的策略排序，再按单策略上限 '+capLabel+' 依序分配资金。因此排名第一不等于100%持仓；风控、流动性和容量是准入约束，不是为分散化另设收益目标。当前目标ETF和四档美元容量应按整组冻结权重计算。表中事后收益第一名不等于决策时可选出的第一名。'
+  : 'US Return-Max ranks admissible strategies by frozen multi-window return estimates less switching costs, then allocates under the frozen per-strategy cap '+capLabel+'. The top-ranked strategy is therefore not necessarily a 100% holding. Risk, liquidity and capacity are feasibility constraints, not an independent diversification objective. ETF targets and four USD sleeves are based on the entire frozen strategy mix. The top realized strategy is an ex-post oracle, not a known winner at decision time.';
+ if(legacyMix){
+  el('usReturnMaxNote').textContent+=lang==='zh'
+   ? ' 注意：上一轮属于旧版多策略决策，理论收益和模拟成交资产配置的口径未核验；本页暂不展示该轮资金容量收益金额。'
+   : ' Caution: the prior multi-strategy freeze used an unverified legacy execution asset mix. Its capacity P&L is withheld rather than presented as comparable realized evidence.';
+ }
  const rw=d.target_strategy_weights||{};
  const gw=d.generic_core_control_weights||{};
  const sids=Array.from(new Set([...Object.keys(rw),...Object.keys(gw)])).sort();
@@ -4380,13 +4388,19 @@ function renderUSReturnMax(report){
  el('usrmCapitalRows').innerHTML=(cap.sleeves||[]).map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtUsd(x.target_invested_notional_usd)+'</td><td class="num">'+fmtPct(x.max_one_day_participation_adv)+'</td><td class="num">'+esc(x.minimum_execution_days??'-')+'</td><td class="num">'+fmtUsd(x.estimated_round_trip_cost_proxy_usd)+'</td></tr>').join('') ||
   '<tr><td colspan="5">'+(lang==='zh'?'等待资金容量决策':'Awaiting capacity decision')+'</td></tr>';
  const rs=((review&&review.capital_sleeves)||{}).sleeves||[];
- const hasRealized=rs.length>0;
+ const hasRealized=rs.length>0&&!legacyMix;
  el('usrmRealizedWrap').style.display=hasRealized?'block':'none';
  el('usrmRealizedEmpty').style.display=hasRealized?'none':'block';
- el('usrmRealizedEmpty').textContent=lang==='zh'
-  ? '完整交易日后验尚未形成。盘中价格不会被冒充为已实现收益。'
-  : 'A complete trading-day posterior is not available yet. Intraday prices are never presented as realized returns.';
- el('usrmRealizedRows').innerHTML=rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('');
+ el('usrmRealizedEmpty').textContent=legacyMix
+  ? (lang==='zh'
+    ? '旧版多策略决策的资金容量收益暂不展示：模拟成交资产配置未与整组策略权重核验，不能作为可执行净收益。理论持仓后验仍保留供参考。'
+    : 'Legacy multi-strategy capital P&L withheld: executable assets were not verified against the full frozen mix. The theoretical holdings path remains visible for context.')
+  : (lang==='zh'
+    ? '完整交易日后验尚未形成。盘中价格不会被冒充为已实现收益。'
+    : 'A complete trading-day posterior is not available yet. Intraday prices are never presented as realized returns.');
+ el('usrmRealizedRows').innerHTML=hasRealized
+  ? rs.map(x=>'<tr><td class="num">'+fmtUsd(x.starting_capital_usd)+'</td><td class="num">'+fmtPct(x.fill_ratio)+'</td><td class="num">'+fmtUsd(x.current_equity_usd)+'</td><td class="num '+cls(Number(x.current_net_pnl_usd||0))+'">'+fmtUsd(x.current_net_pnl_usd)+'</td><td class="num '+cls(Number(x.current_net_return||0))+'">'+signedPct(x.current_net_return)+'</td><td class="num">'+fmtUsd(x.total_execution_cost_usd)+'</td></tr>').join('')
+  : '';
  const path=(review&&review.daily_path)||[];
  const hasDaily=path.length>0;
  el('usrmDailyWrap').style.display=hasDaily?'block':'none';
