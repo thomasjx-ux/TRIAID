@@ -38,7 +38,7 @@ def start_background_server() -> None:
     log_path = log_dir() / "server.log"
     with log_path.open("ab") as logfile:
         kwargs = {
-            "cwd": str(Path(__file__).resolve().parent.parent),
+            "cwd": str(Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent),
             "stdin": subprocess.DEVNULL,
             "stdout": logfile,
             "stderr": subprocess.STDOUT,
@@ -51,7 +51,8 @@ def start_background_server() -> None:
         else:
             kwargs["start_new_session"] = True
         subprocess.Popen(
-            [sys.executable, "-m", "local_desktop.server"], **kwargs
+            ([sys.executable, "--server"] if getattr(sys, "frozen", False)
+             else [sys.executable, "-m", "local_desktop.server"]), **kwargs
         )
 
 
