@@ -93,6 +93,7 @@ BUILD_CASES=[
     "manual_preview_guard_smoke.py",
     "hk_tencent_5m_aggregation_smoke.py",
     "storage_runtime_fence_smoke.py",
+    "local_desktop_contract_smoke.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[
