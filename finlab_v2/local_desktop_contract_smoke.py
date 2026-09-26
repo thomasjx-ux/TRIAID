@@ -5,6 +5,7 @@ root=Path(__file__).resolve().parent
 arch=(root/"LOCAL_DESKTOP_ARCHITECTURE.md").read_text(encoding="utf-8")
 launcher=(root/"local_desktop/client.py").read_text(encoding="utf-8")
 server=(root/"local_desktop/server.py").read_text(encoding="utf-8")
+config=(root/"local_desktop/config.py").read_text(encoding="utf-8")
 guard=(root/"local_desktop/app.py").read_text(encoding="utf-8")
 shell=(root/"local_desktop/ui/shell.html").read_text(encoding="utf-8")
 live=(root/"local_desktop/ui/live.html").read_text(encoding="utf-8")
@@ -14,7 +15,7 @@ requirements=(root/"requirements-desktop.txt").read_text(encoding="utf-8")
 
 assert "full-function, single-user research workstation" in arch
 assert "Desktop shell never imports TRIAID domain internals" in arch
-assert "127.0.0.1" in server
+assert 'HOST = "127.0.0.1"' in config
 assert "host=HOST" in server
 assert "workers=1" in server
 assert "TRIAID_LOCAL_DESKTOP_MODE" in server
