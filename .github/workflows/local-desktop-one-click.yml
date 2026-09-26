@@ -1,0 +1,133 @@
+name: TRIAID FIN Desktop One-Click Setup
+
+on:
+  push:
+    branches:
+      - research/local-desktop-lab
+    paths:
+      - finlab_v2/local_desktop/**
+      - finlab_v2/requirements-desktop.txt
+      - .github/workflows/local-desktop-one-click.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-self-contained:
+    name: Self-contained Windows installation and smoke
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      TRIAID_DATA_AUTOMATION: "0"
+      TRIAID_DECISION_AUTOMATION: "0"
+      TRIAID_CALENDAR_SYNC: "0"
+      TRIAID_LONG_RESEARCH_BOOTSTRAP: "0"
+      TRIAID_STARTUP_MAINTENANCE: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Prepare pinned Windows build dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install -r finlab_v2/requirements-desktop.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install desktop dependencies' }
+          python -m pip install pyinstaller==6.17.0
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install pinned PyInstaller' }
+          Push-Location finlab_v2
+          try {
+            python -m local_desktop.smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Desktop smoke failed' }
+            python -m local_desktop.integration_smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Authenticated desktop integration failed' }
+            python -m local_desktop.process_smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Process/restart check failed' }
+            python -m local_desktop.packaging_smoke
+            if ($LASTEXITCODE -ne 0) { throw 'Self-contained packaging contract failed' }
+            python local_desktop_parity_smoke.py
+            if ($LASTEXITCODE -ne 0) { throw 'Full UI/API parity failed' }
+          } finally { Pop-Location }
+      - name: Build frozen Python runtime and verify its real APIs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $revision=(git rev-parse HEAD).Trim()
+          [IO.File]::WriteAllText((Join-Path $pwd 'finlab_v2\local_desktop\BUILD_REVISION'),$revision)
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name TRIAID-FIN-Desktop --paths finlab_v2 --collect-all webview --collect-all tzdata --collect-submodules triaid_fin --collect-submodules uvicorn --hidden-import local_desktop.app --hidden-import app --add-data "finlab_v2;." finlab_v2/local_desktop/frozen_entry.py
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to build frozen desktop executable' }
+          $exe=Join-Path $pwd 'dist\TRIAID-FIN-Desktop\TRIAID-FIN-Desktop.exe'
+          if (-not (Test-Path $exe)) { throw 'Frozen desktop executable missing' }
+          $env:TRIAID_LOCAL_HOME=Join-Path $env:RUNNER_TEMP ('fin-desktop-frozen-' + [guid]::NewGuid().ToString('N'))
+          & $exe --self-test
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content (Join-Path $env:TRIAID_LOCAL_HOME 'logs\frozen-launch.log') -ErrorAction SilentlyContinue
+            throw 'Frozen executable failed authenticated API and UI-resource self-test'
+          }
+          Write-Host 'TRIAID_FROZEN_WINDOWS_API_SELF_TEST_PASS'
+      - name: Obtain and verify Microsoft WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $bootstrap=Join-Path $pwd 'dist\MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrap -MaximumRedirection 8
+          $signature=Get-AuthenticodeSignature -FilePath $bootstrap
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Microsoft*') {
+            throw 'WebView2 bootstrapper was not signed by Microsoft'
+          }
+          Write-Host 'MICROSOFT_WEBVIEW2_AUTHENTICODE_VALID'
+      - name: Compile single-click Setup.exe with Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $iscc=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler unavailable' }
+          $env:TRIAID_BUILD_ROOT=$pwd.Path
+          $env:TRIAID_DESKTOP_VERSION='0.1.'+$env:GITHUB_RUN_NUMBER
+          & $iscc (Join-Path $pwd 'finlab_v2\local_desktop\setup.iss')
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to compile self-contained Setup.exe' }
+          $setup=Join-Path $pwd 'dist\TRIAID-FIN-Desktop-Setup.exe'
+          if (-not (Test-Path $setup)) { throw 'Setup executable missing' }
+          Write-Host 'TRIAID_ONE_CLICK_SETUP_COMPILED'
+      - name: Perform actual silent install without Python requirement
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $setup=Join-Path $pwd 'dist\TRIAID-FIN-Desktop-Setup.exe'
+          $fresh=Join-Path $env:RUNNER_TEMP 'TRIAID-Installed'
+          $p=Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=!autostart',('/DIR="'+$fresh+'"')) -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "One-click Windows installer failed with code $($p.ExitCode)" }
+          $exe=Join-Path $fresh 'TRIAID-FIN-Desktop.exe'
+          if (-not (Test-Path $exe)) { throw 'Installed app executable missing' }
+          $env:TRIAID_LOCAL_HOME=Join-Path $env:RUNNER_TEMP ('fin-desktop-installed-' + [guid]::NewGuid().ToString('N'))
+          & $exe --self-test
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content (Join-Path $env:TRIAID_LOCAL_HOME 'logs\frozen-launch.log') -ErrorAction SilentlyContinue
+            throw 'Installed desktop executable failed frozen API self-test'
+          }
+          Write-Host 'TRIAID_ONE_CLICK_INSTALL_AND_FROZEN_API_PASS'
+      - name: Stamp source revision and SHA-256 integrity
+        shell: pwsh
+        run: |
+          $revision=(git rev-parse HEAD).Trim()
+          $original=Join-Path $pwd 'dist\TRIAID-FIN-Desktop-Setup.exe'
+          $final=Join-Path $pwd ('dist\TRIAID-FIN-Desktop-Setup-'+$revision.Substring(0,12)+'.exe')
+          Move-Item -Path $original -Destination $final -Force
+          $hash=(Get-FileHash -Path $final -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText(($final+'.sha256'),$hash+'  '+[IO.Path]::GetFileName($final))
+          Write-Host "VERIFIED_ONE_CLICK_SETUP=$final SHA256=$hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TRIAID-FIN-Desktop-One-Click-Setup
+          path: |
+            dist/TRIAID-FIN-Desktop-Setup-*.exe
+            dist/TRIAID-FIN-Desktop-Setup-*.exe.sha256
+          retention-days: 30
+          if-no-files-found: error
