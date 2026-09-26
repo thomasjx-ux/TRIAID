@@ -78,6 +78,14 @@ jobs:
           New-Item -ItemType Directory -Path $site -Force | Out-Null
           python -m pip install --disable-pip-version-check --no-compile --target $site -r finlab_v2/requirements-desktop.txt
           if ($LASTEXITCODE -ne 0) { throw 'Bundled Python dependencies failed installation' }
+          # Pip's generated console launchers are not used by FIN Desktop and are
+          # often unsigned executables. Do not ship them with the signed Python runtime.
+          $scriptBin = Join-Path $site 'bin'
+          if (Test-Path $scriptBin) { Remove-Item $scriptBin -Recurse -Force }
+          $thirdPartyExecutables = @(Get-ChildItem -Path $site -Filter '*.exe' -File -Recurse)
+          if ($thirdPartyExecutables.Count -ne 0) {
+            throw "Unexpected third-party executable in portable runtime: $($thirdPartyExecutables.FullName)"
+          }
           # Embedded Python is intentionally isolated from system Python and user site-packages.
           $pth = @('python312.zip','.','Lib\site-packages','..\finlab_v2','import site')
           [System.IO.File]::WriteAllLines((Join-Path $runtime 'python312._pth'),[string[]]$pth)
@@ -194,6 +202,11 @@ jobs:
               if ($entries -notcontains $required) {
                 throw "ZIP missing required component: $required"
               }
+            }
+            $executables = @($entries | Where-Object { $_.ToLowerInvariant().EndsWith('.exe') } | Sort-Object)
+            $expectedExecutables = @('MicrosoftEdgeWebview2Setup.exe','Runtime/python.exe','Runtime/pythonw.exe')
+            if ((@($executables) -join '|') -ne (@($expectedExecutables) -join '|')) {
+              throw "Unexpected executable files in portable ZIP: $($executables -join ', ')"
             }
             Write-Host "ZIP_ARCHIVE_ENTRIES=$($archive.Entries.Count)"
           } finally { $archive.Dispose() }
