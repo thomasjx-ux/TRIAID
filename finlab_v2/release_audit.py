@@ -94,6 +94,7 @@ BUILD_CASES=[
     "hk_tencent_5m_aggregation_smoke.py",
     "storage_runtime_fence_smoke.py",
     "local_desktop_contract_smoke.py",
+    "local_desktop_parity_smoke.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[
