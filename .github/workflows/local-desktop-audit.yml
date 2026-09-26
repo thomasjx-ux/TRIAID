@@ -13,6 +13,9 @@ on:
       - finlab_v2/requirements-desktop.txt
       - finlab_v2/triaid_fin/storage_backend.py
       - finlab_v2/release_audit.py
+      - finlab_v2/app.py
+      - finlab_v2/ui_smoke.py
+      - finlab_v2/triaid_fin/ui_projection.py
       - .github/workflows/local-desktop-audit.yml
   pull_request:
     paths:
@@ -94,6 +97,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows desktop architecture audit failed' }
           python local_desktop_parity_smoke.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows UI/API parity audit failed' }
+          python -m local_desktop.ui_startup_regression
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh-local-UI 503 regression failed' }
       - name: Build revision-pinned Windows ZIP and offline wheelhouse
         if: github.event_name == 'push'
         shell: pwsh

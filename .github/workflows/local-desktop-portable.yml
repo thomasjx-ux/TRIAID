@@ -7,6 +7,11 @@ on:
     paths:
       - finlab_v2/local_desktop/**
       - finlab_v2/requirements-desktop.txt
+      - finlab_v2/app.py
+      - finlab_v2/ui_smoke.py
+      - finlab_v2/triaid_fin/ui_projection.py
+      - finlab_v2/ui_projection_smoke.py
+      - finlab_v2/release_audit.py
       - .github/workflows/local-desktop-portable.yml
   workflow_dispatch:
 
@@ -168,6 +173,8 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled authenticated API test failed' }
             & $python -m local_desktop.ui_startup_regression
             if ($LASTEXITCODE -ne 0) { throw 'Fresh desktop startup/UI data degradation regression failed' }
+            & $python ui_smoke.py
+            if ($LASTEXITCODE -ne 0) { throw 'Full legacy UI audit failed on bundled Python' }
             & $python -m local_desktop.process_smoke
             if ($LASTEXITCODE -ne 0) { throw 'Bundled real restart/lock test failed' }
             & $python local_desktop_parity_smoke.py
