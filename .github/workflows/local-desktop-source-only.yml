@@ -1,0 +1,79 @@
+name: TRIAID FIN Desktop Verified Source ZIP
+on:
+  push:
+    branches: [research/local-desktop-lab]
+    paths: [.github/workflows/local-desktop-source-only.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-source-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build audited source-only archive with NO binary installers
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          from hashlib import sha256
+          import subprocess
+          import io
+
+          root=Path("finlab_v2")
+          assert root.joinpath("app.py").is_file()
+          assert root.joinpath("local_desktop/client.py").is_file()
+          assert root.joinpath("local_desktop/server.py").is_file()
+          assert root.joinpath("local_desktop/ui/live.html").is_file()
+          sha=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
+          out=Path("dist")
+          out.mkdir(exist_ok=True)
+          filename="TRIAID-FIN-Desktop-SOURCE-"+sha[:12]+".zip"
+          archive=out/filename
+          allowed={".py",".html",".md",".txt",".json"}
+          forbidden={"vendor","runtime_data","__pycache__",".venv","venv","dist","build"}
+          files=sorted(p for p in root.rglob("*")
+                       if p.is_file()
+                       and p.suffix.lower() in allowed
+                       and not forbidden.intersection(p.parts)
+                       and p.name not in {".env",".desktop-session"}
+                       and not p.name.startswith("."))
+          guidance=(
+              "TRIAID FIN Desktop / SOURCE-ONLY EDITION\n"
+              "Source revision: "+sha+"\n"
+              "This ZIP contains readable source only, NO .exe/.dll/.pyd/.whl or bundled runtime.\n"
+              "The prior unsigned, self-extracting Windows installer was blocked by security software.\n"
+              "We do not claim that alert is a false positive; do not disable security checks.\n"
+              "To run: install Python 3.12 from python.org and Microsoft WebView2 from microsoft.com;\n"
+              "open a terminal in finlab_v2 and run:\n"
+              "  py -3.12 -m pip install -r requirements-desktop.txt\n"
+              "  py -3.12 -m local_desktop.client\n"
+              "This is NOT a one-click distribution. Start with test data and review permissions.\n"
+              "Report false-positive suspicions only via Microsoft Security Intelligence.\n"
+          )
+          with ZipFile(archive,"w",ZIP_DEFLATED,compresslevel=9) as z:
+              z.writestr("INSTALL-SOURCE-FIRST.txt",guidance)
+              for p in files:
+                  z.write(p,p.as_posix())
+          with ZipFile(archive) as z:
+              assert z.testzip() is None
+              names=z.namelist()
+              assert len(names)>=190, "Unusually few source files"
+              assert "finlab_v2/app.py" in names
+              assert "finlab_v2/local_desktop/ui/live.html" in names
+              assert "finlab_v2/local_desktop/frozen_entry.py" in names
+              assert not [n for n in names if Path(n).suffix.lower() in {".exe",".dll",".pyd",".whl",".bat",".cmd",".ps1",".msi",".zip"}]
+              assert all(not z.read(n).startswith((b"MZ",b"PK\\x03\\x04")) for n in names)
+          h=sha256(archive.read_bytes()).hexdigest()
+          (out/(filename+".sha256")).write_text(h+"  "+filename+"\n")
+          print("SOURCE_ZIP_VERIFIED",filename,"source_count",len(files),"sha256",h)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TRIAID-FIN-Desktop-SOURCE-only
+          path: |
+            dist/TRIAID-FIN-Desktop-SOURCE-*.zip
+            dist/TRIAID-FIN-Desktop-SOURCE-*.zip.sha256
+          retention-days: 30
+          if-no-files-found: error
