@@ -11,7 +11,9 @@ assert "baseline_weight" in html
 assert "triaid_weight" in html
 assert "JSON.stringify(d,null,2)" not in html
 assert "const el=id=>document.getElementById(id);" in html
-assert "UI data error:" in html
+assert "数据读取暂时失败：" in html
+assert "marketPageBlockMessage(page,m)" in html
+assert "UI data error:" not in html
 assert "function fmtPrice(x,currency)" in html
 assert "String.fromCharCode(36)" in html
 assert "return prefix+v.toFixed(digits);" in html
