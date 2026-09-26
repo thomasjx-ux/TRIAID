@@ -32,6 +32,7 @@ From finlab_v2 with Python 3.12:
     python -m pip install -r requirements-desktop.txt
     python -m local_desktop.smoke
     python -m local_desktop.integration_smoke
+    python -m local_desktop.process_smoke
     python -m local_desktop.durability
     python -m local_desktop.client
 
@@ -77,7 +78,7 @@ independent encrypted backups, a UPS, and a restoration drill remain required.
 
 Windows login startup is not pre-login system-service startup. An unattended
 machine must remain logged in or use a separately audited operating-system
-service configuration. The server supervisor retries after crashes; network
+service configuration. An exclusive cross-platform lock prevents two servers from writing the same data directory. The real-process smoke starts and restarts Uvicorn to verify this. The server supervisor retries after crashes; network
 outages and unavailable provider feeds remain explicit, not silently filled.
 
 The existing official market calendars and release contract apply. The

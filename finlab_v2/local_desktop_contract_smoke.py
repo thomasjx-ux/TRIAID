@@ -10,6 +10,8 @@ guard=(root/"local_desktop/app.py").read_text(encoding="utf-8")
 shell=(root/"local_desktop/ui/shell.html").read_text(encoding="utf-8")
 live=(root/"local_desktop/ui/live.html").read_text(encoding="utf-8")
 supervisor=(root/"local_desktop/supervisor.py").read_text(encoding="utf-8")
+instance=(root/"local_desktop/instance.py").read_text(encoding="utf-8")
+process_smoke=(root/"local_desktop/process_smoke.py").read_text(encoding="utf-8")
 installer=(root/"local_desktop/install.ps1").read_text(encoding="utf-8")
 requirements=(root/"requirements-desktop.txt").read_text(encoding="utf-8")
 
@@ -18,6 +20,10 @@ assert "Desktop shell never imports TRIAID domain internals" in arch
 assert 'HOST = "127.0.0.1"' in config
 assert "host=HOST" in server
 assert "workers=1" in server
+assert "with exclusive_instance():" in server
+assert "LK_NBLCK" in instance and "LOCK_NB" in instance
+assert "TRIAID_LOCAL_TEST_MODE" in server
+assert "local_desktop.server" in process_smoke
 assert "TRIAID_LOCAL_DESKTOP_MODE" in server
 assert "TRIAID_STORAGE_BACKEND" in server
 assert "TRIAID_SUPABASE_TOKEN" in server
@@ -35,6 +41,7 @@ assert "source_latest_ts" in live
 assert "local_desktop.server" in supervisor
 assert "local_desktop.smoke" in installer
 assert "local_desktop.integration_smoke" in installer
+assert "local_desktop.process_smoke" in installer
 assert "pywebview==6.2.1" in requirements
 assert "httpx==0.28.1" in requirements
 assert not (root/"desktop_app.py").exists(), "Unsafe legacy desktop launcher must be removed"

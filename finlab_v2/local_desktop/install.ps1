@@ -49,6 +49,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Desktop security smoke failed' }
     & $Py -m local_desktop.integration_smoke
     if ($LASTEXITCODE -ne 0) { throw 'Desktop HTTP integration smoke failed' }
+    & $Py -m local_desktop.process_smoke
+    if ($LASTEXITCODE -ne 0) { throw 'Desktop background-process/restart smoke failed' }
     & $Py local_desktop_contract_smoke.py
     if ($LASTEXITCODE -ne 0) { throw 'Desktop architecture audit failed' }
     & $Py local_desktop_parity_smoke.py
