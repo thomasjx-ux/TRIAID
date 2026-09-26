@@ -111,8 +111,8 @@ jobs:
           [System.IO.File]::WriteAllText((Join-Path $fin 'local_desktop\BUILD_REVISION'),$revision)
           $wheels=Join-Path $fin 'vendor\wheels'
           New-Item -ItemType Directory -Path $wheels -Force | Out-Null
-          python -m pip download --disable-pip-version-check -r finlab_v2/requirements-desktop.txt --dest $wheels
-          if ($LASTEXITCODE -ne 0) { throw 'Windows offline wheel download failed' }
+          python -m pip wheel --disable-pip-version-check -r finlab_v2/requirements-desktop.txt --wheel-dir $wheels
+          if ($LASTEXITCODE -ne 0) { throw 'Windows offline wheel build failed' }
           $checksums=Get-ChildItem -Path $wheels -File | Sort-Object Name | ForEach-Object {
             (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name
           }
