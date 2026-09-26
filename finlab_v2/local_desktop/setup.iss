@@ -1,4 +1,8 @@
 ; FIN Desktop v1: per-user one-click installer, self-contained Python and OS-user data.
+#define BuildRoot GetEnv("TRIAID_BUILD_ROOT")
+#if BuildRoot == ""
+  #error "Set TRIAID_BUILD_ROOT before compiling this installer"
+#endif
 #define MyAppName "TRIAID FIN Desktop"
 #define MyAppVersion GetEnv("TRIAID_DESKTOP_VERSION")
 #define MyAppPublisher "TRIAID Research Team"
@@ -12,7 +16,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\TRIAID FIN Desktop
 DefaultGroupName=TRIAID FIN Desktop
 PrivilegesRequired=lowest
-OutputDir=dist
+OutputDir={#BuildRoot}\dist
 OutputBaseFilename=TRIAID-FIN-Desktop-Setup
 Compression=lzma2
 SolidCompression=yes
@@ -31,8 +35,8 @@ ShowLanguageDialog=no
 Name: "autostart"; Description: "开机登录后自动运行 TRIAID 研究后台"; GroupDescription: "后台设置"; Flags: checkedonce
 
 [Files]
-Source: "dist\TRIAID-FIN-Desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "dist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "{#BuildRoot}\dist\TRIAID-FIN-Desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#BuildRoot}\dist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{userdesktop}\TRIAID FIN Desktop"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"
