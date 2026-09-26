@@ -95,6 +95,7 @@ BUILD_CASES=[
     "storage_runtime_fence_smoke.py",
     "local_desktop_contract_smoke.py",
     "local_desktop_parity_smoke.py",
+    "local_desktop/ui_startup_regression.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[

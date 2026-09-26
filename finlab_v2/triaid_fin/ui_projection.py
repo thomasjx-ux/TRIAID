@@ -167,6 +167,17 @@ def _strategy_section(services,market:str,lang:str,run_id:str|None)->dict:
             source="strategy_population+latest_decision_run",
             required=True,
         )
+    if not run_id and all(row.get("run_id") is None for row in rows):
+        # A newly installed local workstation has a real strategy catalog but
+        # no frozen trade decision. WAITING is truthful; READY would fabricate
+        # numeric evidence. It remains a required-section 503 until validated.
+        return _section(
+            WAITING,
+            rows,
+            reason="WAITING_FOR_FIRST_FROZEN_DECISION",
+            source="strategy_population+latest_decision_run",
+            required=True,
+        )
     malformed=[]
     for row in rows:
         if not isinstance(row,dict) or not row.get("strategy_id"):

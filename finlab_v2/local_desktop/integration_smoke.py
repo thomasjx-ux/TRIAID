@@ -52,6 +52,20 @@ async def check() -> None:
                 assert "TRIAID" in original.text
                 assert "strategyRows" in original.text
 
+                # Fresh local data has no official decision. HTTP 503 must
+                # retain the full, structured BLOCKED contract for the UI,
+                # rather than fabricate zero-valued returns or allocations.
+                first = await c.get("/api/ui/market-page/US?lang=zh")
+                assert first.status_code in (200,503), first.text[:220]
+                initial = first.json()
+                if first.status_code == 503:
+                    assert initial["projection_scope"] == "FULL"
+                    assert initial["integrity"]["status"] == "BLOCKED"
+                    assert isinstance(initial["sections"], dict)
+                    assert initial["sections"]["strategies"]["state"] in ("WAITING","ERROR")
+                else:
+                    assert initial["integrity"]["passed"] is True
+
                 desktop = await c.get("/desktop/")
                 assert desktop.status_code == 200, desktop.text[:200]
                 assert 'id="classic" src="/"' in desktop.text

@@ -166,6 +166,8 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled desktop unit test failed' }
             & $python -m local_desktop.integration_smoke
             if ($LASTEXITCODE -ne 0) { throw 'Bundled authenticated API test failed' }
+            & $python -m local_desktop.ui_startup_regression
+            if ($LASTEXITCODE -ne 0) { throw 'Fresh desktop startup/UI data degradation regression failed' }
             & $python -m local_desktop.process_smoke
             if ($LASTEXITCODE -ne 0) { throw 'Bundled real restart/lock test failed' }
             & $python local_desktop_parity_smoke.py

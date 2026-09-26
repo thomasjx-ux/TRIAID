@@ -3084,7 +3084,51 @@ function statusTip(status){
  const key=String(status||'').toLowerCase();
  return (TIP[lang][key]||TIP[lang].state)+'\\n'+statusActionGuide(status);
 }
-async function json(url,opts){const r=await fetch(url,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+// The market-page HTTP 503 is an EVIDENCE GATE, not an instruction to dump
+// its multi-megabyte research payload into a user-facing status line.
+async function json(url,opts){
+ const r=await fetch(url,opts);
+ if(r.ok)return r.json();
+ let payload=null;
+ const type=(r.headers.get('content-type')||'').toLowerCase();
+ if(type.includes('json')){
+  try{payload=await r.json()}catch(_ignored){}
+ }
+ if(r.status===503&&url.startsWith('/api/ui/market-page/')
+    &&payload?.projection_scope==='FULL'
+    &&payload?.integrity?.status==='BLOCKED'
+    &&payload.sections&&typeof payload.sections==='object'){
+  // Render only section-verified fields and show an explicit blocked state.
+  // Formal decisions and realized results remain ineligible.
+  return payload;
+ }
+ const detail=typeof payload?.detail==='string'?payload.detail
+             :typeof payload?.error==='string'?payload.error:'';
+ const brief=detail.split(String.fromCharCode(10))[0].slice(0,140);
+ throw new Error('HTTP '+r.status+(brief?': '+brief:''));
+}
+function marketPageBlockMessage(page,m){
+ const zh=lang==='zh';
+ const sections=page.sections||{};
+ const strategy=sections.strategies||{};
+ const noFirstDecision=strategy.reason==='WAITING_FOR_FIRST_FROZEN_DECISION';
+ const missing=(page.integrity?.errors||[]).slice(0,2).join(' · ');
+ if(noFirstDecision){
+  const closed=marketClockState[m]?.session_phase==='CLOSED';
+  return zh
+   ? ('本机尚无'+(MARKET_UI[m]?.zh||m)+'的正式冻结决策。策略目录已载入，但没有可信收益、风险和调权结果；'+
+      (closed?'目前休市，':'')+'待有效行情与正式决策形成后再展示数值。')
+   : ('No frozen '+m+' decision is available on this PC. The strategy catalog is loaded, but return, risk and weights are not verified. '+
+      (closed?'The exchange is closed. ':'')+'Wait for valid market data and a formal decision.');
+ }
+ if(missing.includes('STRATEGY_NUMERIC_FIELDS_INCOMPLETE')){
+  return zh?'策略关键数值不完整，已阻止将缺失收益、风险或权重当作有效结果。请检查行情和正式决策状态。'
+           :'Strategy numeric fields are incomplete. Missing returns, risk or weights are not valid research results.';
+ }
+ return zh?'部分数据尚未通过完整性验证，已保留可用模块；未通过验证的结果不会进入正式证据链。'
+          :'Some data failed integrity checks. Available sections remain visible; blocked results are excluded from formal evidence.';
+}
+
 async function jsonOrNull(url,opts){try{return await json(url,opts)}catch(e){return null}}
 const uiFetchCache=new Map();
 let refreshSeq=0,liveSeq=0,marketSwitchSeq=0;
@@ -4733,15 +4777,19 @@ async function refreshAll(preferStale=false,forceServer=false){
   const evolutionSection=sections.evolution||{};
   const previewSection=sections.preview||{};
   const d=dailySection.state==='READY'?(dailySection.data||{}):{};
-  const cards=strategySection.state==='READY'?(strategySection.data||[]):[];
+  const cards=['READY','WAITING'].includes(strategySection.state)?(strategySection.data||[]):[];
   const curves=curveSection.state==='READY'?(curveSection.data||[]):[];
   const runs=['READY','WAITING'].includes(runsSection.state)?(runsSection.data||[]):[];
   const evo=evolutionSection.state==='READY'?(evolutionSection.data||{}):{};
   const previewRun=previewSection.state==='READY'?(previewSection.data||null):null;
   const projectionIntegrity=page.integrity||{};
   if(projectionIntegrity.status==='BLOCKED'){
-   const reason=(projectionIntegrity.errors||[]).slice(0,2).join(' · ');
-   el('marketScopeStatus').textContent=(lang==='zh'?'页面数据契约阻塞：':'Market-page data contract blocked: ')+reason;
+   el('marketScopeStatus').textContent=marketPageBlockMessage(page,m);
+   el('marketScopeStatus').title=(projectionIntegrity.errors||[]).slice(0,5).join(' · ');
+  }else{
+   const meta=MARKET_UI[m]||MARKET_UI.US;
+   el('marketScopeStatus').textContent=lang==='zh'?meta.scopeZh:meta.scopeEn;
+   el('marketScopeStatus').title='';
   }
   const isCN=m==='CN';
   const isHK=m==='HK';
@@ -4951,10 +4999,19 @@ async function refreshAll(preferStale=false,forceServer=false){
     '<td class="num">'+fmtPct(x.risk)+'</td>'+
     '<td class="reason">'+esc([x.summary,x.best_conditions].filter(Boolean).join(' · ')||(lang==='zh'?'当前没有补充说明':'No additional explanation'))+'</td></tr>';
   }).join('') || tableEmptyRow(5,'当前没有未入选候选策略。','There are no unselected candidate strategies.');
-  if(strategySection.state!=='READY'){
-   const reason=String(strategySection.reason||'STRATEGY_SECTION_NOT_READY');
-   el('strategyRows').innerHTML=tableEmptyRow(8,(lang==='zh'?'策略数据契约未就绪：':'Strategy data contract not ready: ')+reason,(lang==='zh'?'策略数据契约未就绪：':'Strategy data contract not ready: ')+reason);
-   el('candidateRows').innerHTML=tableEmptyRow(5,(lang==='zh'?'候选池暂不渲染半成品数据：':'Candidate pool partial data suppressed: ')+reason,(lang==='zh'?'候选池暂不渲染半成品数据：':'Candidate pool partial data suppressed: ')+reason);
+  if(strategySection.state==='WAITING'&&strategySection.reason==='WAITING_FOR_FIRST_FROZEN_DECISION'){
+   // The candidate catalog is informative even without a verified numeric estimate.
+   // Do not invent an allocation or a positive/negative performance ranking.
+   el('strategyRows').innerHTML=tableEmptyRow(8,
+    '尚未形成正式冻结策略。当前仅可查看候选策略目录，收益、风险与权重均待真实数据验证。',
+    'No frozen allocation yet. Inspect the strategy catalog; returns, risk and weights await real evidence.');
+  }else if(strategySection.state!=='READY'){
+   const reason=String(strategySection.reason||'STRATEGY_SECTION_NOT_READY').slice(0,110);
+   const note=(lang==='zh'?'策略数据未通过验证：':'Strategy evidence not verified: ')+reason;
+   el('strategyRows').innerHTML=tableEmptyRow(8,note,note);
+   el('candidateRows').innerHTML=tableEmptyRow(5,
+    '候选池数值尚未通过验证，暂不展示半成品估计。',
+    'Candidate numeric fields are unverified; partial estimates are suppressed.');
   }
   const diag=evo.diagnosis||{};el('evoObserved').textContent=diag.evaluated_runs??0;
   el('evoMean').textContent=diag.mean_excess_return===null||diag.mean_excess_return===undefined?T[lang].noResult:
@@ -4963,12 +5020,18 @@ async function refreshAll(preferStale=false,forceServer=false){
   el('evoNeg').textContent=diag.negative_rate===null||diag.negative_rate===undefined?'-':fmtPct(diag.negative_rate);
   const history=evo.history||[];const last=history.length?history[history.length-1]:null;
   el('evoLast').textContent=last?(last.event+' · '+(last.version||'')):T[lang].noCandidate;
-  el('runStatus').textContent=previewRun
-    ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
-    : (latest?((latest.market_id||m)+' · '+(latest.status||'')):'Ready');
+  el('runStatus').textContent=projectionIntegrity.status==='BLOCKED'
+    ? marketPageBlockMessage(page,m)
+    : (previewRun
+      ? ((lang==='zh'?'即时预览 · 不进入证据链 · ':'Manual preview · non-evidence · ')+previewRun.run_id)
+      : (latest?((latest.market_id||m)+' · '+(latest.status||'')):(lang==='zh'?'等待正式数据':'Awaiting verified data')));
   refreshStrategyContextIfDue(m);
  }catch(e){
-  if(seq===refreshSeq&&el('market').value===m)el('runStatus').textContent='UI data error: '+e.message;
+  if(seq===refreshSeq&&el('market').value===m){
+   // Never print a raw API response or full research JSON in the dashboard.
+   const brief=String(e?.message||e).split(String.fromCharCode(10))[0].slice(0,160);
+   el('runStatus').textContent=(lang==='zh'?'数据读取暂时失败：':'Data temporarily unavailable: ')+brief;
+  }
  }finally{
   if(fullRequestPending[m]===seq)delete fullRequestPending[m];
  }

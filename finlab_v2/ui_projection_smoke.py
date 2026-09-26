@@ -294,6 +294,32 @@ checks["closed_market_activity_is_not_applicable"]=closed_live["sections"]["acti
 checks["closed_market_intraday_is_not_applicable"]=closed_live["sections"]["intraday"]["state"]=="NOT_APPLICABLE"
 checks["closed_market_has_no_unexplained_empty_sections"]=closed_live["integrity"]["unexplained_non_ready_sections"]==[]
 
+class EmptyLocalEngine(FakeEngine):
+    def latest_decision_run(self,market):
+        return None
+
+    def all_runs(self):
+        return []
+
+    def daily_summary(self,market,compact=False):
+        return {"date":None, "runs_detail":[], "us_return_max":{}}
+
+
+fresh=MarketPageProjection(EmptyLocalEngine(),ClosedAutomation(),ClosedScheduler()).full("US","zh")
+fresh_strategies=fresh["sections"]["strategies"]
+checks["fresh_local_strategy_catalog_is_visible"]=len(fresh_strategies["data"])==1
+checks["fresh_local_strategy_section_waits_explicitly"]=(fresh_strategies["state"]==WAITING
+    and fresh_strategies["reason"]=="WAITING_FOR_FIRST_FROZEN_DECISION")
+checks["fresh_local_numeric_evidence_not_fabricated"]=all(
+    item["expected_net_return"] is None and item["risk"] is None
+    for item in fresh_strategies["data"]
+)
+checks["fresh_local_formal_evidence_remains_blocked"]=(
+    fresh["integrity"]["status"]=="BLOCKED"
+    and fresh["integrity"]["passed"] is False
+    and any("WAITING_FOR_FIRST_FROZEN_DECISION" in row for row in fresh["integrity"]["errors"])
+)
+
 failed=[name for name,ok in checks.items() if not ok]
 if failed:
     raise SystemExit("TRIAID_UI_PROJECTION_FAILED:"+"|".join(failed))
