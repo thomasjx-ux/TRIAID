@@ -34,8 +34,9 @@ class VerifiedProjectionRepository:
 
     version=VERSION
 
-    def __init__(self,journal)->None:
+    def __init__(self,journal,read_only:bool=False)->None:
         self.journal=journal
+        self.read_only=bool(read_only)
 
     @staticmethod
     def _strategy_evidence(rows:list)->list[dict]:
@@ -170,7 +171,7 @@ class VerifiedProjectionRepository:
         latest_name=f"verified_projections/{market}/latest.json"
         latest=self.journal.load_json(latest_name,default={})
         changed=latest.get("evidence_id")!=evidence_id
-        if changed:
+        if changed and not self.read_only:
             self.journal.save_json(
                 f"verified_projections/{market}/{evidence_id}.json",
                 artifact,
@@ -190,12 +191,16 @@ class VerifiedProjectionRepository:
                 },
             )
         return {
-            "state":"FROZEN",
+            "state":"READ_ONLY_CANDIDATE" if self.read_only else "FROZEN",
             "repository_version":self.version,
             "evidence_id":evidence_id,
             "evidence_hash_sha256":evidence_hash,
             "decision_lineage":lineage,
-            "changed":changed,
+            "changed":changed and not self.read_only,
+            "would_change":changed if self.read_only else False,
+            "read_only":self.read_only,
+            "persisted_latest_evidence_id":latest.get("evidence_id"),
+            "persisted_latest_evidence_hash_sha256":latest.get("evidence_hash_sha256"),
             "future_information_excluded":formal_evidence["future_information_excluded"],
         }
 
