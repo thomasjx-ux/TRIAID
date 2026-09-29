@@ -47,6 +47,7 @@ from .us_return_max import USReturnMaxLedger, USReturnMaxRoute
 from .hk_return_max import HKReturnMaxLedger, HKReturnMaxRoute
 from .volatility_forecast import cached_all_market_volatility_forecasts, cached_volatility_forecast, refresh_all_market_volatility_forecasts, refresh_market_volatility_forecast
 from .value_frontier_shadow_v2 import allocate_shadow
+from .full_core_shadow import run_full_core_shadow
 
 
 class EvolutionLabEngine:
@@ -1316,6 +1317,49 @@ class EvolutionLabEngine:
             "weight_delta":{sid:shadow.get(sid,0.0)-current.get(sid,0.0) for sid in ids},
             "production_mutation":False,
             "decision_time_only":True,
+        }
+
+    def full_core_shadow_preview(self,market_id:str)->dict:
+        """Run the independent full-core candidate over the complete frozen T0 state pool."""
+        market=normalize_market_id(market_id)
+        run=self.latest_decision_run(market,primary_only=True)
+        if run is None or run.triaid_decision is None:
+            return {
+                "market_id":market,
+                "available":False,
+                "reason":"NO_PRIMARY_DECISION_SNAPSHOT",
+                "production_mutation":False,
+            }
+        metadata=run.market.metadata or {}
+        max_weight=float(
+            ((run.strategy_group.diagnostics or {}).get("max_strategy_weight_constraint",0.28)
+             if run.strategy_group is not None else 0.28)
+            or 0.28
+        )
+        decision=run_full_core_shadow(
+            market,
+            run.strategy_states,
+            production_weights=run.triaid_decision.weights_after,
+            previous_weights=run.triaid_decision.weights_before,
+            population=self.strategy_population,
+            max_members=10,
+            risk_budget=float(metadata.get("account_risk_budget",1.0) or 1.0),
+            max_strategy_weight=max_weight,
+            modeled_cost_bps=float(metadata.get("base_cost_bps",0.0) or 0.0),
+            absolute_return_calibrated=bool(metadata.get("absolute_return_calibrated",False)),
+        )
+        return {
+            "market_id":market,
+            "available":True,
+            "run_id":run.run_id,
+            "as_of":run.market.as_of,
+            "snapshot_id":run.market.snapshot_id,
+            "production_core_version":run.triaid_decision.core_version,
+            "production_group_members":list(run.strategy_group.members) if run.strategy_group else [],
+            "full_state_count":len(run.strategy_states),
+            "full_core_shadow":decision.to_dict(),
+            "decision_time_only":True,
+            "production_mutation":False,
         }
 
     def run_live_research(self,market_id:str,account_id:str="GLOBAL")->RunRecord:
