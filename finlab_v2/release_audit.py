@@ -864,7 +864,7 @@ def runtime_checks()->list[dict]:
         outcome_status=payloads.get(f"/api/experiments/outcomes/{market}/status") or {}
         check(
             f"{market}_t0_t1_outcome_status_contract",
-            outcome_status.get("resolver_version")=="triaid-outcome-resolver@1.1.0"
+            outcome_status.get("resolver_version")=="triaid-outcome-resolver@1.1.1"
             and outcome_status.get("market_id")==market
             and bool(outcome_status.get("read_only")) is READ_ONLY_RUNTIME
             and int(outcome_status.get("formal_evidence_count") or 0)>=1
