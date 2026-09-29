@@ -1151,6 +1151,22 @@ def value_frontier_shadow(market_id: str | None = None) -> dict:
     }
 
 
+@app.get("/api/evolution/full-core-shadow")
+def full_core_shadow(market_id: str | None = None) -> dict:
+    """Read-only full-core candidate before production lifecycle/group filtering."""
+    if market_id is not None:
+        try:
+            market=normalize_market_id(market_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404,detail=str(exc)) from exc
+        return engine.full_core_shadow_preview(market)
+    return {
+        "version":"full-core-shadow@0.1.0",
+        "markets":{market:engine.full_core_shadow_preview(market) for market in market_ids()},
+        "production_mutation":False,
+    }
+
+
 @app.get("/api/evolution")
 def evolution_status() -> dict:
     return engine.evolution_status()
