@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 
-VERSION="triaid-outcome-resolver@1.1.0"
+VERSION="triaid-outcome-resolver@1.1.1"
 
 
 def _hash(payload:dict)->str:
@@ -183,8 +183,11 @@ class OutcomeResolver:
             "resolved_at_utc":resolved_at,
         }
         path=f"verified_outcomes/{market}/{evidence_id}.json"
-        previous=self.journal.load_json(path,default={})
-        changed=previous.get("outcome_hash_sha256")!=outcome_hash
+        # Read-only Shadow does not need persisted-outcome deduplication.
+        # Avoid N remote object reads while still evaluating the same audited
+        # formal evidence and T1 review in memory.
+        previous={} if self.read_only else self.journal.load_json(path,default={})
+        changed=True if self.read_only else previous.get("outcome_hash_sha256")!=outcome_hash
         if changed and not self.read_only:
             self.journal.save_json(path,artifact)
             self.journal.save_json(
@@ -228,9 +231,13 @@ class OutcomeResolver:
                 evaluated.append(result)
             else:
                 waiting.append(result)
-        persisted_latest=self.journal.load_json(
-            f"verified_outcomes/{market}/latest.json",
-            default={},
+        persisted_latest=(
+            {}
+            if self.read_only
+            else self.journal.load_json(
+                f"verified_outcomes/{market}/latest.json",
+                default={},
+            )
         )
         latest=(evaluated[-1] if self.read_only and evaluated else persisted_latest)
         return {
