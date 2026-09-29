@@ -38,10 +38,11 @@ class OutcomeResolver:
 
     version=VERSION
 
-    def __init__(self,evidence_repository,outcome_read_port,journal)->None:
+    def __init__(self,evidence_repository,outcome_read_port,journal,read_only:bool=False)->None:
         self.evidence_repository=evidence_repository
         self.outcome_read_port=outcome_read_port
         self.journal=journal
+        self.read_only=bool(read_only)
 
     @staticmethod
     def _normalize_route(market:str,review:dict)->dict|None:
