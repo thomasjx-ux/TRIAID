@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from app import engine, home, status, risk_center_projection
 
@@ -167,8 +168,11 @@ receipt={
         "known_gap_count":len(((rw or {}).get("data_coverage") or {}).get("known_gaps") or []),
     },
 }
-engine.store.save_json("risk_center_full_audit_latest.json",receipt)
-engine.store.append_jsonl("risk_center_full_audit_history.jsonl",receipt)
+read_only=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
+receipt["runtime_mode"]="READ_ONLY_SHADOW" if read_only else "PRODUCTION"
+if not read_only:
+    engine.store.save_json("risk_center_full_audit_latest.json",receipt)
+    engine.store.append_jsonl("risk_center_full_audit_history.jsonl",receipt)
 print("TRIAID_RISK_CENTER_FULL_AUDIT_"+("PASS" if receipt["passed"] else "FAIL"),json.dumps(receipt,ensure_ascii=False,sort_keys=True))
 if issues:
     raise SystemExit(1)
