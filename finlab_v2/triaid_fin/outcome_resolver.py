@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 
-VERSION="triaid-outcome-resolver@1.0.0"
+VERSION="triaid-outcome-resolver@1.1.0"
 
 
 def _hash(payload:dict)->str:
@@ -184,7 +184,7 @@ class OutcomeResolver:
         path=f"verified_outcomes/{market}/{evidence_id}.json"
         previous=self.journal.load_json(path,default={})
         changed=previous.get("outcome_hash_sha256")!=outcome_hash
-        if changed:
+        if changed and not self.read_only:
             self.journal.save_json(path,artifact)
             self.journal.save_json(
                 f"verified_outcomes/{market}/latest.json",
@@ -204,7 +204,12 @@ class OutcomeResolver:
                     "resolved_at_utc":resolved_at,
                 },
             )
-        return {**artifact,"changed":changed}
+        return {
+            **artifact,
+            "changed":changed and not self.read_only,
+            "would_change":changed if self.read_only else False,
+            "read_only":self.read_only,
+        }
 
     def resolve_market(self,market_id:str,limit:int=50)->dict:
         market=str(market_id).upper()
@@ -222,12 +227,14 @@ class OutcomeResolver:
                 evaluated.append(result)
             else:
                 waiting.append(result)
-        latest=self.journal.load_json(
+        persisted_latest=self.journal.load_json(
             f"verified_outcomes/{market}/latest.json",
             default={},
         )
+        latest=(evaluated[-1] if self.read_only and evaluated else persisted_latest)
         return {
             "resolver_version":self.version,
+            "read_only":self.read_only,
             "market_id":market,
             "formal_evidence_count":len(ledger),
             "evaluated_count":len(evaluated),
