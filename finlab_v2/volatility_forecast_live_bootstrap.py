@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import os
+
 from triaid_fin.engine import EvolutionLabEngine
+
+
+def _read_only()->bool:
+    return os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
 
 
 def main()->None:
     engine=EvolutionLabEngine()
-    payload=engine.refresh_volatility_forecasts(require_all=True)
+    if _read_only():
+        payload=engine.volatility_forecasts()
+    else:
+        payload=engine.refresh_volatility_forecasts(require_all=True)
     markets=payload.get("markets") or {}
     assert set(markets)=={"US","CN","HK"}, payload
     for market,row in markets.items():
@@ -21,6 +30,7 @@ def main()->None:
             "markets":sorted(markets),
             "cache_state":cached.get("cache_state"),
             "updated_at":cached.get("updated_at"),
+            "runtime_mode":"READ_ONLY_SHADOW" if _read_only() else "PRODUCTION",
         },
     )
 
