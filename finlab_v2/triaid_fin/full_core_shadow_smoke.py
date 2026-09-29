@@ -93,6 +93,9 @@ assert "P16_REV5" in payload["candidate_group_members"]
 assert "C29_SIZE_REL20" not in payload["candidate_group_members"]
 assert payload["shadow_weights"].get("P16_REV5",0)>0
 assert payload["shadow_weights"] != payload["production_weights"]
+assert abs(payload["allocation_risk_budget"]-0.28)<1e-12
+assert payload["risk_budget_basis"]=="RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE"
+assert abs(sum(v for k,v in payload["shadow_weights"].items() if k!="P28_CASH")-0.28)<1e-12
 assert payload["allocation"]["production_mutation"] is False
 assert payload["allocation"]["reads_t1_for_allocation"] is False
 print("TRIAID_FULL_CORE_SHADOW_SMOKE_PASS")
