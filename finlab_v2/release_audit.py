@@ -17,6 +17,7 @@ RECEIPT_PATH=Path(os.getenv(
     "/tmp/triaid_release_audit.json" if MODE=="runtime" else "/tmp/triaid_build_audit.json",
 ))
 BASE=os.getenv("TRIAID_POSTDEPLOY_SMOKE_BASE","http://127.0.0.1:8080").rstrip("/")
+READ_ONLY_RUNTIME=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
 
 BUILD_CASES=[
     "selftest.py",
@@ -601,6 +602,20 @@ def runtime_checks()->list[dict]:
 
     live=wait_liveness()
     check("process_liveness",live.get("ok") is True,live)
+    if READ_ONLY_RUNTIME:
+        check(
+            "shadow_runtime_write_fence",
+            os.getenv("TRIAID_DATA_AUTOMATION","0").strip().lower() not in {"1","true","on","yes"}
+            and os.getenv("TRIAID_DECISION_AUTOMATION","0").strip().lower() not in {"1","true","on","yes"}
+            and os.getenv("TRIAID_STARTUP_MAINTENANCE","0").strip().lower() not in {"1","true","on","yes"}
+            and os.getenv("TRIAID_LONG_RESEARCH_BOOTSTRAP","0").strip().lower() not in {"1","true","on","yes"},
+            {
+                "data_automation":os.getenv("TRIAID_DATA_AUTOMATION"),
+                "decision_automation":os.getenv("TRIAID_DECISION_AUTOMATION"),
+                "startup_maintenance":os.getenv("TRIAID_STARTUP_MAINTENANCE"),
+                "long_research_bootstrap":os.getenv("TRIAID_LONG_RESEARCH_BOOTSTRAP"),
+            },
+        )
 
     maintenance_deadline=time.monotonic()+120
     maintenance=live.get("startup_maintenance_receipt") or {}
@@ -794,8 +809,9 @@ def runtime_checks()->list[dict]:
         outcome_status=payloads.get(f"/api/experiments/outcomes/{market}/status") or {}
         check(
             f"{market}_t0_t1_outcome_status_contract",
-            outcome_status.get("resolver_version")=="triaid-outcome-resolver@1.0.0"
+            outcome_status.get("resolver_version")=="triaid-outcome-resolver@1.1.0"
             and outcome_status.get("market_id")==market
+            and bool(outcome_status.get("read_only")) is READ_ONLY_RUNTIME
             and int(outcome_status.get("formal_evidence_count") or 0)>=1
             and int(outcome_status.get("evaluated_count") or 0)>=0
             and int(outcome_status.get("waiting_count") or 0)>=0,
@@ -1149,21 +1165,40 @@ def runtime_checks()->list[dict]:
             posterior,
         )
         formal_evidence=page.get("formal_evidence") or {}
-        check(
-            f"{market}_formal_evidence_frozen",
-            formal_evidence.get("state")=="FROZEN"
-            and bool(formal_evidence.get("evidence_id"))
-            and bool(formal_evidence.get("evidence_hash_sha256"))
-            and bool((formal_evidence.get("decision_lineage") or {}).get("decision_id")),
-            formal_evidence,
-        )
+        if READ_ONLY_RUNTIME:
+            check(
+                f"{market}_formal_evidence_frozen",
+                formal_evidence.get("state")=="READ_ONLY_CANDIDATE"
+                and formal_evidence.get("read_only") is True
+                and formal_evidence.get("changed") is False
+                and bool(formal_evidence.get("evidence_id"))
+                and bool(formal_evidence.get("evidence_hash_sha256"))
+                and bool((formal_evidence.get("decision_lineage") or {}).get("decision_id")),
+                formal_evidence,
+            )
+        else:
+            check(
+                f"{market}_formal_evidence_frozen",
+                formal_evidence.get("state")=="FROZEN"
+                and formal_evidence.get("read_only") is False
+                and bool(formal_evidence.get("evidence_id"))
+                and bool(formal_evidence.get("evidence_hash_sha256"))
+                and bool((formal_evidence.get("decision_lineage") or {}).get("decision_id")),
+                formal_evidence,
+            )
         frozen=payloads.get(f"/api/experiments/evidence/{market}/latest") or {}
         excluded=set(frozen.get("future_information_excluded") or [])
+        evidence_identity_ok=(
+            frozen.get("evidence_id")==formal_evidence.get("persisted_latest_evidence_id")
+            and frozen.get("evidence_hash_sha256")==formal_evidence.get("persisted_latest_evidence_hash_sha256")
+        ) if READ_ONLY_RUNTIME else (
+            frozen.get("evidence_id")==formal_evidence.get("evidence_id")
+            and frozen.get("evidence_hash_sha256")==formal_evidence.get("evidence_hash_sha256")
+        )
         check(
             f"{market}_formal_evidence_repository_contract",
             frozen.get("evidence_schema")=="formal-market-projection-evidence@1.1.0"
-            and frozen.get("evidence_id")==formal_evidence.get("evidence_id")
-            and frozen.get("evidence_hash_sha256")==formal_evidence.get("evidence_hash_sha256")
+            and evidence_identity_ok
             and excluded=={"posterior","curves","live","activity","intraday","route_embedded_reviews","localized_presentation_copy"}
             and all(
                 key not in frozen
@@ -1173,7 +1208,9 @@ def runtime_checks()->list[dict]:
             and "formal_strategies" in frozen
             and "latest_decision_review" not in (frozen.get("formal_route") or {}),
             {
-                "evidence_id":frozen.get("evidence_id"),
+                "runtime_profile":"READ_ONLY_SHADOW" if READ_ONLY_RUNTIME else "PRODUCTION",
+                "candidate_evidence_id":formal_evidence.get("evidence_id"),
+                "persisted_evidence_id":frozen.get("evidence_id"),
                 "excluded":sorted(excluded),
                 "keys":sorted(frozen),
             },
@@ -1473,6 +1510,7 @@ def finish(mode:str,rows:list[dict])->int:
     receipt={
         "audit":"TRIAID_RELEASE_AUDIT_CHAIN_V1",
         "mode":mode,
+        "runtime_profile":("READ_ONLY_SHADOW" if READ_ONLY_RUNTIME else "PRODUCTION") if mode=="runtime" else "BUILD",
         "passed":not failed,
         "required_check_count":len(rows),
         "passed_check_count":len(rows)-len(failed),
