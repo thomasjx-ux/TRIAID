@@ -117,6 +117,25 @@ checks={
     "ledger_written":len(journal.streams.get("verified_outcomes/ledger.jsonl",[]))==2,
 }
 
+
+# Read-only shadow resolution may compute current status from production
+# evidence, but it must never mutate the production journal.
+readonly_journal=FakeJournal()
+readonly=OutcomeResolver(
+    FakeEvidenceRepository(evidence("US","US-D1")),
+    FakeOutcomePort(us_review),
+    readonly_journal,
+    read_only=True,
+)
+readonly_status=readonly.resolve_market("US")
+readonly_latest=readonly_status["latest_evaluated"]
+checks["readonly_flag"]=readonly_status["read_only"] is True
+checks["readonly_evaluated_in_memory"]=readonly_latest["state"]=="EVALUATED"
+checks["readonly_marks_would_change"]=readonly_latest["would_change"] is True
+checks["readonly_does_not_report_persisted_change"]=readonly_latest["changed"] is False
+checks["readonly_no_object_writes"]=readonly_journal.objects=={}
+checks["readonly_no_ledger_writes"]=readonly_journal.streams=={}
+
 # Re-resolving the same T1 state must not append duplicate outcome evidence.
 us.resolve_market("US")
 checks["outcome_idempotent"]=len(journal.streams.get("verified_outcomes/ledger.jsonl",[]))==2
