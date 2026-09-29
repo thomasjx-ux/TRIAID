@@ -95,7 +95,32 @@ assert payload["shadow_weights"].get("P16_REV5",0)>0
 assert payload["shadow_weights"] != payload["production_weights"]
 assert abs(payload["allocation_risk_budget"]-0.28)<1e-12
 assert payload["risk_budget_basis"]=="RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE"
+assert abs(payload["production_weights"]["P28_CASH"]-0.72)<1e-12
+assert "P28_CASH" not in payload["production_weights_raw"]
 assert abs(sum(v for k,v in payload["shadow_weights"].items() if k!="P28_CASH")-0.28)<1e-12
 assert payload["allocation"]["production_mutation"] is False
 assert payload["allocation"]["reads_t1_for_allocation"] is False
 print("TRIAID_FULL_CORE_SHADOW_SMOKE_PASS")
+
+# Implicit cash must not be charged as turnover when only the risky sleeve rotates.
+rotation_states=[
+    StrategyState(strategy_id="P00_BUY_HOLD",eligible=True,lifecycle="frozen",
+                  expected_net_return=.05,risk=.1,liquidity_ok=True,capacity_ok=True,
+                  risk_ok=True,concentration_ok=True,hard_failure=False,recent_returns=[.001]*30),
+    StrategyState(strategy_id="P16_REV5",eligible=True,lifecycle="frozen",
+                  expected_net_return=.20,risk=.1,liquidity_ok=True,capacity_ok=True,
+                  risk_ok=True,concentration_ok=True,hard_failure=False,recent_returns=[.001,-.001]*15),
+    StrategyState(strategy_id="P28_CASH",eligible=True,lifecycle="frozen",
+                  expected_net_return=0.0,liquidity_ok=True,capacity_ok=True,
+                  risk_ok=True,concentration_ok=True,hard_failure=False),
+]
+rot=run_full_core_shadow(
+    "HK",rotation_states,
+    production_weights={"P00_BUY_HOLD":.28},
+    previous_weights={"P00_BUY_HOLD":.28},
+    max_members=10,risk_budget=1.0,max_strategy_weight=.28,
+    modeled_cost_bps=2.0,absolute_return_calibrated=False,
+).to_dict()
+assert abs(rot["allocation"]["modeled_turnover"]-.56)<1e-12, rot
+assert abs(rot["shadow_weights"]["P16_REV5"]-.28)<1e-12, rot
+assert abs(rot["shadow_weights"]["P28_CASH"]-.72)<1e-12, rot
