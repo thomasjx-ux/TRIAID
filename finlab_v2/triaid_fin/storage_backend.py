@@ -251,7 +251,7 @@ class FileStorageBackend:
 
 
 class SupabaseStorageBackend:
-    version="supabase-storage-backend@0.2.0"
+    version="supabase-storage-backend@0.2.1"
 
     def __init__(self)->None:
         self.endpoint=os.environ.get("TRIAID_SUPABASE_PERSISTENCE_URL","").strip()
@@ -273,7 +273,13 @@ class SupabaseStorageBackend:
     def durability(self)->str:
         return "PERSISTENT"
 
-    def _call(self,payload:dict,timeout:int=20)->dict:
+    def _call(self,payload:dict,timeout:int|None=None)->dict:
+        if timeout is None:
+            try:
+                timeout=int(os.environ.get("TRIAID_SUPABASE_TIMEOUT_SECONDS","20"))
+            except Exception:
+                timeout=20
+        timeout=max(1,min(int(timeout),120))
         data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode("utf-8")
         req=urllib.request.Request(
             self.endpoint,
