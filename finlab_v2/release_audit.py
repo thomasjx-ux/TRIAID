@@ -666,7 +666,10 @@ def runtime_checks()->list[dict]:
     payloads={}
     for path in RUNTIME_REQUIRED_PATHS:
         try:
-            code,payload=http_get(path,timeout=60 if READ_ONLY_RUNTIME else 20)
+            # Shadow may hit the bounded 60s Supabase read timeout and then
+            # return a fail-soft payload. Keep the outer audit timeout above
+            # that inner bound so the endpoint can complete its degradation path.
+            code,payload=http_get(path,timeout=90 if READ_ONLY_RUNTIME else 20)
             payloads[path]=payload
             check("http:"+path,code==200,{"status":code})
         except Exception as exc:
