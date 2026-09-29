@@ -35,6 +35,7 @@ class FullCoreShadowDecision:
     candidate_group_members: list[str]
     candidate_group_weights: dict[str, float]
     candidate_group_diagnostics: dict[str, Any]
+    production_weights_raw: dict[str, float]
     production_weights: dict[str, float]
     shadow_weights: dict[str, float]
     weight_delta: dict[str, float]
@@ -100,6 +101,24 @@ def independent_lifecycle(
     return out,reasons,changes
 
 
+def _canonical_cash_weights(raw: Mapping[str, float] | None) -> dict[str, float] | None:
+    """Make implicit unallocated capital explicit cash without changing exposure."""
+    if raw is None:
+        return None
+    risky={
+        str(k):float(v)
+        for k,v in raw.items()
+        if str(k)!="P28_CASH" and float(v)>0.0
+    }
+    risky_total=sum(risky.values())
+    if risky_total>1.0+1e-12:
+        raise ValueError("weights exceed 100%")
+    cash=max(0.0,1.0-risky_total)
+    if cash>1e-12:
+        risky["P28_CASH"]=cash
+    return risky
+
+
 def run_full_core_shadow(
     market_id: str,
     states: Iterable[StrategyState],
@@ -128,7 +147,9 @@ def run_full_core_shadow(
         allow_shadow_simulation=False,
     )
 
-    production={str(k):float(v) for k,v in production_weights.items()}
+    production_raw={str(k):float(v) for k,v in production_weights.items()}
+    production=_canonical_cash_weights(production_raw) or {}
+    previous=_canonical_cash_weights(previous_weights)
     incumbent_risky_exposure=sum(
         float(w) for sid,w in production.items() if sid!="P28_CASH"
     )
@@ -152,7 +173,7 @@ def run_full_core_shadow(
             or max_strategy_weight
         ),
         frozen_incumbent=production,
-        previous_weights=previous_weights,
+        previous_weights=previous,
         modeled_cost_bps=modeled_cost_bps,
         absolute_return_calibrated=absolute_return_calibrated,
     )
@@ -173,6 +194,7 @@ def run_full_core_shadow(
         candidate_group_members=list(group.members),
         candidate_group_weights={str(k):float(v) for k,v in group.weights.items()},
         candidate_group_diagnostics=dict(group.diagnostics or {}),
+        production_weights_raw=production_raw,
         production_weights=production,
         shadow_weights=shadow,
         weight_delta={sid:shadow.get(sid,0.0)-production.get(sid,0.0) for sid in ids},
