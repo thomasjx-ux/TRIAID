@@ -39,15 +39,20 @@ from triaid_fin.home_brief import HomeBriefProjection
 from triaid_fin.economic_evolution import EconomicEvolutionModule
 from triaid_fin.projection_cache import ReadThroughProjectionCache
 
+runtime_read_only=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
+
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
 ui_read_services=UiReadServices(engine)
-verified_projection_repository=VerifiedProjectionRepository(runtime_services.journal)
+verified_projection_repository=VerifiedProjectionRepository(
+    runtime_services.journal,
+    read_only=runtime_read_only,
+)
 outcome_resolver=OutcomeResolver(
     verified_projection_repository,
     ui_read_services.outcome,
     runtime_services.journal,
-    read_only=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"},
+    read_only=runtime_read_only,
 )
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
