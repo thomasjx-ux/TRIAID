@@ -37,6 +37,7 @@ BUILD_CASES=[
     "economic_evolution_smoke.py",
     "value_frontier_smoke.py",
     "triaid_fin/value_frontier_shadow_v2_smoke.py",
+    "triaid_fin/full_core_shadow_smoke.py",
     "trader_shadow_smoke.py",
     "provider_adjustment_smoke.py",
     "provider_freshness_smoke.py",
@@ -117,10 +118,13 @@ RUNTIME_REQUIRED_PATHS=[
     "/api/ui/home-brief",
     "/api/evolution/economic-value?market_id=US",
     "/api/evolution/value-frontier-shadow?market_id=US",
+    "/api/evolution/full-core-shadow?market_id=US",
     "/api/evolution/economic-value?market_id=CN",
     "/api/evolution/value-frontier-shadow?market_id=CN",
+    "/api/evolution/full-core-shadow?market_id=CN",
     "/api/evolution/economic-value?market_id=HK",
     "/api/evolution/value-frontier-shadow?market_id=HK",
+    "/api/evolution/full-core-shadow?market_id=HK",
     "/api/ui/market-page/US?lang=zh",
     "/api/ui/market-page/CN?lang=zh",
     "/api/ui/market-page/HK?lang=zh",
@@ -217,6 +221,7 @@ def structural_checks()->list[dict]:
     economic_evolution=(ROOT/"triaid_fin"/"economic_evolution.py").read_text(encoding="utf-8")
     value_frontier=(ROOT/"triaid_fin"/"value_frontier.py").read_text(encoding="utf-8")
     value_frontier_shadow_v2=(ROOT/"triaid_fin"/"value_frontier_shadow_v2.py").read_text(encoding="utf-8")
+    full_core_shadow=(ROOT/"triaid_fin"/"full_core_shadow.py").read_text(encoding="utf-8")
     projection_cache=(ROOT/"triaid_fin"/"projection_cache.py").read_text(encoding="utf-8")
     external_strategy=(ROOT/"triaid_fin"/"external_strategy.py").read_text(encoding="utf-8")
     external_strategy_api=(ROOT/"triaid_fin"/"external_strategy_api.py").read_text(encoding="utf-8")
@@ -436,6 +441,21 @@ def structural_checks()->list[dict]:
         and "modeled_execution_cost" in value_frontier_shadow_v2
         and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" in value_frontier_shadow_v2
         and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
+        None,
+    )
+    check(
+        "full_core_shadow_is_independent_future_blind_and_non_mutating",
+        'VERSION = "full-core-shadow@0.1.0"' in full_core_shadow
+        and 'LIFECYCLE_VERSION = "independent-lifecycle@0.1.0"' in full_core_shadow
+        and "ignores_production_lifecycle_labels: bool = True" in full_core_shadow
+        and "uses_full_frozen_t0_state_pool: bool = True" in full_core_shadow
+        and "reads_t1_for_allocation: bool = False" in full_core_shadow
+        and "production_mutation: bool = False" in full_core_shadow
+        and "NON_INCUMBENT_REQUIRES_INDEPENDENT_PROSPECTIVE_EVIDENCE" in full_core_shadow
+        and "ESTABLISHED_AUDITED_POLICY_CURRENT_HARD_CONSTRAINTS_PASS" in full_core_shadow
+        and "def full_core_shadow_preview" in engine
+        and '@app.get("/api/evolution/full-core-shadow")' in app
+        and "engine.full_core_shadow_preview" in app,
         None,
     )
     check(
@@ -673,6 +693,38 @@ def runtime_checks()->list[dict]:
         market:payloads.get(f"/api/ui/validation-summary?market_id={market}") or {}
         for market in ("US","CN","HK")
     }
+    full_core_shadow_payloads={
+        market:payloads.get(f"/api/evolution/full-core-shadow?market_id={market}") or {}
+        for market in ("US","CN","HK")
+    }
+    for market,payload in full_core_shadow_payloads.items():
+        shadow=payload.get("full_core_shadow") or {}
+        check(
+            f"{market}_full_core_shadow_contract",
+            payload.get("market_id")==market
+            and payload.get("production_mutation") is False
+            and (
+                payload.get("available") is False
+                or (
+                    payload.get("available") is True
+                    and int(payload.get("full_state_count") or 0)>=len(payload.get("production_group_members") or [])
+                    and shadow.get("version")=="full-core-shadow@0.1.0"
+                    and shadow.get("lifecycle_version")=="independent-lifecycle@0.1.0"
+                    and shadow.get("independent_lifecycle") is True
+                    and shadow.get("ignores_production_lifecycle_labels") is True
+                    and shadow.get("uses_full_frozen_t0_state_pool") is True
+                    and shadow.get("reads_t1_for_allocation") is False
+                    and shadow.get("production_mutation") is False
+                )
+            ),
+            {
+                "available":payload.get("available"),
+                "full_state_count":payload.get("full_state_count"),
+                "production_group_members":payload.get("production_group_members"),
+                "shadow_version":shadow.get("version"),
+                "lifecycle_version":shadow.get("lifecycle_version"),
+            },
+        )
     home=payloads.get("/") or ""
 
     risk_projection_sections=risk_projection_payload.get("sections") or {}
