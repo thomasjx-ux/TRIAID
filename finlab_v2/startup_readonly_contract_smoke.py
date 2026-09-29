@@ -13,6 +13,7 @@ os.environ["TRIAID_DATA_AUTOMATION"]="0"
 os.environ["TRIAID_CALENDAR_SYNC"]="0"
 os.environ["TRIAID_DECISION_AUTOMATION"]="0"
 os.environ["TRIAID_STARTUP_MAINTENANCE"]="0"
+os.environ["TRIAID_RUNTIME_READONLY"]="1"
 
 from triaid_fin.contracts import MarketSnapshot, RunRecord
 from triaid_fin.store import RunStore
@@ -58,6 +59,10 @@ def fingerprint(root:str)->dict[str,str]:
 before=fingerprint(tmp)
 
 import app
+
+assert app.runtime_read_only is True
+assert app.outcome_resolver.read_only is True
+assert app.verified_projection_repository.read_only is True
 
 assert app.engine.get_run("US-stale-startup-contract").status=="FETCHING_DATA"
 assert app.engine.population_state.state["version"]=="population-state@0.4.0"
