@@ -454,6 +454,8 @@ def structural_checks()->list[dict]:
         and "NON_INCUMBENT_REQUIRES_INDEPENDENT_PROSPECTIVE_EVIDENCE" in full_core_shadow
         and "ESTABLISHED_AUDITED_POLICY_CURRENT_HARD_CONSTRAINTS_PASS" in full_core_shadow
         and "RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE" in full_core_shadow
+        and "def _canonical_cash_weights" in full_core_shadow
+        and "Make implicit unallocated capital explicit cash without changing exposure." in full_core_shadow
         and "def full_core_shadow_preview" in engine
         and '@app.get("/api/evolution/full-core-shadow")' in app
         and "engine.full_core_shadow_preview" in app,
