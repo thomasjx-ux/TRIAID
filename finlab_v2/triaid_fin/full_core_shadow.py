@@ -39,6 +39,9 @@ class FullCoreShadowDecision:
     shadow_weights: dict[str, float]
     weight_delta: dict[str, float]
     allocation: dict[str, Any]
+    configured_risk_budget: float
+    allocation_risk_budget: float
+    risk_budget_basis: str
     independent_lifecycle: bool = True
     ignores_production_lifecycle_labels: bool = True
     uses_full_frozen_t0_state_pool: bool = True
@@ -125,21 +128,34 @@ def run_full_core_shadow(
         allow_shadow_simulation=False,
     )
 
+    production={str(k):float(v) for k,v in production_weights.items()}
+    incumbent_risky_exposure=sum(
+        float(w) for sid,w in production.items() if sid!="P28_CASH"
+    )
+    if absolute_return_calibrated:
+        allocation_risk_budget=float(risk_budget)
+        risk_budget_basis="ABSOLUTE_RETURN_CALIBRATED_CONFIGURED_RISK_BUDGET"
+    else:
+        # Relative-only scores can rank risky policies, but they cannot justify
+        # changing the cash/risk split. Preserve incumbent risky exposure and
+        # only optimize composition inside that matched-risk sleeve.
+        allocation_risk_budget=max(0.0,min(float(risk_budget),incumbent_risky_exposure))
+        risk_budget_basis="RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE"
+
     allocation=allocate_shadow(
         str(market_id).upper(),
         shadow_states,
         group.members,
-        risk_budget=risk_budget,
+        risk_budget=allocation_risk_budget,
         position_cap=float(
             (group.diagnostics or {}).get("max_strategy_weight_constraint")
             or max_strategy_weight
         ),
-        frozen_incumbent=production_weights,
+        frozen_incumbent=production,
         previous_weights=previous_weights,
         modeled_cost_bps=modeled_cost_bps,
         absolute_return_calibrated=absolute_return_calibrated,
     )
-    production={str(k):float(v) for k,v in production_weights.items()}
     shadow={str(k):float(v) for k,v in allocation.weights.items()}
     ids=sorted(set(production)|set(shadow))
     counts: dict[str,int]={}
@@ -161,4 +177,7 @@ def run_full_core_shadow(
         shadow_weights=shadow,
         weight_delta={sid:shadow.get(sid,0.0)-production.get(sid,0.0) for sid in ids},
         allocation=allocation.to_dict(),
+        configured_risk_budget=float(risk_budget),
+        allocation_risk_budget=allocation_risk_budget,
+        risk_budget_basis=risk_budget_basis,
     )
