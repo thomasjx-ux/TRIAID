@@ -1,0 +1,17 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "TRIAID_DATA_AUTOMATION=1 TRIAID_DECISION_AUTOMATION=1 sh build_gate.sh",
+    "watchPatterns": [
+      "/finlab_v2/**"
+    ]
+  },
+  "deploy": {
+    "startCommand": "sh start.sh",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 1
+  }
+}
