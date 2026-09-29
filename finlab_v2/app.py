@@ -47,6 +47,7 @@ outcome_resolver=OutcomeResolver(
     verified_projection_repository,
     ui_read_services.outcome,
     runtime_services.journal,
+    read_only=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"},
 )
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
