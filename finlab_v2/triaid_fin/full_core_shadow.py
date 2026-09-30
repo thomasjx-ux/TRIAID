@@ -3,9 +3,16 @@
 The production lifecycle labels are deliberately ignored. Established audited
 policies are re-admitted from the frozen T0 state when current hard constraints
 pass; non-incumbent candidates remain shadow until they accumulate their own
-prospective evidence. Selection reuses the audited population optimizer and
-allocation reuses Value Frontier Shadow V2. This module has no storage, broker,
-runtime, or deployment imports and cannot mutate production state.
+prospective evidence.
+
+V2 keeps the population optimizer's top group as an explanatory shortlist, but
+it is no longer a hard allocation gate. The allocation layer sees the complete
+currently admissible established policy bank and uses the continuous Value
+Frontier Shadow allocator. This removes the old rank-10/rank-11 cliff while
+retaining hard constraints and the absolute per-strategy safety cap.
+
+This module has no storage, broker, runtime, or deployment imports and cannot
+mutate production state.
 """
 from __future__ import annotations
 
@@ -18,7 +25,7 @@ from .strategy_registry import POLICY_IDS
 from .value_frontier_shadow_v2 import allocate_shadow
 
 
-VERSION = "full-core-shadow@0.1.0"
+VERSION = "full-core-shadow@0.2.0"
 LIFECYCLE_VERSION = "independent-lifecycle@0.1.0"
 ESTABLISHED_POLICY_IDS = frozenset(POLICY_IDS)
 
@@ -35,6 +42,9 @@ class FullCoreShadowDecision:
     candidate_group_members: list[str]
     candidate_group_weights: dict[str, float]
     candidate_group_diagnostics: dict[str, Any]
+    allocation_member_ids: list[str]
+    allocation_member_count: int
+    shortlist_is_allocation_gate: bool
     production_weights_raw: dict[str, float]
     production_weights: dict[str, float]
     shadow_weights: dict[str, float]
@@ -136,6 +146,8 @@ def run_full_core_shadow(
     shadow_states,lifecycle_reasons,lifecycle_changes=independent_lifecycle(frozen_states)
     population=population or StrategyPopulationModule()
 
+    # Diagnostic shortlist only. It explains the strongest current population
+    # candidates but no longer creates a discontinuous allocation boundary.
     group=population.select(
         str(market_id).upper(),
         shadow_states,
@@ -145,6 +157,19 @@ def run_full_core_shadow(
         experiment_mode="FULL_CORE_SHADOW",
         max_weight_override=max_strategy_weight,
         allow_shadow_simulation=False,
+    )
+
+    allocation_members=sorted(
+        {
+            str(state.strategy_id)
+            for state in shadow_states
+            if _hard_admissible(state)
+            and str(state.lifecycle) in {"active","reduced"}
+            and (
+                str(state.strategy_id)=="P28_CASH"
+                or str(state.strategy_id) in ESTABLISHED_POLICY_IDS
+            )
+        }
     )
 
     production_raw={str(k):float(v) for k,v in production_weights.items()}
@@ -166,12 +191,9 @@ def run_full_core_shadow(
     allocation=allocate_shadow(
         str(market_id).upper(),
         shadow_states,
-        group.members,
+        allocation_members,
         risk_budget=allocation_risk_budget,
-        position_cap=float(
-            (group.diagnostics or {}).get("max_strategy_weight_constraint")
-            or max_strategy_weight
-        ),
+        position_cap=float(max_strategy_weight),
         frozen_incumbent=production,
         previous_weights=previous,
         modeled_cost_bps=modeled_cost_bps,
@@ -194,6 +216,9 @@ def run_full_core_shadow(
         candidate_group_members=list(group.members),
         candidate_group_weights={str(k):float(v) for k,v in group.weights.items()},
         candidate_group_diagnostics=dict(group.diagnostics or {}),
+        allocation_member_ids=allocation_members,
+        allocation_member_count=len(allocation_members),
+        shortlist_is_allocation_gate=False,
         production_weights_raw=production_raw,
         production_weights=production,
         shadow_weights=shadow,
