@@ -5,11 +5,11 @@ policies are re-admitted from the frozen T0 state when current hard constraints
 pass; non-incumbent candidates remain shadow until they accumulate their own
 prospective evidence.
 
-V2 keeps the population optimizer's top group as an explanatory shortlist, but
-it is no longer a hard allocation gate. The allocation layer sees the complete
-currently admissible established policy bank and uses the continuous Value
-Frontier Shadow allocator. This removes the old rank-10/rank-11 cliff while
-retaining hard constraints and the absolute per-strategy safety cap.
+V3 keeps the population optimizer's top group as an explanatory shortlist only.
+Allocation sees the complete currently admissible established policy bank and
+uses a proximal sparse state transition from the actual pre-decision portfolio.
+Production-core weights are retained only for comparison diagnostics and do not
+gate the candidate allocation.
 
 This module has no storage, broker, runtime, or deployment imports and cannot
 mutate production state.
@@ -25,7 +25,7 @@ from .strategy_registry import POLICY_IDS
 from .value_frontier_shadow_v2 import allocate_shadow
 
 
-VERSION = "full-core-shadow@0.2.0"
+VERSION = "full-core-shadow@0.3.0"
 LIFECYCLE_VERSION = "independent-lifecycle@0.1.0"
 ESTABLISHED_POLICY_IDS = frozenset(POLICY_IDS)
 
@@ -77,13 +77,7 @@ def _hard_admissible(state: StrategyState) -> bool:
 def independent_lifecycle(
     states: Iterable[StrategyState],
 ) -> tuple[list[StrategyState], dict[str, str], dict[str, dict[str, str]]]:
-    """Rebuild lifecycle without reading PopulationStateTracker memory.
-
-    The established P00-P28 audited bank is eligible on current hard evidence.
-    New/non-incumbent strategies do not inherit production admission and remain
-    shadow until a future version has its own prospective lifecycle ledger.
-    Return sign is never used as an absolute cash/lifecycle gate.
-    """
+    """Rebuild lifecycle without reading PopulationStateTracker memory."""
     out: list[StrategyState] = []
     reasons: dict[str, str] = {}
     changes: dict[str, dict[str, str]] = {}
@@ -146,8 +140,6 @@ def run_full_core_shadow(
     shadow_states,lifecycle_reasons,lifecycle_changes=independent_lifecycle(frozen_states)
     population=population or StrategyPopulationModule()
 
-    # Diagnostic shortlist only. It explains the strongest current population
-    # candidates but no longer creates a discontinuous allocation boundary.
     group=population.select(
         str(market_id).upper(),
         shadow_states,
@@ -175,18 +167,24 @@ def run_full_core_shadow(
     production_raw={str(k):float(v) for k,v in production_weights.items()}
     production=_canonical_cash_weights(production_raw) or {}
     previous=_canonical_cash_weights(previous_weights)
-    incumbent_risky_exposure=sum(
+
+    production_risky_exposure=sum(
         float(w) for sid,w in production.items() if sid!="P28_CASH"
     )
+    predecision_risky_exposure=(
+        sum(float(w) for sid,w in previous.items() if sid!="P28_CASH")
+        if previous is not None else production_risky_exposure
+    )
+
     if absolute_return_calibrated:
         allocation_risk_budget=float(risk_budget)
         risk_budget_basis="ABSOLUTE_RETURN_CALIBRATED_CONFIGURED_RISK_BUDGET"
     else:
-        # Relative-only scores can rank risky policies, but they cannot justify
-        # changing the cash/risk split. Preserve incumbent risky exposure and
-        # only optimize composition inside that matched-risk sleeve.
-        allocation_risk_budget=max(0.0,min(float(risk_budget),incumbent_risky_exposure))
-        risk_budget_basis="RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE"
+        allocation_risk_budget=max(
+            0.0,
+            min(float(risk_budget),predecision_risky_exposure),
+        )
+        risk_budget_basis="RELATIVE_ONLY_PRESERVE_PREDECISION_RISKY_EXPOSURE"
 
     allocation=allocate_shadow(
         str(market_id).upper(),
