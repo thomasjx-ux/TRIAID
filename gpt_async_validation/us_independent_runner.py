@@ -142,7 +142,7 @@ def main()->int:
         "scheduler_trigger_time":os.getenv("SCHEDULER_TRIGGER_TIME") or now.isoformat(),
         "evidence_ready_time":now.isoformat(),
         "freeze_start_time":now.isoformat(),
-        "freeze_verified_time":None,
+        "freeze_verified_time":now.isoformat(),
         "exchange_timezone":"America/New_York",
         "exchange_session_type":"REGULAR" if not info.get("early_close") else "EARLY_CLOSE",
         "actual_close_time":close_text,
@@ -183,7 +183,7 @@ def main()->int:
         "us_route":route,
         "modeled_turnover":shadow.get("modeled_turnover"),
         "modeled_cost":shadow.get("modeled_execution_cost"),
-        "capital_cases":[x for x in route.get("capital_sleeves",route.get("sleeves",[]))],
+        "capital_cases":[x for x in ((route.get("capital_capacity") or {}).get("sleeves") or [])],
         "required_capital_cases_usd":list(CAPITAL_CASES),
         "capacity_assumptions":{
             "adv_lookback_days":USReturnMaxRoute.adv_lookback,
