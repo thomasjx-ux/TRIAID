@@ -19,6 +19,11 @@ RECEIPT_PATH=Path(os.getenv(
 ))
 BASE=os.getenv("TRIAID_POSTDEPLOY_SMOKE_BASE","http://127.0.0.1:8080").rstrip("/")
 READ_ONLY_RUNTIME=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
+RUNTIME_ROLE=(os.getenv("TRIAID_RUNTIME_ROLE") or "").strip().upper()
+WRITER_ACTIVATION_REQUIRED=(
+    os.getenv("TRIAID_WRITER_ACTIVATION_REQUIRED","0").strip().lower()
+    in {"1","true","on","yes"}
+)
 
 BUILD_CASES=[
     "selftest.py",
@@ -96,6 +101,7 @@ BUILD_CASES=[
     "manual_preview_guard_smoke.py",
     "hk_tencent_5m_aggregation_smoke.py",
     "storage_runtime_fence_smoke.py",
+    "persistence_role_contract_smoke.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[
@@ -216,6 +222,9 @@ def run_runtime_bootstrap(script:str)->dict:
                 "TRIAID_STORAGE_BACKEND":"file",
                 "TRIAID_DATA_DIR":data_dir,
                 "TRIAID_RUNTIME_READONLY":"0",
+                "TRIAID_RUNTIME_ROLE":"AUDIT",
+                "TRIAID_PERSISTENCE_SCOPE":"ISOLATED",
+                "TRIAID_WRITER_ACTIVATION_REQUIRED":"0",
                 "TRIAID_STARTUP_MAINTENANCE":"0",
                 "TRIAID_LONG_RESEARCH_BOOTSTRAP":"0",
                 "TRIAID_DATA_AUTOMATION":"0",
@@ -301,6 +310,21 @@ def structural_checks()->list[dict]:
     check("risk_increase_requires_persistence","INTRADAY_RISK_INCREASE_REQUIRES_CONFIRMED_STATE_CHANGE" in scheduler)
     check("preopen_baseline_freshness_guard","PREOPEN_BASELINE_STALE" in scheduler and "baseline_expected_as_of" in scheduler and "baseline_reference_as_of" in scheduler)
     check("runtime_audit_is_blocking","release_audit.py runtime" in start and "wait \"$SERVER_PID\"" in start,start)
+    check(
+        "official_writer_activation_is_post_audit_and_blocking",
+        "activate_official_writer.py" in start
+        and start.find("release_audit.py runtime")<start.find("activate_official_writer.py")
+        and "TRIAID_WRITER_ACTIVATION_BLOCKED_DEPLOY" in start,
+        start,
+    )
+    check(
+        "mutating_background_services_wait_for_writer_activation",
+        "wait_for_writer_activation" in app
+        and "run_after_writer_activation" in app
+        and "DEFERRED_PRE_ACTIVATION" in app
+        and "writer_activation_status(runtime_persistence_policy)" in app,
+        None,
+    )
     check("critical_audit_not_echo_only","TRIAID_POSTDEPLOY_RUNTIME_SMOKE_FAILED" not in start and "TRIAID_RISK_CENTER_FULL_AUDIT_FAILED" not in start,start)
     check("liveness_endpoint_present",'@app.get("/health/live")' in app,None)
     check("readiness_audit_gate_present","TRIAID_RELEASE_AUDIT_REQUIRED" in app and "release_audit" in app,None)
@@ -664,13 +688,24 @@ def runtime_checks()->list[dict]:
             },
         )
 
-    maintenance_deadline=time.monotonic()+120
     maintenance=live.get("startup_maintenance_receipt") or {}
-    while maintenance.get("state") not in {"COMPLETED","FAILED","DISABLED"} and time.monotonic()<maintenance_deadline:
-        time.sleep(1)
-        _,live=http_get("/health/live",timeout=5)
-        maintenance=(live or {}).get("startup_maintenance_receipt") or {}
-    check("startup_maintenance_complete",maintenance.get("state") in {"COMPLETED","DISABLED"},maintenance)
+    preactivation_candidate=bool(
+        RUNTIME_ROLE=="PRODUCTION"
+        and WRITER_ACTIVATION_REQUIRED
+    )
+    if preactivation_candidate:
+        check(
+            "startup_maintenance_deferred_until_writer_activation",
+            maintenance.get("state") in {"DEFERRED_PRE_ACTIVATION","DISABLED"},
+            maintenance,
+        )
+    else:
+        maintenance_deadline=time.monotonic()+120
+        while maintenance.get("state") not in {"COMPLETED","FAILED","DISABLED"} and time.monotonic()<maintenance_deadline:
+            time.sleep(1)
+            _,live=http_get("/health/live",timeout=5)
+            maintenance=(live or {}).get("startup_maintenance_receipt") or {}
+        check("startup_maintenance_complete",maintenance.get("state") in {"COMPLETED","DISABLED"},maintenance)
 
     for script in RUNTIME_BOOTSTRAPS:
         result=run_runtime_bootstrap(script)
@@ -1505,19 +1540,60 @@ def runtime_checks()->list[dict]:
     backend=storage.get("backend") or {}
     backend_name=backend.get("backend") if isinstance(backend,dict) else backend
     durability=storage.get("durability")
+    persistence_policy=(backend.get("persistence_policy") or {}) if isinstance(backend,dict) else {}
+    writer_activation=(backend.get("writer_activation") or {}) if isinstance(backend,dict) else {}
     check("storage_backend_known",backend_name in {"supabase","file"},{"backend":backend_name,"durability":durability})
     railway_runtime=bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_SERVICE_ID"))
     if railway_runtime:
         check(
-            "railway_production_storage_must_be_supabase",
+            "railway_runtime_storage_must_be_supabase",
             backend_name=="supabase",
             {"backend":backend_name,"durability":durability},
         )
         check(
-            "railway_production_storage_must_be_persistent",
+            "railway_runtime_storage_must_be_persistent",
             durability=="PERSISTENT",
             {"backend":backend_name,"durability":durability},
         )
+        check(
+            "railway_runtime_role_is_explicit",
+            persistence_policy.get("role_explicit") is True
+            and persistence_policy.get("runtime_role") in {"PRODUCTION","SHADOW","CANDIDATE","AUDIT"},
+            persistence_policy,
+        )
+        check(
+            "railway_persistence_scope_is_explicit",
+            persistence_policy.get("scope_explicit") is True
+            and persistence_policy.get("persistence_scope")=="OFFICIAL",
+            persistence_policy,
+        )
+        check(
+            "supabase_contract_version_current",
+            backend.get("persistence_contract")=="triaid-persistence-contract@1.0.0",
+            backend.get("persistence_contract"),
+        )
+        if RUNTIME_ROLE=="PRODUCTION":
+            check(
+                "production_candidate_is_write_fenced_before_activation",
+                backend.get("mutation_allowed") is False
+                and writer_activation.get("required") is True
+                and writer_activation.get("ready") is False,
+                {
+                    "mutation_allowed":backend.get("mutation_allowed"),
+                    "writer_activation":writer_activation,
+                    "policy":persistence_policy,
+                },
+            )
+        else:
+            check(
+                "nonproduction_runtime_cannot_mutate_official_persistence",
+                persistence_policy.get("official_write_authorized") is False
+                and backend.get("mutation_allowed") is False,
+                {
+                    "mutation_allowed":backend.get("mutation_allowed"),
+                    "policy":persistence_policy,
+                },
+            )
     elif backend_name=="supabase":
         check("production_storage_persistent",durability=="PERSISTENT",durability)
 
