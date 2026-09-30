@@ -59,6 +59,12 @@ outcome_resolver=OutcomeResolver(
     runtime_services.journal,
     read_only=runtime_read_only,
 )
+outcome_read_resolver=OutcomeResolver(
+    verified_projection_repository,
+    ui_read_services.outcome,
+    runtime_services.journal,
+    read_only=True,
+)
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
@@ -69,7 +75,7 @@ market_page_projection=MarketPageProjection(
     verified_projection_repository,
 )
 risk_center_projection=RiskCenterProjection(ui_read_services.risk)
-validation_summary_projection=ValidationSummaryProjection(outcome_resolver)
+validation_summary_projection=ValidationSummaryProjection(outcome_read_resolver)
 home_brief_projection=HomeBriefProjection(ui_read_services.market_page)
 ui_projection_cache=ReadThroughProjectionCache()
 
@@ -694,20 +700,20 @@ def experiment_evidence_latest(market_id:str)->dict:
 @app.get("/api/experiments/outcomes/{market_id}/status")
 def experiment_outcome_status(market_id:str)->dict:
     market=normalize_market_id(market_id)
-    return outcome_resolver.resolve_market(market)
+    return outcome_read_resolver.resolve_market(market)
 
 
 @app.get("/api/experiments/outcomes/{market_id}/latest")
 def experiment_outcome_latest(market_id:str)->dict:
     market=normalize_market_id(market_id)
-    status=outcome_resolver.resolve_market(market)
+    status=outcome_read_resolver.resolve_market(market)
     latest=status.get("latest_evaluated")
     if latest:
         return latest
     return {
         "state":"WAITING",
         "market_id":market,
-        "resolver_version":outcome_resolver.version,
+        "resolver_version":outcome_read_resolver.version,
         "reason":"NO_EVALUATED_T1_OUTCOME_YET",
         "formal_evidence_count":status.get("formal_evidence_count",0),
         "waiting_count":status.get("waiting_count",0),
