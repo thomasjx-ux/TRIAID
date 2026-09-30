@@ -135,6 +135,33 @@ checks["readonly_marks_would_change"]=readonly_latest["would_change"] is True
 checks["readonly_does_not_report_persisted_change"]=readonly_latest["changed"] is False
 checks["readonly_no_object_writes"]=readonly_journal.objects=={}
 checks["readonly_no_ledger_writes"]=readonly_journal.streams=={}
+checks["readonly_read_health_ok"]=readonly_status["read_health"]["state"]=="OK"
+
+class FaultingEvidenceRepository:
+    def recent(self,market,limit=50):
+        return [
+            {"market_id":market,"evidence_id":"GOOD"},
+            {"market_id":market,"evidence_id":"TIMEOUT"},
+        ]
+    def get(self,market,evidence_id):
+        if evidence_id=="TIMEOUT":
+            raise TimeoutError("simulated remote read timeout")
+        row=evidence("US","US-D1")
+        row["evidence_id"]="GOOD"
+        return row
+
+fault_journal=FakeJournal()
+fault_shadow=OutcomeResolver(
+    FaultingEvidenceRepository(),
+    FakeOutcomePort(us_review),
+    fault_journal,
+    read_only=True,
+)
+fault_status=fault_shadow.resolve_market("US")
+checks["readonly_fault_isolation_degraded"]=fault_status["read_health"]["state"]=="DEGRADED"
+checks["readonly_fault_isolation_counts_error"]=fault_status["read_health"]["error_count"]==1
+checks["readonly_fault_isolation_keeps_good_evidence"]=fault_status["evaluated_count"]==1
+checks["readonly_fault_isolation_never_writes"]=fault_journal.objects=={} and fault_journal.streams=={}
 
 # Re-resolving the same T1 state must not append duplicate outcome evidence.
 us.resolve_market("US")
