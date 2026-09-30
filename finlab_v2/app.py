@@ -113,6 +113,17 @@ def _schedule_market_page_refresh(background_tasks:BackgroundTasks,key,market:st
     )
     return True
 
+def _resolve_outcome_background(market:str)->None:
+    try:
+        outcome_resolver.resolve_market(market)
+    except Exception as exc:
+        print(
+            "TRIAID_OUTCOME_BACKGROUND_READ_RECOVERY",
+            market,
+            f"{type(exc).__name__}:{exc}",
+            flush=True,
+        )
+
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
     if not expected:
@@ -778,9 +789,11 @@ def ui_market_page(
 
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
-        if not cache_hit and not run_id:
-            # Outcome resolution belongs off the page response critical path.
-            background_tasks.add_task(outcome_resolver.resolve_market,market)
+        if not cache_hit and not run_id and not runtime_read_only:
+            # Production outcome publication belongs off the page response
+            # critical path. Read-only runtimes must not create redundant
+            # remote-read fanout merely because a UI cache was cold.
+            background_tasks.add_task(_resolve_outcome_background,market)
         payload["read_cache"]={
             "hit":cache_hit,
             "stale_served":stale_served,
