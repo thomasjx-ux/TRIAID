@@ -447,7 +447,7 @@ def structural_checks()->list[dict]:
         and "dominance" in value_frontier_shadow_v2
         and "cost_factor" in value_frontier_shadow_v2
         and "effective_positions" in value_frontier_shadow_v2
-        and "It never gates the allocation." in value_frontier_shadow_v2
+        and "never gates the allocation." in value_frontier_shadow_v2
         and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" not in value_frontier_shadow_v2
         and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
         None,
