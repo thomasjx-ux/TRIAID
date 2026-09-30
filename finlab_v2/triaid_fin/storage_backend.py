@@ -4,12 +4,24 @@ import json
 import os
 import time
 import uuid
+import urllib.error
 import urllib.request
 from pathlib import Path
 from threading import RLock
 
+from .persistence_policy import (
+    current_runtime_persistence_policy,
+    validate_runtime_persistence_policy,
+    writer_activation_status,
+    write_writer_activation_receipt,
+)
+
 
 class StorageBackendError(RuntimeError):
+    pass
+
+
+class StorageWriteFenceError(StorageBackendError):
     pass
 
 
@@ -50,6 +62,8 @@ class FileStorageBackend:
     version="file-storage-backend@0.2.0"
 
     def __init__(self,root:str|None=None)->None:
+        self.policy=current_runtime_persistence_policy()
+        validate_runtime_persistence_policy(self.policy,"file")
         self.expected_volume_mount=Path(
             os.environ.get("TRIAID_VOLUME_MOUNT","/data")
         )
@@ -232,6 +246,9 @@ class FileStorageBackend:
         return {
             "backend":"file",
             "version":self.version,
+            "persistence_policy":self.policy.status(),
+            "mutation_allowed":True,
+            "mutation_scope":"LOCAL_OR_ISOLATED",
             "root":str(self.root),
             "durability":self.durability,
             "persistent":self.persistent,
@@ -251,12 +268,20 @@ class FileStorageBackend:
 
 
 class SupabaseStorageBackend:
-    version="supabase-storage-backend@0.2.1"
+    version="supabase-storage-backend@0.3.0"
+    persistence_contract="triaid-persistence-contract@1.0.0"
 
     def __init__(self)->None:
         self.endpoint=os.environ.get("TRIAID_SUPABASE_PERSISTENCE_URL","").strip()
         self.token=os.environ.get("TRIAID_SUPABASE_TOKEN","").strip()
-        self.runtime_id=os.environ.get("TRIAID_RUNTIME_ID","").strip()
+        self.policy=current_runtime_persistence_policy()
+        validate_runtime_persistence_policy(self.policy,"supabase")
+        self.runtime_id=self.policy.runtime_id
+        self.runtime_role=self.policy.runtime_role
+        self.persistence_scope=self.policy.persistence_scope
+        self.service_id=self.policy.service_id
+        self.deployment_id=self.policy.deployment_id
+        self.commit_sha=self.policy.commit_sha
         if not self.endpoint or not self.token:
             raise StorageBackendError("supabase_backend_missing_endpoint_or_token")
         self.root=Path("/remote/supabase")
@@ -264,6 +289,13 @@ class SupabaseStorageBackend:
         ping=self._call({"action":"ping"})
         if not ping.get("ok"):
             raise StorageBackendError("supabase_backend_ping_failed")
+        self.remote_contract_version=str(ping.get("contract_version") or "")
+        self.remote_active_writer=ping.get("active_writer")
+        if self.remote_contract_version!=self.persistence_contract:
+            raise StorageBackendError(
+                "supabase_persistence_contract_mismatch:"
+                f"expected={self.persistence_contract}:actual={self.remote_contract_version or 'missing'}"
+            )
 
     @property
     def persistent(self)->bool:
@@ -289,12 +321,25 @@ class SupabaseStorageBackend:
                 "content-type":"application/json",
                 "x-triaid-token":self.token,
                 **({"x-triaid-runtime-id":self.runtime_id} if self.runtime_id else {}),
-                "user-agent":"TRIAID-FIN-V2-STORAGE/0.2",
+                **({"x-triaid-runtime-role":self.runtime_role} if self.runtime_role else {}),
+                **({"x-triaid-persistence-scope":self.persistence_scope} if self.persistence_scope else {}),
+                **({"x-triaid-service-id":self.service_id} if self.service_id else {}),
+                **({"x-triaid-deployment-id":self.deployment_id} if self.deployment_id else {}),
+                **({"x-triaid-commit-sha":self.commit_sha} if self.commit_sha else {}),
+                "user-agent":"TRIAID-FIN-V2-STORAGE/0.3",
             },
         )
         try:
             with urllib.request.urlopen(req,timeout=timeout) as response:
                 raw=response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            try:
+                detail=exc.read().decode("utf-8","replace")
+            except Exception:
+                detail=""
+            raise StorageBackendError(
+                f"supabase_http_error:{exc.code}:{detail or exc.reason}"
+            ) from exc
         except Exception as exc:
             raise StorageBackendError(
                 f"supabase_call_failed:{type(exc).__name__}:{exc}"
@@ -314,10 +359,46 @@ class SupabaseStorageBackend:
     def exists(self,name:str)->bool:
         return bool(self._call({"action":"exists_object","key":name}).get("exists"))
 
+    def _require_mutation(self,action:str,name:str)->None:
+        if not self.policy.official_write_authorized:
+            raise StorageWriteFenceError(
+                "official_persistence_write_fenced:"
+                f"role={self.runtime_role}:scope={self.persistence_scope}:"
+                f"action={action}:key={name}"
+            )
+        activation=writer_activation_status(self.policy)
+        if self.policy.requires_writer_activation and not activation.get("ready"):
+            raise StorageWriteFenceError(
+                "official_writer_not_activated:"
+                f"deployment_id={self.deployment_id}:action={action}:key={name}"
+            )
+
+    def activate_official_writer(self)->dict:
+        if not self.policy.official_write_authorized:
+            raise StorageWriteFenceError(
+                "writer_activation_requires_production_official_role"
+            )
+        if not self.deployment_id:
+            raise StorageWriteFenceError("writer_activation_requires_deployment_id")
+        result=self._call({"action":"activate_writer"})
+        active=result.get("active_writer") or {}
+        if (
+            str(active.get("runtime_id") or "")!=self.runtime_id
+            or str(active.get("service_id") or "")!=self.service_id
+            or str(active.get("deployment_id") or "")!=self.deployment_id
+        ):
+            raise StorageBackendError(f"writer_activation_identity_mismatch:{active}")
+        return write_writer_activation_receipt(active)
+
+    def writer_status(self)->dict:
+        return self._call({"action":"writer_status"})
+
     def atomic_write_text(self,name:str,text:str)->None:
+        self._require_mutation("write_object",name)
         self._call({"action":"write_object","key":name,"content":text})
 
     def append_line(self,name:str,line:str)->None:
+        self._require_mutation("append_stream",name)
         self._call({"action":"append_stream","key":name,"line":line})
 
     def read_text(self,name:str)->str:
@@ -356,11 +437,26 @@ class SupabaseStorageBackend:
         }
 
     def status(self)->dict:
+        activation=writer_activation_status(self.policy)
         return {
             "backend":"supabase",
             "version":self.version,
+            "persistence_contract":self.remote_contract_version,
             "root":"supabase://triaid-persistence",
             "runtime_id":self.runtime_id or None,
+            "runtime_role":self.runtime_role,
+            "persistence_scope":self.persistence_scope,
+            "service_id":self.service_id or None,
+            "deployment_id":self.deployment_id or None,
+            "persistence_policy":self.policy.status(),
+            "mutation_allowed":bool(
+                self.policy.official_write_authorized
+                and (
+                    not self.policy.requires_writer_activation
+                    or activation.get("ready")
+                )
+            ),
+            "writer_activation":activation,
             "durability":"PERSISTENT",
             "persistent":True,
             "endpoint_configured":bool(self.endpoint),
