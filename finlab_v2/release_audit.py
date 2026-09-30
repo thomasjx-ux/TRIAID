@@ -5,6 +5,7 @@ import math
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -178,17 +179,20 @@ def write_receipt(payload:dict)->None:
     tmp.write_text(json.dumps(payload,ensure_ascii=False,sort_keys=True),encoding="utf-8")
     tmp.replace(RECEIPT_PATH)
 
-def run_case(script:str)->dict:
+def run_case(script:str,env_overrides:dict[str,str]|None=None)->dict:
     path=ROOT/script
     if not path.exists():
         return {"name":script,"passed":False,"returncode":127,"error":"MISSING_AUDIT_SCRIPT"}
+    child_env=os.environ.copy()
+    if env_overrides:
+        child_env.update({str(key):str(value) for key,value in env_overrides.items()})
     started=time.monotonic()
     cp=subprocess.run(
         [sys.executable,str(path)],
         cwd=str(ROOT),
         text=True,
         capture_output=True,
-        env=os.environ.copy(),
+        env=child_env,
     )
     elapsed=round(time.monotonic()-started,3)
     return {
@@ -199,6 +203,26 @@ def run_case(script:str)->dict:
         "stdout_tail":"\n".join(cp.stdout.splitlines()[-8:]),
         "stderr_tail":"\n".join(cp.stderr.splitlines()[-8:]),
     }
+
+def run_runtime_bootstrap(script:str)->dict:
+    # Runtime bootstrap checks validate live providers and domain behavior, but
+    # candidate deployment validation must never mutate production persistence.
+    # Run each bootstrap with its own temporary file backend while leaving the
+    # actual runtime process and its read-only/write-fence configuration intact.
+    with tempfile.TemporaryDirectory(prefix="triaid-runtime-bootstrap-") as data_dir:
+        return run_case(
+            script,
+            {
+                "TRIAID_STORAGE_BACKEND":"file",
+                "TRIAID_DATA_DIR":data_dir,
+                "TRIAID_RUNTIME_READONLY":"0",
+                "TRIAID_STARTUP_MAINTENANCE":"0",
+                "TRIAID_LONG_RESEARCH_BOOTSTRAP":"0",
+                "TRIAID_DATA_AUTOMATION":"0",
+                "TRIAID_DECISION_AUTOMATION":"0",
+                "TRIAID_BOOTSTRAP_ALLOW_PERSISTENT":"0",
+            },
+        )
 
 def structural_checks()->list[dict]:
     rows=[]
@@ -649,7 +673,7 @@ def runtime_checks()->list[dict]:
     check("startup_maintenance_complete",maintenance.get("state") in {"COMPLETED","DISABLED"},maintenance)
 
     for script in RUNTIME_BOOTSTRAPS:
-        result=run_case(script)
+        result=run_runtime_bootstrap(script)
         rows.append({"name":"runtime_bootstrap:"+script,"passed":result["passed"],"detail":result})
 
     for risk_path in ("/api/risk-warning/latest","/api/risk-control/latest"):
