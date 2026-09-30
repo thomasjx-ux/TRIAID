@@ -5,6 +5,7 @@ export TRIAID_STARTUP_MAINTENANCE="${TRIAID_STARTUP_MAINTENANCE:-1}"
 export TRIAID_LONG_RESEARCH_BOOTSTRAP="${TRIAID_LONG_RESEARCH_BOOTSTRAP:-1}"
 export TRIAID_RELEASE_AUDIT_REQUIRED="${TRIAID_RELEASE_AUDIT_REQUIRED:-1}"
 export TRIAID_RELEASE_AUDIT_RECEIPT_PATH="${TRIAID_RELEASE_AUDIT_RECEIPT_PATH:-/tmp/triaid_release_audit.json}"
+export TRIAID_WRITER_ACTIVATION_RECEIPT_PATH="${TRIAID_WRITER_ACTIVATION_RECEIPT_PATH:-/tmp/triaid_writer_activation.json}"
 
 # Railway's injected Git SHA is the authoritative runtime source identity.
 # Bind both declared and runtime revisions to it before app import/audit so
@@ -25,6 +26,7 @@ else
 fi
 
 rm -f "$TRIAID_RELEASE_AUDIT_RECEIPT_PATH"
+rm -f "$TRIAID_WRITER_ACTIVATION_RECEIPT_PATH"
 
 "$UVICORN_BIN" app:app --host 0.0.0.0 --port "${PORT:-8080}" &
 SERVER_PID=$!
@@ -40,6 +42,17 @@ if ! "$PYTHON_BIN" release_audit.py runtime; then
   wait "$SERVER_PID" 2>/dev/null || true
   exit 1
 fi
+
+case "${TRIAID_WRITER_ACTIVATION_REQUIRED:-0}" in
+  1|true|TRUE|on|ON|yes|YES)
+    if ! "$PYTHON_BIN" activate_official_writer.py; then
+      echo TRIAID_WRITER_ACTIVATION_BLOCKED_DEPLOY
+      kill "$SERVER_PID" 2>/dev/null || true
+      wait "$SERVER_PID" 2>/dev/null || true
+      exit 1
+    fi
+    ;;
+esac
 
 echo TRIAID_RELEASE_READY
 trap - INT TERM EXIT
