@@ -481,27 +481,40 @@ def structural_checks()->list[dict]:
     )
     check(
         "value_frontier_shadow_v2_is_non_mutating_and_cost_aware",
-        "VERSION = \"value-frontier-shadow@0.2.0\"" in value_frontier_shadow_v2
+        "VERSION = \"value-frontier-shadow@0.5.0\"" in value_frontier_shadow_v2
         and 'mode=\"SHADOW_ONLY\"' in value_frontier_shadow_v2
         and "production_mutation: bool = False" in value_frontier_shadow_v2
         and "frozen_t0_only: bool = True" in value_frontier_shadow_v2
         and "reads_t1_for_allocation: bool = False" in value_frontier_shadow_v2
         and "modeled_execution_cost" in value_frontier_shadow_v2
-        and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" in value_frontier_shadow_v2
+        and "SPARSE_FRONTIER_CONTINUOUS_TRANSITION" in value_frontier_shadow_v2
+        and "def _capped_sparse_projection" in value_frontier_shadow_v2
+        and "frontier_target_weights" in value_frontier_shadow_v2
+        and "transition_strength" in value_frontier_shadow_v2
+        and "state_confidence" in value_frontier_shadow_v2
+        and "dominance" in value_frontier_shadow_v2
+        and "cost_factor" in value_frontier_shadow_v2
+        and "effective_positions" in value_frontier_shadow_v2
+        and "never gates the allocation." in value_frontier_shadow_v2
+        and "HOLD_FEASIBLE_INCUMBENT_AFTER_MATCHED_COST_COMPARISON" not in value_frontier_shadow_v2
         and "NOT_ABOVE_CASH_AFTER_COST" in value_frontier_shadow_v2,
         None,
     )
     check(
         "full_core_shadow_is_independent_future_blind_and_non_mutating",
-        'VERSION = "full-core-shadow@0.1.0"' in full_core_shadow
+        'VERSION = "full-core-shadow@0.3.0"' in full_core_shadow
         and 'LIFECYCLE_VERSION = "independent-lifecycle@0.1.0"' in full_core_shadow
         and "ignores_production_lifecycle_labels: bool = True" in full_core_shadow
         and "uses_full_frozen_t0_state_pool: bool = True" in full_core_shadow
+        and "shortlist_is_allocation_gate: bool" in full_core_shadow
+        and "shortlist_is_allocation_gate=False" in full_core_shadow.replace(" ","")
+        and "allocation_member_ids" in full_core_shadow
+        and "allocation_members" in full_core_shadow
         and "reads_t1_for_allocation: bool = False" in full_core_shadow
         and "production_mutation: bool = False" in full_core_shadow
         and "NON_INCUMBENT_REQUIRES_INDEPENDENT_PROSPECTIVE_EVIDENCE" in full_core_shadow
         and "ESTABLISHED_AUDITED_POLICY_CURRENT_HARD_CONSTRAINTS_PASS" in full_core_shadow
-        and "RELATIVE_ONLY_PRESERVE_INCUMBENT_RISKY_EXPOSURE" in full_core_shadow
+        and "RELATIVE_ONLY_PRESERVE_PREDECISION_RISKY_EXPOSURE" in full_core_shadow
         and "def _canonical_cash_weights" in full_core_shadow
         and "Make implicit unallocated capital explicit cash without changing exposure." in full_core_shadow
         and "def full_core_shadow_preview" in engine
@@ -773,7 +786,7 @@ def runtime_checks()->list[dict]:
                 or (
                     payload.get("available") is True
                     and int(payload.get("full_state_count") or 0)>=len(payload.get("production_group_members") or [])
-                    and shadow.get("version")=="full-core-shadow@0.1.0"
+                    and shadow.get("version")=="full-core-shadow@0.3.0"
                     and shadow.get("lifecycle_version")=="independent-lifecycle@0.1.0"
                     and shadow.get("independent_lifecycle") is True
                     and shadow.get("ignores_production_lifecycle_labels") is True
