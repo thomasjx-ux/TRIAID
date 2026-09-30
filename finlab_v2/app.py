@@ -38,8 +38,13 @@ from triaid_fin.validation_projection import ValidationSummaryProjection
 from triaid_fin.home_brief import HomeBriefProjection
 from triaid_fin.economic_evolution import EconomicEvolutionModule
 from triaid_fin.projection_cache import ReadThroughProjectionCache
+from triaid_fin.persistence_policy import (
+    current_runtime_persistence_policy,
+    writer_activation_status,
+)
 
 runtime_read_only=os.getenv("TRIAID_RUNTIME_READONLY","0").strip().lower() in {"1","true","on","yes"}
+runtime_persistence_policy=current_runtime_persistence_policy()
 
 engine=EvolutionLabEngine()
 runtime_services=RuntimeServices(engine)
@@ -279,9 +284,23 @@ async def bootstrap_long_horizon_research()->None:
         except Exception as exc:
             print("TRIAID_HAZARD_PROSPECTIVE_BACKGROUND_FAILED",f"{type(exc).__name__}:{exc}")
 
+async def wait_for_writer_activation()->dict:
+    while True:
+        status=writer_activation_status(runtime_persistence_policy)
+        if status.get("ready"):
+            return status
+        await asyncio.sleep(0.25)
+
+
+async def run_after_writer_activation(coro_factory):
+    await wait_for_writer_activation()
+    return await coro_factory()
+
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     tasks=[]
+    activation=writer_activation_status(runtime_persistence_policy)
     startup_maintenance_enabled=os.getenv(
         "TRIAID_STARTUP_MAINTENANCE","0"
     ).lower() in {"1","true","on","yes"}
@@ -289,10 +308,12 @@ async def lifespan(app:FastAPI):
         app.state.startup_maintenance_receipt={
             "event":"STALE_RUN_RECOVERY",
             "applied":False,
-            "state":"PENDING",
-            "reason":"DEFERRED_UNTIL_APP_READY",
+            "state":"DEFERRED_PRE_ACTIVATION" if not activation.get("ready") else "PENDING",
+            "reason":"WAITING_FOR_OFFICIAL_WRITER_ACTIVATION" if not activation.get("ready") else "DEFERRED_UNTIL_APP_READY",
         }
-        tasks.append(asyncio.create_task(bootstrap_startup_maintenance(app)))
+        tasks.append(asyncio.create_task(
+            run_after_writer_activation(lambda:bootstrap_startup_maintenance(app))
+        ))
     else:
         app.state.startup_maintenance_receipt={
             "event":"STALE_RUN_RECOVERY",
@@ -301,11 +322,17 @@ async def lifespan(app:FastAPI):
             "reason":"TRIAID_STARTUP_MAINTENANCE_DISABLED",
         }
     if calendar_sync.enabled:
-        tasks.append(asyncio.create_task(calendar_sync.run()))
+        tasks.append(asyncio.create_task(
+            run_after_writer_activation(calendar_sync.run)
+        ))
     if market_automation.enabled:
-        tasks.append(asyncio.create_task(supervise_market_automation()))
+        tasks.append(asyncio.create_task(
+            run_after_writer_activation(supervise_market_automation)
+        ))
     if os.getenv("TRIAID_LONG_RESEARCH_BOOTSTRAP","1").lower() not in {"0","false","off","no"}:
-        tasks.append(asyncio.create_task(bootstrap_long_horizon_research()))
+        tasks.append(asyncio.create_task(
+            run_after_writer_activation(bootstrap_long_horizon_research)
+        ))
     try:
         yield
     finally:
@@ -405,6 +432,8 @@ def health_live()->dict:
         "ok":True,
         "architecture_version":engine.architecture_version,
         "deployment":deployment_identity(),
+        "persistence_policy":runtime_persistence_policy.status(),
+        "writer_activation":writer_activation_status(runtime_persistence_policy),
         "storage_backend":storage.get("backend"),
         "storage_durability":storage.get("durability"),
         "storage_volume_mounted":volume.get("expected_mount_is_mounted"),
@@ -427,8 +456,10 @@ def health_live()->dict:
 def health():
     payload=health_live()
     audit=release_audit_status()
+    activation=writer_activation_status(runtime_persistence_policy)
     payload["release_audit"]=audit
-    payload["ok"]=bool(audit.get("passed"))
+    payload["writer_activation"]=activation
+    payload["ok"]=bool(audit.get("passed") and activation.get("ready"))
     if not payload["ok"]:
         return JSONResponse(status_code=503,content=payload)
     return payload
