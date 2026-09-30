@@ -1,5 +1,11 @@
 """Non-production, read-only value-frontier candidate for frozen T0 studies.
 
+V3 removes the old greedy "rank then fill to a fixed cap" allocation as the
+default. Admissible strategies remain subject to hard feasibility and an
+absolute safety cap, but risky-sleeve weights are now a continuous function of
+relative frozen-T0 score separation. A small rank change therefore produces a
+small weight change unless the score structure itself changes materially.
+
 No import from the runtime engine, storage, broker or deployment layer. Never
 registers, promotes, persists, or places orders. All market inputs are explicit.
 """
@@ -7,10 +13,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import math
+from statistics import median
 from typing import Any, Iterable, Mapping
 
 
-VERSION = "value-frontier-shadow@0.2.0"
+VERSION = "value-frontier-shadow@0.3.0"
 CASH = "P28_CASH"
 EPS = 1e-12
 
@@ -32,6 +39,12 @@ class ShadowDecision:
     modeled_execution_cost: float
     expected_after_cost_proxy: float
     absolute_cash_gate_applied: bool
+    allocation_method: str
+    score_scale: float
+    allocation_temperature: float
+    state_confidence: float
+    concentration_hhi: float
+    effective_positions: float
     frozen_t0_only: bool = True
     reads_t1_for_allocation: bool = False
     production_mutation: bool = False
@@ -69,6 +82,112 @@ def _turnover(previous: Mapping[str, float], current: Mapping[str, float]) -> fl
                for sid in set(previous) | set(current))
 
 
+def _robust_score_scale(scores: list[float]) -> float:
+    """Scale score gaps without tying allocation to an absolute return unit."""
+    if len(scores) < 2:
+        return 1.0
+    center = median(scores)
+    mad = median(abs(x-center) for x in scores)
+    if mad > EPS:
+        return max(EPS, 1.4826 * mad)
+    mean = sum(scores) / len(scores)
+    variance = sum((x-mean)**2 for x in scores) / len(scores)
+    stdev = math.sqrt(max(0.0, variance))
+    if stdev > EPS:
+        return stdev
+    spread = max(scores)-min(scores)
+    if spread > EPS:
+        return max(EPS, spread/2.0)
+    return 1.0
+
+
+def _state_confidence(states: Iterable[object], member_ids: set[str]) -> float:
+    """Use only T0 history depth to flatten uncertain allocations.
+
+    This is deliberately modest: full history does not create leverage or relax
+    hard constraints. It only allows score separation to express itself more
+    clearly. Sparse history raises the softmax temperature and spreads weight.
+    """
+    completeness=[]
+    for state in states:
+        sid=str(getattr(state, "strategy_id", ""))
+        if sid not in member_ids or sid == CASH:
+            continue
+        recent=getattr(state, "recent_returns", None) or []
+        completeness.append(min(1.0, len(recent)/63.0))
+    if not completeness:
+        return 0.0
+    return max(0.0, min(1.0, float(median(completeness))))
+
+
+def _capped_softmax(
+    ranked: list[tuple[str, float]],
+    *,
+    budget: float,
+    cap: float,
+    temperature: float,
+    scale: float,
+) -> dict[str, float]:
+    """Continuous score allocation with a hard safety cap.
+
+    The cap is now only a boundary. It is not the default target weight.
+    """
+    if budget <= EPS or not ranked:
+        return {}
+    max_score=max(score for _,score in ranked)
+    denom_scale=max(EPS, float(scale)*max(EPS,float(temperature)))
+    raw={}
+    for sid,score in ranked:
+        z=max(-30.0,min(0.0,(float(score)-max_score)/denom_scale))
+        raw[sid]=math.exp(z)
+
+    weights={}
+    remaining=max(0.0,float(budget))
+    active=set(raw)
+    while active and remaining > EPS:
+        denom=sum(raw[sid] for sid in active)
+        if denom <= EPS:
+            equal=remaining/len(active)
+            if equal <= cap + EPS:
+                for sid in active:
+                    weights[sid]=weights.get(sid,0.0)+equal
+                remaining=0.0
+                break
+            for sid in list(active):
+                weights[sid]=weights.get(sid,0.0)+cap
+                remaining=max(0.0,remaining-cap)
+                active.remove(sid)
+            continue
+
+        proposals={sid:remaining*raw[sid]/denom for sid in active}
+        capped=[sid for sid,w in proposals.items() if w > cap + EPS]
+        if not capped:
+            for sid,w in proposals.items():
+                weights[sid]=weights.get(sid,0.0)+w
+            remaining=0.0
+            break
+        for sid in capped:
+            room=max(0.0,cap-weights.get(sid,0.0))
+            take=min(room,remaining)
+            if take > EPS:
+                weights[sid]=weights.get(sid,0.0)+take
+                remaining=max(0.0,remaining-take)
+            active.remove(sid)
+
+    return {sid:w for sid,w in weights.items() if w > EPS}
+
+
+def _concentration(weights: Mapping[str,float]) -> tuple[float,float]:
+    risky=[float(w) for sid,w in weights.items() if sid != CASH and float(w)>EPS]
+    total=sum(risky)
+    if total <= EPS:
+        return 0.0,0.0
+    normalized=[w/total for w in risky]
+    hhi=sum(w*w for w in normalized)
+    effective=(1.0/hhi) if hhi > EPS else 0.0
+    return hhi,effective
+
+
 def allocate_shadow(
     market_id: str,
     states: Iterable[object],
@@ -83,12 +202,11 @@ def allocate_shadow(
     absolute_return_calibrated: bool = False,
     min_expected_improvement: float = 0.0,
 ) -> ShadowDecision:
-    """Build a candidate using T0 states only; optionally hold feasible incumbent.
+    """Build a flexible candidate using frozen T0 states only.
 
-    `absolute_return_calibrated` MUST be independently supported before a
-    negative score can gate a strategy to cash. Relative-only scores cannot
-    justify a cash call on their sign alone. `estimated_cost` follows the
-    project's current score convention; modelled turnover cost is separate.
+    Relative-only scores rank risky policies but cannot change the cash/risk
+    split by sign alone. Weight changes are continuous in score gaps, subject to
+    hard feasibility, the matched risky sleeve and the absolute safety cap.
     """
     market = str(market_id).strip().upper()
     if not market:
@@ -101,8 +219,10 @@ def allocate_shadow(
     members = set(str(sid) for sid in member_ids)
     if not members:
         raise ValueError("empty member_ids")
+
+    state_rows=list(states)
     seen: dict[str, object] = {}
-    for state in states:
+    for state in state_rows:
         sid = str(getattr(state, "strategy_id", ""))
         if not sid or sid in seen:
             raise ValueError("missing or duplicate strategy_id")
@@ -126,20 +246,25 @@ def allocate_shadow(
     ranked.sort(key=lambda item: (-item[1], item[0]))
     score_map = dict(ranked)
 
-    weights: dict[str, float] = {}
-    remaining = budget
-    for sid, _ in ranked:
-        if remaining <= EPS:
-            break
-        take = min(cap, remaining)
-        weights[sid] = take
-        remaining -= take
-    # Explicit cash is recorded when available; otherwise unallocated weight
+    scores=[score for _,score in ranked]
+    score_scale=_robust_score_scale(scores)
+    confidence=_state_confidence(state_rows,{sid for sid,_ in ranked})
+    # Full T0 history -> 1.0. Sparse history -> progressively flatter weights.
+    temperature=1.0+0.75*(1.0-confidence)
+    weights=_capped_softmax(
+        ranked,
+        budget=budget,
+        cap=cap,
+        temperature=temperature,
+        scale=score_scale,
+    )
+
+    # Explicit cash is recorded when available; otherwise residual weight
     # remains implicit cash, matching the existing evaluation convention.
     if CASH in members:
-        residual = max(0.0, 1 - sum(weights.values()))
+        residual=max(0.0,1.0-sum(weights.values()))
         if residual > EPS:
-            weights[CASH] = residual
+            weights[CASH]=residual
 
     def validated(raw: Mapping[str, float] | None, label: str) -> dict[str, float] | None:
         if raw is None:
@@ -175,7 +300,7 @@ def allocate_shadow(
 
     candidate_metrics = scored(weights)
     keep = False
-    rationale = "CANDIDATE_SHADOW_ONLY"
+    rationale = "CONTINUOUS_SCORE_FRONTIER_SHADOW_ONLY"
     if incumbent is not None and feasible_incumbent(incumbent):
         incumbent_metrics = scored(incumbent)
         if incumbent_metrics[3] + threshold >= candidate_metrics[3] - EPS:
@@ -185,7 +310,9 @@ def allocate_shadow(
             candidate_metrics = incumbent_metrics
     if not ranked and not keep:
         rationale = "NO_ADMISSIBLE_OPPORTUNITY_RESIDUAL_CASH"
+
     raw, turnover, execution_cost, after_cost = candidate_metrics
+    hhi,effective=_concentration(weights)
     return ShadowDecision(
         market_id=market,
         version=VERSION,
@@ -202,4 +329,10 @@ def allocate_shadow(
         modeled_execution_cost=execution_cost,
         expected_after_cost_proxy=after_cost,
         absolute_cash_gate_applied=bool(absolute_return_calibrated),
+        allocation_method="CAPPED_ADAPTIVE_SOFTMAX",
+        score_scale=score_scale,
+        allocation_temperature=temperature,
+        state_confidence=confidence,
+        concentration_hhi=hhi,
+        effective_positions=effective,
     )
