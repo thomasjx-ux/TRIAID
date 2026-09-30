@@ -97,6 +97,55 @@ Candidate application construction must not mutate production state. Module cons
 
 Stale incomplete official-run recovery is explicit operational maintenance, not constructor behavior. Final production startup may enable `TRIAID_STARTUP_MAINTENANCE=1`; the maintenance action records `runtime_maintenance_events.jsonl`. Candidate smoke servers must force this flag off.
 
+## Runtime roles and official writer authority
+
+Official persistence uses an explicit control-plane contract. Access to the Supabase
+backend does not imply write authority.
+
+Runtime roles:
+- `PRODUCTION`: the only role eligible to write official persistence.
+- `SHADOW`: may read official evidence but cannot mutate it.
+- `CANDIDATE`: deployment candidate; read-only against official persistence.
+- `AUDIT`: validation process; must use isolated storage for mutating bootstrap checks.
+- `LOCAL`: local/offline runtime; cannot become an official cloud writer.
+
+Persistence scopes:
+- `OFFICIAL`: shared production evidence namespace.
+- `ISOLATED`: temporary validation namespace/backend.
+- `LOCAL`: local desktop/offline state.
+
+The write contract is fail-closed at two independent layers.
+
+1. Client-side storage policy rejects official writes unless the caller is
+   `PRODUCTION + OFFICIAL` and, on Railway, carries an explicit service and
+   deployment identity.
+2. The Supabase persistence gateway independently validates runtime role, scope,
+   service ID and the currently activated deployment ID before accepting any
+   mutation.
+
+Production deployment is two-phase:
+1. Start the new container as a non-writing candidate.
+2. Run build and runtime release audits while all mutating background services
+   remain deferred.
+3. After every audit passes, atomically activate that Railway deployment as the
+   sole official writer.
+4. Only after activation may startup maintenance, market automation, calendar
+   sync and long-horizon research mutate official persistence.
+5. Activation of a new deployment immediately fences the previous deployment
+   from further official writes, even during Railway rolling-overlap.
+
+The active-writer record belongs to the persistence control plane and is not
+part of the normal object namespace. Application callers cannot read, list,
+overwrite or append to the reserved control key through ordinary storage
+actions.
+
+Invariant:
+
+`one official persistence namespace == one activated production deployment writer`
+
+Shadow, candidate and audit runtimes can therefore share production reads
+without sharing production write authority.
+
 ## External infrastructure dependency
 
 Current production persistence is external Supabase storage, not a Railway volume. Required production configuration includes:
