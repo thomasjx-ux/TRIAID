@@ -217,16 +217,32 @@ class OutcomeResolver:
 
     def resolve_market(self,market_id:str,limit:int=50)->dict:
         market=str(market_id).upper()
-        ledger=self.evidence_repository.recent(market,limit)
+        read_errors=[]
+        try:
+            ledger=self.evidence_repository.recent(market,limit)
+        except Exception as exc:
+            if not self.read_only:
+                raise
+            ledger=[]
+            read_errors.append(
+                f"ledger:{type(exc).__name__}:{exc}"
+            )
         evaluated=[]
         waiting=[]
         for row in ledger:
-            evidence=self.evidence_repository.get(
-                market,str(row.get("evidence_id") or "")
-            )
-            if not evidence:
+            evidence_id=str(row.get("evidence_id") or "")
+            try:
+                evidence=self.evidence_repository.get(market,evidence_id)
+                if not evidence:
+                    continue
+                result=self.resolve_evidence(evidence)
+            except Exception as exc:
+                if not self.read_only:
+                    raise
+                read_errors.append(
+                    f"evidence:{evidence_id}:{type(exc).__name__}:{exc}"
+                )
                 continue
-            result=self.resolve_evidence(evidence)
             if result.get("state")=="EVALUATED":
                 evaluated.append(result)
             else:
@@ -249,6 +265,12 @@ class OutcomeResolver:
             "waiting_count":len(waiting),
             "latest_evaluated":latest or None,
             "latest_waiting":waiting[-1] if waiting else None,
+            "read_health":{
+                "state":"DEGRADED" if read_errors else "OK",
+                "error_count":len(read_errors),
+                "errors":read_errors[:5],
+                "fail_soft":bool(self.read_only),
+            },
             "rule":"T0_FORMAL_EVIDENCE_IS_PAIRED_ONLY_WITH_EXISTING_AUDITED_T1_RESULTS; RESOLVER_DOES_NOT_RECOMPUTE_RETURNS",
         }
 
