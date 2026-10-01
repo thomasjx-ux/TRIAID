@@ -10,6 +10,7 @@ os.environ["TRIAID_STORAGE_BACKEND"]="file"
 
 from triaid_fin.contracts import MarketSnapshot, OutcomeRequest, RunRequest, StrategyState
 from triaid_fin.engine import EvolutionLabEngine
+from triaid_fin.release_manifest import ARCHITECTURE_VERSION
 from triaid_fin.decision_scheduler import DecisionScheduler
 from triaid_fin.frequency_policy import FrequencyPolicy
 from triaid_fin.market_data import session_phase
@@ -36,7 +37,7 @@ try:
     engine=EvolutionLabEngine()
 
     assert engine.status()["strategy_registry_count"]==33
-    assert engine.status()["architecture_version"]=="fin-evolution-lab@0.14.0"
+    assert engine.status()["architecture_version"]==ARCHITECTURE_VERSION
     assert engine.module_manifest["objective_constitution"]=="fin-objective-constitution@0.2.0"
     assert engine.status()["markets"]==["US","CN","HK"]
     assert engine.module_manifest["strategy_rules_HK"].startswith("strategy-rules-hk@")
