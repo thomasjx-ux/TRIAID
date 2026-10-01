@@ -51,7 +51,7 @@ from .full_core_shadow import run_full_core_shadow
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.14.0"
+    architecture_version = "fin-evolution-lab@0.15.0"
     market_adapter_version = "market-lab@0.5.0"
 
     def __init__(self) -> None:
