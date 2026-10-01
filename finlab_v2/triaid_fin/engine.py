@@ -34,6 +34,7 @@ from .recovery_ledger import RecoveryWaveLedger
 from .observation import MarketObservationStore
 from .objective import VERSION as OBJECTIVE_CONSTITUTION_VERSION
 from .review import ReviewModule
+from .release_manifest import ARCHITECTURE_VERSION
 from .daily_experiment_intelligence import build_cross_market_learning, build_market_intelligence
 from .daily_report import DailyReportModule
 from .store import RunStore
@@ -51,7 +52,7 @@ from .full_core_shadow import run_full_core_shadow
 
 
 class EvolutionLabEngine:
-    architecture_version = "fin-evolution-lab@0.15.0"
+    architecture_version = ARCHITECTURE_VERSION
     market_adapter_version = "market-lab@0.5.0"
 
     def __init__(self) -> None:
