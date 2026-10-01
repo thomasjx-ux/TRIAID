@@ -34,7 +34,7 @@ RELEASE_BASELINE={
         },
         "shadow":{
             "role":"SHADOW",
-            "persistence_scope":"OFFICIAL_READ_ONLY",
+            "persistence_scope":"OFFICIAL",
             "single_writer":False,
             "runtime_read_only":True,
             "production_mutation":False,
