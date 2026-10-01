@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-VERSION="triaid-fin-release-baseline@1.0.0"
+VERSION="triaid-fin-release-baseline@1.0.1"
 ARCHITECTURE_VERSION="fin-evolution-lab@0.15.0"
 ACTIVE_CORE_PARAMETER_VERSION="triaid-core-v2@0.2.0"
 CORE_IMPLEMENTATION_VERSION="triaid-core-return-max@0.4.0"
 OBJECTIVE_CONSTITUTION_VERSION="fin-objective-constitution@0.2.0"
 GLOBAL_CONSTITUTION_VERSION="triaid-constitution@1.0.0"
 FORWARD_VALIDATION_PROTOCOL_VERSION="gpt-forward-validation@1.1.0"
+OUTCOME_AUTOMATION_VERSION="outcome-resolution-automation@1.0.0"
 
 RELEASE_BASELINE={
     "version":VERSION,
@@ -16,6 +17,7 @@ RELEASE_BASELINE={
     "objective_constitution_version":OBJECTIVE_CONSTITUTION_VERSION,
     "global_constitution_version":GLOBAL_CONSTITUTION_VERSION,
     "forward_validation_protocol_version":FORWARD_VALIDATION_PROTOCOL_VERSION,
+    "outcome_automation_version":OUTCOME_AUTOMATION_VERSION,
     "research_only":True,
     "broker_execution_enabled":False,
     "markets":["US","CN","HK"],
@@ -47,6 +49,7 @@ RELEASE_BASELINE={
     },
     "architecture_rules":[
         "READ_PATHS_MUST_NOT_REQUIRE_OR_TRIGGER_OFFICIAL_PERSISTENCE_MUTATION",
+        "OUTCOME_PUBLICATION_RUNS_ONLY_IN_WRITER_ACTIVATED_RUNTIME_AUTOMATION",
         "BUILD_AND_RUNTIME_AUDITS_USE_ISOLATED_STORAGE_AND_MUST_NOT_MUTATE_PRODUCTION",
         "ONLY_ONE_ACTIVATED_PRODUCTION_WRITER_MAY_MUTATE_OFFICIAL_PERSISTENCE",
         "SHADOW_CANDIDATE_BOOTSTRAP_AND_AUDIT_ROLES_MUST_FAIL_CLOSED_ON_OFFICIAL_WRITES",

@@ -34,6 +34,7 @@ from triaid_fin.market_interfaces import MARKET_INTERFACE_REGISTRY
 from triaid_fin.runtime_jobs import RUNTIME_JOB_REGISTRY
 from triaid_fin.projection_repository import VerifiedProjectionRepository
 from triaid_fin.outcome_resolver import OutcomeResolver
+from triaid_fin.outcome_runtime import OutcomeResolutionAutomation
 from triaid_fin.validation_projection import ValidationSummaryProjection
 from triaid_fin.home_brief import HomeBriefProjection
 from triaid_fin.economic_evolution import EconomicEvolutionModule
@@ -66,6 +67,7 @@ outcome_read_resolver=OutcomeResolver(
     runtime_services.journal,
     read_only=True,
 )
+outcome_automation=OutcomeResolutionAutomation(outcome_resolver)
 decision_scheduler=DecisionScheduler(runtime_services)
 calendar_sync=TradingCalendarSync(engine.store)
 market_automation=MarketDataAutomation(runtime_services,decision_scheduler)
@@ -119,17 +121,6 @@ def _schedule_market_page_refresh(background_tasks:BackgroundTasks,key,market:st
         fingerprint,
     )
     return True
-
-def _resolve_outcome_background(market:str)->None:
-    try:
-        outcome_resolver.resolve_market(market)
-    except Exception as exc:
-        print(
-            "TRIAID_OUTCOME_BACKGROUND_READ_RECOVERY",
-            market,
-            f"{type(exc).__name__}:{exc}",
-            flush=True,
-        )
 
 def require_admin_token(x_triaid_admin_token:str|None=Header(default=None))->None:
     expected=os.getenv("TRIAID_ADMIN_TOKEN","").strip()
@@ -347,6 +338,10 @@ async def lifespan(app:FastAPI):
         tasks.append(asyncio.create_task(
             run_after_writer_activation(supervise_market_automation)
         ))
+    if outcome_automation.enabled and not runtime_read_only:
+        tasks.append(asyncio.create_task(
+            run_after_writer_activation(outcome_automation.run)
+        ))
     if os.getenv("TRIAID_LONG_RESEARCH_BOOTSTRAP","1").lower() not in {"0","false","off","no"}:
         tasks.append(asyncio.create_task(
             run_after_writer_activation(bootstrap_long_horizon_research)
@@ -457,6 +452,7 @@ def health_live()->dict:
         "storage_volume_mounted":volume.get("expected_mount_is_mounted"),
         "storage_persistence_confirmed":probe.get("confirmed_across_deployments"),
         "decision_automation_enabled":decision_scheduler.enabled,
+        "outcome_automation":outcome_automation.status(),
         "broker_execution_enabled":False,
         "official_trading_calendar_version":TRADING_CALENDAR_VERSION,
         "calendar_sync_enabled":calendar_sync.enabled,
@@ -489,6 +485,7 @@ def status()->dict:
         **engine.status(),
         "deployment":deployment_identity(),
         "release_baseline":release_baseline(),
+        "outcome_automation":outcome_automation.status(),
     }
 
 
@@ -803,11 +800,8 @@ def ui_market_page(
 
         if not (payload.get("integrity") or {}).get("passed"):
             return JSONResponse(status_code=503,content=payload)
-        if not cache_hit and not run_id and not runtime_read_only:
-            # Production outcome publication belongs off the page response
-            # critical path. Read-only runtimes must not create redundant
-            # remote-read fanout merely because a UI cache was cold.
-            background_tasks.add_task(_resolve_outcome_background,market)
+        # HTTP GET remains persistence-neutral. Matured outcome publication is
+        # handled only by the writer-activated runtime automation.
         payload["read_cache"]={
             "hit":cache_hit,
             "stale_served":stale_served,

@@ -104,6 +104,7 @@ BUILD_CASES=[
     "supabase_pagination_contract_smoke.py",
     "persistence_role_contract_smoke.py",
     "release_baseline_smoke.py",
+    "read_path_purity_smoke.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[
