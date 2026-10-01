@@ -102,6 +102,7 @@ BUILD_CASES=[
     "hk_tencent_5m_aggregation_smoke.py",
     "storage_runtime_fence_smoke.py",
     "persistence_role_contract_smoke.py",
+    "release_baseline_smoke.py",
 ]
 
 RUNTIME_BOOTSTRAPS=[
