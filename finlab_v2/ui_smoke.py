@@ -1,4 +1,5 @@
 from app import daily, evolution_status, home, status, strategies, engine
+from triaid_fin.release_manifest import ARCHITECTURE_VERSION
 
 html=home()
 assert "TRIAID 相对收益差" in html
@@ -167,7 +168,7 @@ assert html.index('id="riskWarningPanel"') < html.index('id="evolutionTitle"')
 assert html.index('id="evolutionTitle"') < html.index('id="systemOpsPanel"')
 
 s=status()
-assert s["architecture_version"]=="fin-evolution-lab@0.14.0"
+assert s["architecture_version"]==ARCHITECTURE_VERSION
 assert s["strategy_registry_count"]==33
 
 d=daily("US")
