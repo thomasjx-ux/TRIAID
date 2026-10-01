@@ -38,6 +38,7 @@ from triaid_fin.validation_projection import ValidationSummaryProjection
 from triaid_fin.home_brief import HomeBriefProjection
 from triaid_fin.economic_evolution import EconomicEvolutionModule
 from triaid_fin.projection_cache import ReadThroughProjectionCache
+from triaid_fin.release_manifest import release_baseline
 from triaid_fin.persistence_policy import (
     current_runtime_persistence_policy,
     writer_activation_status,
@@ -487,7 +488,13 @@ def status()->dict:
     return {
         **engine.status(),
         "deployment":deployment_identity(),
+        "release_baseline":release_baseline(),
     }
+
+
+@app.get("/api/system/release-baseline")
+def system_release_baseline()->dict:
+    return release_baseline()
 
 
 @app.get("/api/audit/status")
@@ -641,6 +648,7 @@ def system_interfaces()->dict:
     market_data_status=runtime_services.market_data.status()
     return {
         "architecture":"MODULAR_INTERFACE_REGISTRY",
+        "release_baseline":release_baseline(),
         "market_interfaces":MARKET_INTERFACE_REGISTRY.status(),
         "ports":{
             **runtime_services.status()["ports"],

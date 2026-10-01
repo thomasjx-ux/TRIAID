@@ -268,7 +268,7 @@ class FileStorageBackend:
 
 
 class SupabaseStorageBackend:
-    version="supabase-storage-backend@0.3.0"
+    version="supabase-storage-backend@0.4.0"
     persistence_contract="triaid-persistence-contract@1.0.0"
 
     def __init__(self)->None:
@@ -326,7 +326,7 @@ class SupabaseStorageBackend:
                 **({"x-triaid-service-id":self.service_id} if self.service_id else {}),
                 **({"x-triaid-deployment-id":self.deployment_id} if self.deployment_id else {}),
                 **({"x-triaid-commit-sha":self.commit_sha} if self.commit_sha else {}),
-                "user-agent":"TRIAID-FIN-V2-STORAGE/0.3",
+                "user-agent":"TRIAID-FIN-V2-STORAGE/0.4",
             },
         )
         try:
@@ -415,21 +415,60 @@ class SupabaseStorageBackend:
         lines=result.get("lines") or []
         return [str(x) for x in lines]
 
+    def _paged_objects(
+        self,
+        action:str,
+        prefix:str,
+        suffix:str="",
+        *,
+        page_limit:int,
+    )->list:
+        cursor=""
+        seen_cursors:set[str]=set()
+        rows:list=[]
+        while True:
+            payload={
+                "action":action,
+                "prefix":prefix,
+                "suffix":suffix,
+                "limit":int(page_limit),
+            }
+            if cursor:
+                payload["cursor"]=cursor
+            result=self._call(payload)
+            page=(
+                result.get("keys")
+                if action=="list_objects"
+                else result.get("objects")
+            ) or []
+            rows.extend(page)
+            next_cursor=str(result.get("next_cursor") or "")
+            if not next_cursor:
+                break
+            if next_cursor==cursor or next_cursor in seen_cursors:
+                raise StorageBackendError(
+                    f"supabase_pagination_cursor_loop:action={action}:cursor={next_cursor}"
+                )
+            seen_cursors.add(next_cursor)
+            cursor=next_cursor
+        return rows
+
     def list_names(self,prefix:str,suffix:str="")->list[str]:
-        result=self._call({
-            "action":"list_objects",
-            "prefix":prefix,
-            "suffix":suffix,
-        })
-        return [str(x) for x in (result.get("keys") or [])]
+        rows=self._paged_objects(
+            "list_objects",
+            prefix,
+            suffix,
+            page_limit=100,
+        )
+        return [str(x) for x in rows]
 
     def list_texts(self,prefix:str,suffix:str="")->dict[str,str]:
-        result=self._call({
-            "action":"read_objects",
-            "prefix":prefix,
-            "suffix":suffix,
-        })
-        objects=result.get("objects") or []
+        objects=self._paged_objects(
+            "read_objects",
+            prefix,
+            suffix,
+            page_limit=20,
+        )
         return {
             str(row.get("key")):str(row.get("content") or "")
             for row in objects
