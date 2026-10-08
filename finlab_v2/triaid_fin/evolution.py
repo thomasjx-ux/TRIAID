@@ -1,25 +1,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Iterable
 
 from .contracts import RunRecord
 from .objective import PRIMARY_OBJECTIVE
+from .kernel_contract import CoreParameters
 from .store import RunStore
-
-
-@dataclass
-class CoreParameters:
-    version: str
-    risk_penalty: float = 0.25
-    uncertainty_penalty: float = 1.0
-    intervention_strength: float = 0.55
-    risk_off_multiplier: float = 0.55
-    status: str = "active"
-    parent_version: str | None = None
-    hypothesis: str | None = None
 
 
 class EvolutionModule:
