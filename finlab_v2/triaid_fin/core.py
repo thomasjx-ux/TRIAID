@@ -6,7 +6,7 @@ from typing import Iterable
 
 from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
-from .evolution import CoreParameters
+from .kernel_contract import CoreParameters
 
 
 def _normalize_capped(raw: dict[str, float], cap: float = 0.28) -> dict[str, float]:
@@ -225,4 +225,3 @@ class TriaidCoreModule:
                 "risk_role":"HARD_ADMISSION_AND_STATE_THRESHOLD_CONSTRAINT_NOT_CO_EQUAL_OBJECTIVE",
             },
         )
-
