@@ -23,7 +23,8 @@ from triaid_fin.strategy_population import StrategyPopulationModule
 from triaid_fin.trading_calendar import VERSION as CALENDAR_VERSION, trading_day_info
 from triaid_fin.value_frontier_shadow_v2 import allocate_shadow, VERSION as SHADOW_VERSION
 
-PROTOCOL_VERSION = "gpt-forward-validation@1.2.0"
+PROTOCOL_VERSION = "gpt-forward-validation@1.1.0"
+RISK_OVERLAY_PROTOCOL_VERSION = "gpt-risk-overlay@0.1.0"
 CONSTITUTION_VERSION = "triaid-constitution@1.0.0"
 RUNNER_VERSION = "gpt-us-independent-runner@1.1.0"
 EVALUATION_VERSION = "gpt-forward-evaluation@1.0.0"
@@ -149,6 +150,7 @@ def main() -> int:
 
     constitution = ROOT / "TRIAID_CONSTITUTION.md"
     protocol = ROOT / "gpt_async_validation" / "PROTOCOL.md"
+    risk_overlay_protocol = ROOT / "gpt_async_validation" / "RISK_OVERLAY_PROTOCOL.md"
     core_file = FINLAB / "triaid_fin" / "core.py"
     base_route_file = FINLAB / "triaid_fin" / "us_return_max.py"
     overlay_route_file = FINLAB / "triaid_fin" / "risk_aware_us.py"
@@ -156,6 +158,7 @@ def main() -> int:
 
     payload = {
         "protocol_version": PROTOCOL_VERSION,
+        "risk_overlay_protocol_version": RISK_OVERLAY_PROTOCOL_VERSION,
         "runner_version": RUNNER_VERSION,
         "market_id": "US",
         "t0_trade_date": t0_date.isoformat(),
@@ -198,6 +201,7 @@ def main() -> int:
         "constitution_sha256": sha256_file(constitution),
         "discipline_commit_sha": os.getenv("GITHUB_SHA") or "LOCAL_UNPINNED",
         "protocol_sha256": sha256_file(protocol),
+        "risk_overlay_protocol_sha256": sha256_file(risk_overlay_protocol),
         "evaluation_version": EVALUATION_VERSION,
         "executable_status": "EXECUTED_EXACT_PINNED_CORE_WITH_RISK_OVERLAY",
         "validity_status": "READY_TO_FREEZE",
