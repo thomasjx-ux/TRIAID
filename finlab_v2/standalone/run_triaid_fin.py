@@ -14,6 +14,7 @@ FINLAB = ROOT / "finlab_v2"
 if str(FINLAB) not in sys.path:
     sys.path.insert(0, str(FINLAB))
 
+from triaid_fin.contracts import AccountProfile, StrategyPoolSpec
 from triaid_fin.market_lab import prepare_live_market
 from triaid_fin.risk_aware_engine import RiskAwareEvolutionLabEngine
 
@@ -27,6 +28,8 @@ def load_config(path: Path) -> dict:
             "poll_minutes": 30,
             "data_dir": "./standalone_runtime/data",
             "report_dir": "./standalone_runtime/reports",
+            "strategy_pool": {},
+            "account": {},
         }
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -44,6 +47,61 @@ def ensure_local_storage(config: dict) -> tuple[Path, Path]:
     os.environ["TRIAID_RUNTIME_ROLE"] = "LOCAL"
     os.environ["TRIAID_PERSISTENCE_SCOPE"] = "LOCAL"
     return data_dir, report_dir
+
+
+def configure_local_profile(engine: RiskAwareEvolutionLabEngine, config: dict) -> dict:
+    """Apply standalone customization to the local GLOBAL route only.
+
+    Keeping the identifiers GLOBAL preserves the full market-specific US/CN/HK
+    research routes while the storage boundary keeps these choices local.
+    """
+    markets = [str(x).upper() for x in (config.get("markets") or DEFAULT_MARKETS)]
+    pool_cfg = dict(config.get("strategy_pool") or {})
+    account_cfg = dict(config.get("account") or {})
+
+    market_strategy_ids = {
+        str(market).upper(): [str(x) for x in ids]
+        for market, ids in dict(pool_cfg.get("market_strategy_ids") or {}).items()
+        if isinstance(ids, list)
+    }
+    pool = StrategyPoolSpec(
+        pool_id="GLOBAL",
+        allowed_strategy_ids=[str(x) for x in pool_cfg.get("allowed_strategy_ids", [])],
+        denied_strategy_ids=[str(x) for x in pool_cfg.get("denied_strategy_ids", [])],
+        market_strategy_ids=market_strategy_ids,
+        max_group_size=int(pool_cfg.get("max_group_size") or 10),
+        metadata={
+            "standalone_local_override": True,
+            **dict(pool_cfg.get("metadata") or {}),
+        },
+    )
+    engine.upsert_strategy_pool(pool)
+
+    max_weight = account_cfg.get("max_strategy_weight")
+    max_drawdown = account_cfg.get("max_drawdown_constraint")
+    capital = account_cfg.get("capital")
+    account = AccountProfile(
+        account_id="GLOBAL",
+        strategy_pool_id="GLOBAL",
+        base_currency=str(account_cfg.get("base_currency") or "USD"),
+        capital=float(capital) if capital is not None else None,
+        allowed_markets=markets,
+        risk_budget=float(account_cfg.get("risk_budget") or 1.0),
+        max_strategy_weight=float(max_weight) if max_weight is not None else None,
+        max_drawdown_constraint=float(max_drawdown) if max_drawdown is not None else None,
+        objective="MAXIMIZE_NET_RETURN",
+        execution_profile=dict(account_cfg.get("execution_profile") or {}),
+        metadata={
+            "standalone_local_override": True,
+            **dict(account_cfg.get("metadata") or {}),
+        },
+    )
+    engine.upsert_account(account)
+    return {
+        "markets": markets,
+        "strategy_pool": pool.model_dump(mode="json"),
+        "account": account.model_dump(mode="json"),
+    }
 
 
 def panel_dates(panel) -> list[str]:
@@ -142,7 +200,7 @@ def run_market(engine: RiskAwareEvolutionLabEngine, market: str) -> dict:
             "route": latest_route(engine, market),
         }
 
-    pending = engine.create_pending_live_run(market, "OFFICIAL_EVIDENCE")
+    pending = engine.create_pending_live_run(market, "OFFICIAL_EVIDENCE", account_id="GLOBAL")
     engine.execute_live(pending.run_id, market, "OFFICIAL_EVIDENCE")
     finished = engine.get_run(pending.run_id)
     action = "FAILED" if finished.status == "FAILED" else "EXECUTED"
@@ -168,6 +226,7 @@ def write_report(report_dir: Path, payload: dict) -> tuple[Path, Path]:
         f"TRIAID FIN standalone report {payload['generated_at']}",
         f"storage_integrity_ok={payload['storage'].get('integrity_ok')}",
         f"recovered_stale_runs={payload['recovery'].get('recovered_count')}",
+        f"configured_markets={payload['profile'].get('markets')}",
         "",
     ]
     for row in payload["markets"]:
@@ -197,8 +256,9 @@ def write_report(report_dir: Path, payload: dict) -> tuple[Path, Path]:
 def run_once(config: dict) -> dict:
     data_dir, report_dir = ensure_local_storage(config)
     engine = RiskAwareEvolutionLabEngine()
+    profile = configure_local_profile(engine, config)
     recovery = engine.recover_stale_runs()
-    markets = [str(x).upper() for x in (config.get("markets") or DEFAULT_MARKETS)]
+    markets = profile["markets"]
     rows = []
     for market in markets:
         try:
@@ -213,12 +273,13 @@ def run_once(config: dict) -> dict:
             })
 
     payload = {
-        "version": "triaid-fin-standalone@0.1.1",
+        "version": "triaid-fin-standalone@0.2.0",
         "generated_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
         "research_only": True,
         "broker_execution_enabled": False,
         "data_dir": str(data_dir),
         "report_dir": str(report_dir),
+        "profile": profile,
         "recovery": recovery,
         "storage": engine.store.status(),
         "markets": rows,
