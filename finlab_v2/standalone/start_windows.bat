@@ -37,9 +37,18 @@ if errorlevel 1 goto :deps_failed
 >"%MARKER%" echo %REQ_HASH%
 
 :dependencies_ready
+if /I "%~1"=="--check" goto :check_only
+
 echo [TRIAID FIN] Starting standalone research runtime...
 "%PY%" finlab_v2\standalone\run_triaid_fin.py --watch
 exit /b %errorlevel%
+
+:check_only
+echo [TRIAID FIN] Verifying standalone launcher and runtime imports...
+"%PY%" finlab_v2\standalone\run_triaid_fin.py --help >nul
+if errorlevel 1 exit /b 20
+echo [TRIAID FIN] Windows launcher check passed.
+exit /b 0
 
 :no_python
 echo [TRIAID FIN] Python 3 is required. Install Python 3.12 or newer and run this file again.
