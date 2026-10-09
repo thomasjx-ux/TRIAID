@@ -1,0 +1,37 @@
+name: Multi-scale Prediction Validation
+
+on:
+  push:
+    branches:
+      - research/multiscale-prediction-r1
+  pull_request:
+    paths:
+      - "finlab_v2/triaid_fin/multi_scale_prediction.py"
+      - "finlab_v2/triaid_fin/full_core_shadow.py"
+      - "finlab_v2/multi_scale_prediction_smoke.py"
+      - ".github/workflows/multiscale-prediction-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FIN dependencies
+        run: pip install -r finlab_v2/requirements.txt
+      - name: Compile multi-scale prediction path
+        run: |
+          python -m py_compile \
+            finlab_v2/triaid_fin/multi_scale_prediction.py \
+            finlab_v2/triaid_fin/full_core_shadow.py \
+            finlab_v2/multi_scale_prediction_smoke.py
+      - name: Run multi-scale prediction smoke
+        run: PYTHONPATH=finlab_v2 python finlab_v2/multi_scale_prediction_smoke.py
+      - name: Regress full-core shadow
+        run: PYTHONPATH=finlab_v2 python finlab_v2/triaid_fin/full_core_shadow_smoke.py
