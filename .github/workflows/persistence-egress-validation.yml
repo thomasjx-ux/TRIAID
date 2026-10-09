@@ -1,0 +1,28 @@
+name: FIN Persistence Egress Validation
+
+on:
+  push:
+    branches:
+      - fin-persistence-egress-20261009
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FIN dependencies
+        run: pip install -r finlab_v2/requirements.txt
+      - name: Compile persistence changes
+        run: |
+          python -m py_compile finlab_v2/triaid_fin/store.py finlab_v2/persistence_egress_smoke.py
+      - name: Verify low-egress store semantics
+        run: python finlab_v2/persistence_egress_smoke.py
+      - name: Run existing risk transition smoke
+        run: python finlab_v2/risk_transition_smoke.py
