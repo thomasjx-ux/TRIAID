@@ -38,6 +38,18 @@ jobs:
             triaid_fin/exposure_control.py \
             triaid_fin/us_route_guard.py
           python standalone_runtime.py --help >/dev/null
+      - name: Verify optimized engine wiring
+        working-directory: finlab_v2
+        run: |
+          python - <<'PY'
+          from triaid_fin.runtime_engine import StateAwareEvolutionLabEngine
+          engine = StateAwareEvolutionLabEngine()
+          assert engine.us_return_max.version == "us-return-max-route@0.7.0", engine.us_return_max.version
+          import stateaware_app
+          import app as app_module
+          assert app_module.engine.us_return_max.version == "us-return-max-route@0.7.0", app_module.engine.us_return_max.version
+          print("OPTIMIZED_RUNTIME_WIRING_OK", app_module.engine.us_return_max.version)
+          PY
       - name: Run fast-state regression
         working-directory: finlab_v2
         run: python state_break_smoke.py
