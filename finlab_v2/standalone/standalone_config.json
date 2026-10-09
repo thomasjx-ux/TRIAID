@@ -1,0 +1,6 @@
+{
+  "markets": ["US", "CN", "HK"],
+  "poll_minutes": 30,
+  "data_dir": "./standalone_runtime/data",
+  "report_dir": "./standalone_runtime/reports"
+}
