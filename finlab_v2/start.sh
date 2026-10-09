@@ -25,10 +25,21 @@ else
   UVICORN_BIN="$(command -v uvicorn)"
 fi
 
+case "${TRIAID_RISK_AWARE_RUNTIME:-1}" in
+  0|false|FALSE|off|OFF|no|NO)
+    APP_TARGET="app:app"
+    echo TRIAID_RISK_AWARE_RUNTIME_DISABLED
+    ;;
+  *)
+    APP_TARGET="app_risk_aware:app"
+    echo TRIAID_RISK_AWARE_RUNTIME_ENABLED
+    ;;
+esac
+
 rm -f "$TRIAID_RELEASE_AUDIT_RECEIPT_PATH"
 rm -f "$TRIAID_WRITER_ACTIVATION_RECEIPT_PATH"
 
-"$UVICORN_BIN" app:app --host 0.0.0.0 --port "${PORT:-8080}" &
+"$UVICORN_BIN" "$APP_TARGET" --host 0.0.0.0 --port "${PORT:-8080}" &
 SERVER_PID=$!
 
 cleanup() {
