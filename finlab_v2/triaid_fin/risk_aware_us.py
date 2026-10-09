@@ -125,7 +125,6 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             input_phase,
             previous_decision=previous_decision,
         )
-        base_route_version = str(result.get("route_version") or USReturnMaxRoute.version)
         transition = detect_state_break(panel)
 
         braked_strategy_weights, brake_diag = apply_fast_brake(
@@ -143,7 +142,7 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
 
         state_map = {s.strategy_id: s for s in states}
         result["route_version"] = self.version
-        result["base_route_version"] = base_route_version
+        result["base_route_version"] = USReturnMaxRoute.version
         result["risk_overlay_version"] = self.overlay_version
         result["target_strategy_weights"] = braked_strategy_weights
         result["projected_annualized_expected_net_return"] = self._weighted_expected(
