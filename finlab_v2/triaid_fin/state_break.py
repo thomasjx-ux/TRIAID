@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from statistics import mean, pstdev
-from typing import Iterable
+from statistics import pstdev
+from typing import Any, Iterable
 
 from .contracts import StrategyState
 
@@ -31,7 +31,7 @@ class StateBreakAssessment:
     brake_factor: float
     permission: str
     reasons: tuple[str, ...]
-    metrics: dict[str, float | int | None]
+    metrics: dict[str, Any]
 
     def to_dict(self) -> dict:
         return {
