@@ -11,39 +11,33 @@ set "VENV_DIR=%~dp0.venv-standalone"
 if exist "%VENV_DIR%\Scripts\python.exe" goto :venv_ready
 
 where py >nul 2>nul
-if %errorlevel%==0 (
+if not errorlevel 1 (
   py -3.12 -m venv "%VENV_DIR%" 2>nul
-  if exist "%VENV_DIR%\Scripts\python.exe" goto :install
+  if exist "%VENV_DIR%\Scripts\python.exe" goto :venv_ready
   py -3 -m venv "%VENV_DIR%"
-  goto :install
+  if exist "%VENV_DIR%\Scripts\python.exe" goto :venv_ready
 )
 
 where python >nul 2>nul
-if not %errorlevel%==0 goto :no_python
+if errorlevel 1 goto :no_python
 python -m venv "%VENV_DIR%"
-
-:install
 if not exist "%VENV_DIR%\Scripts\python.exe" goto :venv_failed
-"%VENV_DIR%\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
-if not %errorlevel%==0 goto :deps_failed
->"%VENV_DIR%\triaid_dependencies_ready.txt" echo ready
 
 :venv_ready
-if not exist "%VENV_DIR%\triaid_dependencies_ready.txt" (
-  "%VENV_DIR%\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
-  if not %errorlevel%==0 goto :deps_failed
-  >"%VENV_DIR%\triaid_dependencies_ready.txt" echo ready
-)
+echo.
+echo [TRIAID FIN] Refreshing pinned dependencies...
+"%VENV_DIR%\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+if errorlevel 1 goto :deps_failed
 
 echo.
 echo [TRIAID FIN] Running self-check...
 "%VENV_DIR%\Scripts\python.exe" standalone_selfcheck.py
-if not %errorlevel%==0 goto :selfcheck_failed
+if errorlevel 1 goto :selfcheck_failed
 
 echo.
 echo [TRIAID FIN] Updating US, CN and HK current verifiable states...
 "%VENV_DIR%\Scripts\python.exe" standalone_runtime.py --markets all
-if not %errorlevel%==0 goto :runtime_failed
+if errorlevel 1 goto :runtime_failed
 
 echo.
 echo [TRIAID FIN] Completed.
