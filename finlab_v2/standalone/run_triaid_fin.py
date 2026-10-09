@@ -41,8 +41,8 @@ def ensure_local_storage(config: dict) -> tuple[Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     os.environ["TRIAID_STORAGE_BACKEND"] = "file"
     os.environ["TRIAID_DATA_DIR"] = str(data_dir)
-    os.environ["TRIAID_RUNTIME_ROLE"] = "STANDALONE_RESEARCH"
-    os.environ["TRIAID_PERSISTENCE_SCOPE"] = "LOCAL_ONLY"
+    os.environ["TRIAID_RUNTIME_ROLE"] = "LOCAL"
+    os.environ["TRIAID_PERSISTENCE_SCOPE"] = "LOCAL"
     return data_dir, report_dir
 
 
@@ -132,7 +132,7 @@ def run_market(engine: RiskAwareEvolutionLabEngine, market: str) -> dict:
         }
 
     same_snapshot = bool(existing and existing.market.snapshot_id == snapshot.snapshot_id)
-    healthy_status = bool(existing and existing.status in {"DECISION_READY_AWAITING_OUTCOME", "VERIFIED"})
+    healthy_status = bool(existing and existing.status in {"DECISION_READY_AWAITING_OUTCOME", "VERIFIED", "NO_NEW_DATA"})
     if same_snapshot and healthy_status:
         return {
             "market": market,
@@ -145,9 +145,10 @@ def run_market(engine: RiskAwareEvolutionLabEngine, market: str) -> dict:
     pending = engine.create_pending_live_run(market, "OFFICIAL_EVIDENCE")
     engine.execute_live(pending.run_id, market, "OFFICIAL_EVIDENCE")
     finished = engine.get_run(pending.run_id)
+    action = "FAILED" if finished.status == "FAILED" else "EXECUTED"
     return {
         "market": market,
-        "action": "EXECUTED",
+        "action": action,
         "gap": gap,
         "latest_run": summarize_run(finished),
         "route": latest_route(engine, market),
@@ -212,7 +213,7 @@ def run_once(config: dict) -> dict:
             })
 
     payload = {
-        "version": "triaid-fin-standalone@0.1.0",
+        "version": "triaid-fin-standalone@0.1.1",
         "generated_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
         "research_only": True,
         "broker_execution_enabled": False,
