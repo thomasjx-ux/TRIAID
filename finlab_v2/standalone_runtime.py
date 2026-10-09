@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,8 +38,9 @@ def _parse_markets(value: str) -> tuple[str, ...]:
 def _latest_formal_run(engine: EvolutionLabEngine, market_id: str):
     rows = [
         row
-        for row in engine.global_runs(market_id)
-        if row.market.snapshot_id != "PENDING"
+        for row in engine.all_runs()
+        if row.market.market_id.upper() == market_id.upper()
+        and row.market.snapshot_id != "PENDING"
         and (row.market.metadata or {}).get("evidence_eligible") is not False
         and (row.market.metadata or {}).get("daily_bar_complete") is not False
         and row.status in VALID_COMPLETE_STATUSES
