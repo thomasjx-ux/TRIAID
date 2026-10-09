@@ -1,0 +1,40 @@
+name: FIN PR67 Validation
+
+on:
+  push:
+    branches:
+      - fin-statebreak-standalone-20261009
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FIN dependencies
+        run: pip install -r finlab_v2/requirements.txt
+      - name: Compile changed Python modules
+        run: |
+          python -m py_compile \
+            finlab_v2/triaid_fin/risk_transition.py \
+            finlab_v2/triaid_fin/risk_aware_us.py \
+            finlab_v2/triaid_fin/risk_aware_engine.py \
+            finlab_v2/standalone/run_triaid_fin.py \
+            gpt_async_validation/us_independent_runner.py
+      - name: Run risk transition smoke
+        run: python finlab_v2/risk_transition_smoke.py
+      - name: Import shared engine and standalone shell
+        run: |
+          PYTHONPATH=finlab_v2 python - <<'PY'
+          from triaid_fin.risk_aware_engine import RiskAwareEvolutionLabEngine
+          from triaid_fin.risk_aware_us import RiskAwareUSReturnMaxRoute
+          from triaid_fin.risk_transition import VERSION
+          print("IMPORT_OK", RiskAwareUSReturnMaxRoute.version, VERSION, RiskAwareEvolutionLabEngine.risk_overlay_version)
+          PY
+          python finlab_v2/standalone/run_triaid_fin.py --help
