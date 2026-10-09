@@ -11,7 +11,8 @@ This standalone runtime reuses the same FIN kernel as the cloud research path. I
 - Resumes prospective freezing only from the latest currently observable complete bar.
 - Writes every run summary into one report folder as JSON and plain text.
 - Keeps one market failure isolated so US, CN and HK do not block each other.
-- Uses the risk-aware US route with State Break fast braking and underlying exposure concentration limits.
+- Uses the same risk-aware US route as the cloud path, including State Break fast braking and underlying exposure concentration limits.
+- Allows local market selection, strategy-pool selection and account risk constraints without creating a second core or a second login system.
 - Broker execution remains disabled. This is a research runtime.
 
 ## Run once
@@ -42,6 +43,16 @@ Paths can be changed in `standalone_config.json`.
 
 If the machine is off for multiple trading sessions, the runtime refreshes the missing market data when it starts again, but it does not create fake historical prospective freezes. Missed decision windows are explicitly recorded as gaps. This preserves the no-hindsight validation discipline.
 
-## Market customization
+## Market and strategy-pool customization
 
-The `markets` list can contain any subset of `US`, `CN`, and `HK`. Market and strategy-pool customization remain separate from the shared core. The standalone shell must not alter global strategy definitions merely to satisfy a local UI preference.
+`standalone_config.json` is the local control surface.
+
+- `markets` can contain any subset of `US`, `CN`, and `HK`.
+- `strategy_pool.allowed_strategy_ids` can restrict all markets to an explicit strategy set.
+- `strategy_pool.denied_strategy_ids` can locally exclude strategies.
+- `strategy_pool.market_strategy_ids` can define a different allowed strategy set for each market.
+- `strategy_pool.max_group_size` controls the maximum selected strategy group size.
+- `account.risk_budget`, `max_strategy_weight`, and `max_drawdown_constraint` expose local risk constraints.
+- `account.capital` is optional and is kept separate from the four standard capacity sleeves used for research comparability.
+
+The standalone shell intentionally overrides the local `GLOBAL` profile rather than creating a separate account route. This keeps the complete US/CN/HK market-specific research routes active while all overrides remain isolated inside the local file store.
