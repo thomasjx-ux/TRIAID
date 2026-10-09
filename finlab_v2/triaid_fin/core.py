@@ -7,6 +7,7 @@ from typing import Iterable
 from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
 from .evolution import CoreParameters
+from .state_break import assess_state_break
 
 
 def _normalize_capped(raw: dict[str, float], cap: float = 0.28) -> dict[str, float]:
@@ -48,6 +49,10 @@ class TriaidCoreModule:
     Core decides whether and how strongly to alter the group's baseline weights.
     Parameters are versioned by EvolutionModule and can be replaced without changing
     Market Data, Strategy Population, Evaluation, Review or Audit.
+
+    Slow evidence owns direction. Fast state-break evidence has braking authority only:
+    it may reduce aggregate risk when the prior state stops explaining current returns,
+    but it cannot reverse direction or promote a new strategy.
     """
 
     interface_version = "triaid-core-contract@1"
@@ -63,11 +68,13 @@ class TriaidCoreModule:
         states: Iterable[StrategyState],
     ) -> TriaidDecision:
         before=dict(group.weights)
-        state_map={s.strategy_id:s for s in states}
+        state_rows=list(states)
+        state_map={s.strategy_id:s for s in state_rows}
         regime=(market.regime or "").lower()
         severe_risk=any(x in regime for x in ("stress","bear","shock","high_vol"))
         risk_off=("risk_off" in regime) or severe_risk
         risk_on=("risk_on" in regime) and not risk_off
+        state_break=assess_state_break(state_rows,regime).to_dict()
 
         ranked=[]
         for strategy_id in group.members:
@@ -149,13 +156,15 @@ class TriaidCoreModule:
         after={k:(1-strength)*before.get(k,0.0)+strength*target.get(k,0.0) for k in keys}
         after={k:max(0.0,v) for k,v in after.items() if v>1e-12}
 
-        risk_budget=float((market.metadata or {}).get("account_risk_budget",1.0) or 1.0)
-        risk_budget=max(0.0,min(1.0,risk_budget))
+        base_risk_budget=float((market.metadata or {}).get("account_risk_budget",1.0) or 1.0)
+        base_risk_budget=max(0.0,min(1.0,base_risk_budget))
+        brake_factor=max(0.0,min(1.0,float(state_break.get("brake_factor",1.0) or 1.0)))
+        effective_risk_budget=base_risk_budget*brake_factor
         risky_keys=[k for k in after if k!="P28_CASH"]
         risky_total=sum(after.get(k,0.0) for k in risky_keys)
         risk_budget_scaled=False
-        if risky_total>risk_budget+1e-12 and risky_total>0:
-            scale=risk_budget/risky_total
+        if risky_total>effective_risk_budget+1e-12 and risky_total>0:
+            scale=effective_risk_budget/risky_total
             for key in risky_keys:
                 after[key]=after[key]*scale
             residual=max(0.0,1.0-sum(after.values()))
@@ -173,6 +182,9 @@ class TriaidCoreModule:
                 if abs(delta)<1e-7:
                     zh="现金只保留未被高质量风险策略合理占用的剩余资金，本轮没有需要调整的剩余风险预算。"
                     en="Cash represents only residual risk budget not justified by higher-return admissible strategies; no material residual change is required in this state."
+                elif delta>0 and brake_factor<1.0:
+                    zh="短周期证据显示原有状态出现结构断裂，快速层只执行降风险而不改变长期方向，因此现金暂时上升。"
+                    en="Fast evidence indicates a structural break in the prior state. The fast layer is allowed to reduce risk but not reverse the long-horizon direction, so cash rises temporarily."
                 elif delta>0:
                     zh="当前状态提高了策略进入门槛，受单策略上限和可交易约束影响后留下剩余风险预算，因此现金被动上升；现金比例不是固定模板。"
                     en="The current state raises the admission threshold; after position caps and tradability constraints a residual risk budget remains, so cash rises mechanically rather than from a fixed cash template."
@@ -185,6 +197,9 @@ class TriaidCoreModule:
             elif delta>0:
                 zh="该策略在当前可交易策略中具有更高的净收益排序，因此获得更多风险预算。"
                 en="The strategy ranks higher on the current realizable net-return proxy and receives more risk budget."
+            elif brake_factor<1.0:
+                zh="长期方向尚未被推翻，但短周期证据显示状态断裂风险，因此快速层临时压低该策略风险敞口。"
+                en="The long-horizon direction has not been reversed, but fast evidence indicates state-break risk, so the fast layer temporarily reduces this strategy's risk exposure."
             else:
                 zh="该策略当前净收益排序落后，或在更严格的状态门槛下未进入优先集合，因此降低配置。"
                 en="The strategy ranks lower on the current net-return proxy or falls outside the stricter state-dependent priority set, so its allocation is reduced."
@@ -197,7 +212,7 @@ class TriaidCoreModule:
             reasons=reasons,
             diagnostics={
                 "interface_version":self.interface_version,
-                "implementation_version":"triaid-core-return-max@0.4.0",
+                "implementation_version":"triaid-core-return-max@0.5.0",
                 "objective":PRIMARY_OBJECTIVE,
                 "objective_constitution":OBJECTIVE_CONSTITUTION,
                 "intervention_strength":self.params.intervention_strength,
@@ -220,9 +235,11 @@ class TriaidCoreModule:
                 "cash_target":float(target.get("P28_CASH",0.0)),
                 "cash_is_fixed_template":False,
                 "max_strategy_weight_constraint":position_cap,
-                "account_risk_budget":risk_budget,
+                "account_risk_budget":base_risk_budget,
+                "effective_risk_budget":effective_risk_budget,
                 "risk_budget_scaled":risk_budget_scaled,
+                "fast_brake_applied":brake_factor<1.0,
+                "state_break":state_break,
                 "risk_role":"HARD_ADMISSION_AND_STATE_THRESHOLD_CONSTRAINT_NOT_CO_EQUAL_OBJECTIVE",
             },
         )
-
