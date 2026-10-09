@@ -2,5 +2,19 @@
   "markets": ["US", "CN", "HK"],
   "poll_minutes": 30,
   "data_dir": "./standalone_runtime/data",
-  "report_dir": "./standalone_runtime/reports"
+  "report_dir": "./standalone_runtime/reports",
+  "strategy_pool": {
+    "allowed_strategy_ids": [],
+    "denied_strategy_ids": [],
+    "market_strategy_ids": {},
+    "max_group_size": 10
+  },
+  "account": {
+    "base_currency": "USD",
+    "capital": null,
+    "risk_budget": 1.0,
+    "max_strategy_weight": null,
+    "max_drawdown_constraint": null,
+    "execution_profile": {}
+  }
 }
