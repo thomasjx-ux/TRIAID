@@ -62,7 +62,7 @@ jobs:
           grep -q "requirements_sha256" finlab_v2/standalone/start_windows.bat
           grep -q "hashlib.sha256" finlab_v2/standalone/start_windows.bat
           grep -q "py -3" finlab_v2/standalone/start_windows.bat
-          grep -q "--check" finlab_v2/standalone/start_windows.bat
+          grep -q -- "--check" finlab_v2/standalone/start_windows.bat
       - name: Run canonical release audit
         working-directory: finlab_v2
         run: python release_audit.py build
