@@ -8,9 +8,10 @@ from pathlib import Path
 
 from triaid_fin.engine import EvolutionLabEngine
 from triaid_fin.market_lab import prepare_live_market
+from triaid_fin.us_route_guard import StateAwareUSReturnMaxRoute
 
 
-VERSION = "triaid-fin-standalone-runtime@0.1.0"
+VERSION = "triaid-fin-standalone-runtime@0.2.0"
 DEFAULT_MARKETS = ("US", "CN", "HK")
 VALID_COMPLETE_STATUSES = {
     "DECISION_READY_AWAITING_OUTCOME",
@@ -69,6 +70,7 @@ def _render_text(payload: dict) -> str:
             f"state_break_score: {row.get('state_break_score')}",
             f"fast_brake_applied: {row.get('fast_brake_applied')}",
             f"effective_risk_budget: {row.get('effective_risk_budget')}",
+            f"underlying_exposure_guard: {row.get('underlying_exposure_guard')}",
             "",
         ])
     lines.extend([
@@ -77,6 +79,7 @@ def _render_text(payload: dict) -> str:
         "2. 关机期间不伪造历史决策；重新启动后拉取最新市场历史并恢复到当前可验证状态。",
         "3. 所有正式决策仍遵守下一完整可交易周期生效，禁止同一根K线回看污染。",
         "4. 快速状态断裂层只有降风险权限，没有反向或临时追涨杀跌权限。",
+        "5. 美股主路线在策略层之后继续检查真实资产与风险簇集中度。",
     ])
     return "\n".join(lines) + "\n"
 
@@ -110,6 +113,9 @@ def main() -> int:
     os.environ.setdefault("TRIAID_PERSISTENCE_SCOPE", "LOCAL_ONLY")
 
     engine = EvolutionLabEngine()
+    # Keep the single-machine runtime on the same state-aware US route used by
+    # the independent prospective validator without forking the underlying core.
+    engine.us_return_max = StateAwareUSReturnMaxRoute()
     recovery = engine.recover_stale_runs()
     market_results: dict[str, dict] = {}
 
@@ -136,6 +142,12 @@ def main() -> int:
 
         diagnostics = dict((run.triaid_decision.diagnostics if run.triaid_decision else {}) or {})
         state_break = dict(diagnostics.get("state_break") or {})
+        us_route = None
+        if market_id == "US":
+            try:
+                us_route = engine.latest_us_return_max_decision()
+            except Exception:
+                us_route = None
         market_results[market_id] = {
             "latest_market_date": latest_market_date,
             "previous_local_formal_date": previous_date,
@@ -155,6 +167,11 @@ def main() -> int:
             "fast_brake_applied": diagnostics.get("fast_brake_applied"),
             "account_risk_budget": diagnostics.get("account_risk_budget"),
             "effective_risk_budget": diagnostics.get("effective_risk_budget"),
+            "underlying_exposure_guard": (
+                dict((us_route or {}).get("underlying_exposure_guard") or {})
+                if market_id == "US"
+                else None
+            ),
             "audit_passed": bool(run.audit and run.audit.passed),
         }
 
