@@ -22,19 +22,51 @@ jobs:
       - name: Compile changed Python modules
         run: |
           python -m py_compile \
+            finlab_v2/app_risk_aware.py \
             finlab_v2/triaid_fin/risk_transition.py \
             finlab_v2/triaid_fin/risk_aware_us.py \
             finlab_v2/triaid_fin/risk_aware_engine.py \
             finlab_v2/standalone/run_triaid_fin.py \
             gpt_async_validation/us_independent_runner.py
+          sh -n finlab_v2/start.sh
       - name: Run risk transition smoke
         run: python finlab_v2/risk_transition_smoke.py
-      - name: Import shared engine and standalone shell
+      - name: Instantiate shared engine with local standalone persistence
         run: |
           PYTHONPATH=finlab_v2 python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from standalone.run_triaid_fin import ensure_local_storage
           from triaid_fin.risk_aware_engine import RiskAwareEvolutionLabEngine
           from triaid_fin.risk_aware_us import RiskAwareUSReturnMaxRoute
           from triaid_fin.risk_transition import VERSION
-          print("IMPORT_OK", RiskAwareUSReturnMaxRoute.version, VERSION, RiskAwareEvolutionLabEngine.risk_overlay_version)
+
+          with tempfile.TemporaryDirectory() as td:
+              root=Path(td)
+              ensure_local_storage({
+                  "data_dir":str(root/"data"),
+                  "report_dir":str(root/"reports"),
+              })
+              engine=RiskAwareEvolutionLabEngine()
+              status=engine.store.status()
+              assert status["integrity_ok"] is True, status
+              assert status["backend"]["persistence_policy"]["runtime_role"] == "LOCAL", status
+              assert status["backend"]["persistence_policy"]["persistence_scope"] == "LOCAL", status
+              assert engine.us_return_max.version == RiskAwareUSReturnMaxRoute.version
+              print("ENGINE_INSTANTIATE_OK", engine.us_return_max.version, VERSION)
           PY
+      - name: Check standalone and cloud entrypoint imports
+        run: |
           python finlab_v2/standalone/run_triaid_fin.py --help
+          cd finlab_v2
+          TRIAID_STORAGE_BACKEND=file \
+          TRIAID_DATA_DIR=/tmp/triaid-risk-aware-import \
+          TRIAID_RUNTIME_ROLE=LOCAL \
+          TRIAID_PERSISTENCE_SCOPE=LOCAL \
+          python - <<'PY'
+          import app_risk_aware
+          from triaid_fin.risk_aware_engine import RiskAwareEvolutionLabEngine
+          assert isinstance(app_risk_aware.app, object)
+          assert isinstance(app_risk_aware.engine_module.EvolutionLabEngine(), RiskAwareEvolutionLabEngine)
+          print("CLOUD_ENTRYPOINT_IMPORT_OK")
+          PY
