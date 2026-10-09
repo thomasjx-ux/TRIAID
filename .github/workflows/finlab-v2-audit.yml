@@ -27,6 +27,17 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r finlab_v2/requirements.txt
+      - name: Compile optimized runtime entrypoints
+        working-directory: finlab_v2
+        run: |
+          python -m py_compile \
+            standalone_runtime.py \
+            stateaware_app.py \
+            triaid_fin/runtime_engine.py \
+            triaid_fin/state_break.py \
+            triaid_fin/exposure_control.py \
+            triaid_fin/us_route_guard.py
+          python standalone_runtime.py --help >/dev/null
       - name: Run fast-state regression
         working-directory: finlab_v2
         run: python state_break_smoke.py
