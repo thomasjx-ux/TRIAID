@@ -62,7 +62,18 @@ jobs:
           grep -q "requirements_sha256" finlab_v2/standalone/start_windows.bat
           grep -q "hashlib.sha256" finlab_v2/standalone/start_windows.bat
           grep -q "py -3" finlab_v2/standalone/start_windows.bat
-          grep -q "pip install" finlab_v2/standalone/start_windows.bat
+          grep -q "--check" finlab_v2/standalone/start_windows.bat
       - name: Run canonical release audit
         working-directory: finlab_v2
         run: python release_audit.py build
+
+  standalone-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run real Windows standalone launcher check
+        shell: cmd
+        run: finlab_v2\standalone\start_windows.bat --check
