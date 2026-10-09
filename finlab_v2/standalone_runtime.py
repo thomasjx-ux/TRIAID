@@ -11,7 +11,7 @@ from triaid_fin.market_lab import prepare_live_market
 from triaid_fin.us_route_guard import StateAwareUSReturnMaxRoute
 
 
-VERSION = "triaid-fin-standalone-runtime@0.2.0"
+VERSION = "triaid-fin-standalone-runtime@0.3.0"
 DEFAULT_MARKETS = ("US", "CN", "HK")
 VALID_COMPLETE_STATUSES = {
     "DECISION_READY_AWAITING_OUTCOME",
@@ -62,6 +62,7 @@ def _render_text(payload: dict) -> str:
         lines.extend([
             f"[{market_id}]",
             f"latest_market_date: {row.get('latest_market_date')}",
+            f"evidence_mode: {row.get('evidence_mode')}",
             f"action: {row.get('action')}",
             f"run_id: {row.get('run_id')}",
             f"run_status: {row.get('run_status')}",
@@ -77,9 +78,10 @@ def _render_text(payload: dict) -> str:
         "运行纪律:",
         "1. 单机版与云端共用同一 triaid_fin 核心，不维护第二套算法。",
         "2. 关机期间不伪造历史决策；重新启动后拉取最新市场历史并恢复到当前可验证状态。",
-        "3. 所有正式决策仍遵守下一完整可交易周期生效，禁止同一根K线回看污染。",
-        "4. 快速状态断裂层只有降风险权限，没有反向或临时追涨杀跌权限。",
-        "5. 美股主路线在策略层之后继续检查真实资产与风险簇集中度。",
+        "3. 盘中和尚未结算的数据只能进入 MANUAL_PREVIEW，不能写入正式证据链。",
+        "4. 所有正式决策仍遵守下一完整可交易周期生效，禁止同一根K线回看污染。",
+        "5. 快速状态断裂层只有降风险权限，没有反向或临时追涨杀跌权限。",
+        "6. 美股主路线在策略层之后继续检查真实资产与风险簇集中度。",
     ])
     return "\n".join(lines) + "\n"
 
@@ -89,7 +91,7 @@ def main() -> int:
     parser.add_argument("--data-dir", default="./TRIAID_FIN_LOCAL_DATA")
     parser.add_argument("--report-dir", default=None)
     parser.add_argument("--markets", default="all")
-    parser.add_argument("--force", action="store_true", help="force a fresh same-day research run")
+    parser.add_argument("--force", action="store_true", help="force a fresh completed-session research run")
     args = parser.parse_args()
 
     markets = _parse_markets(args.markets)
@@ -123,10 +125,17 @@ def main() -> int:
         profile = engine.strategy_evolution.active(market_id)
         prepared = prepare_live_market(market_id, profile.window_weights)
         latest_market_date = str(prepared["latest_as_of"])
+        prepared_complete = bool((prepared["snapshot"].metadata or {}).get("daily_bar_complete"))
         previous = _latest_formal_run(engine, market_id)
         previous_date = str(previous.market.as_of) if previous is not None else None
 
-        if (
+        if not prepared_complete:
+            pending = engine.create_pending_live_run(market_id, "MANUAL_PREVIEW")
+            engine.execute_live(pending.run_id, market_id, "MANUAL_PREVIEW")
+            run = engine.get_run(pending.run_id)
+            action = "EXECUTED_PROVISIONAL_PREVIEW_ONLY"
+            evidence_mode = "MANUAL_PREVIEW_NON_EVIDENCE"
+        elif (
             not args.force
             and previous is not None
             and previous_date == latest_market_date
@@ -134,22 +143,26 @@ def main() -> int:
         ):
             run = previous
             action = "REUSED_VERIFIED_SAME_DATE"
+            evidence_mode = "FORMAL_COMPLETE_DAILY"
         else:
             pending = engine.create_pending_live_run(market_id, "OFFICIAL_EVIDENCE")
             engine.execute_live(pending.run_id, market_id, "OFFICIAL_EVIDENCE")
             run = engine.get_run(pending.run_id)
             action = "EXECUTED_CURRENT_FORMAL_STATE"
+            evidence_mode = "FORMAL_COMPLETE_DAILY"
 
         diagnostics = dict((run.triaid_decision.diagnostics if run.triaid_decision else {}) or {})
         state_break = dict(diagnostics.get("state_break") or {})
         us_route = None
-        if market_id == "US":
+        if market_id == "US" and evidence_mode == "FORMAL_COMPLETE_DAILY":
             try:
                 us_route = engine.latest_us_return_max_decision()
             except Exception:
                 us_route = None
         market_results[market_id] = {
             "latest_market_date": latest_market_date,
+            "prepared_daily_bar_complete": prepared_complete,
+            "evidence_mode": evidence_mode,
             "previous_local_formal_date": previous_date,
             "offline_gap_detected": bool(previous_date and previous_date < latest_market_date),
             "offline_gap_policy": (
@@ -205,6 +218,7 @@ def main() -> int:
             market: {
                 "date": row["latest_market_date"],
                 "status": row["run_status"],
+                "evidence_mode": row["evidence_mode"],
                 "state_break": row["state_break_level"],
                 "audit_passed": row["audit_passed"],
             }
