@@ -109,9 +109,13 @@ def main()->int:
     route=route_engine.decide(
         prepared["panel"],group,generic,states,meta.get("session_phase"),previous_decision=None
     )
+    frozen_risk_budget=max(
+        0.0,
+        min(1.0,1.0-float(route.get("cash_residual_weight") or 0.0)),
+    )
     shadow=allocate_shadow(
         "US",states,group.members,
-        risk_budget=float(route.get("cash_residual_weight") is not None and (1.0-float(route.get("cash_residual_weight") or 0.0)) or 1.0),
+        risk_budget=frozen_risk_budget,
         position_cap=float((group.diagnostics or {}).get("max_strategy_weight_constraint") or 0.28),
         frozen_incumbent=route.get("target_strategy_weights"),
         previous_weights=None,
