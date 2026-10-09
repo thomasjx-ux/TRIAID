@@ -3,8 +3,9 @@ name: GPT Independent US Prospective Validation
 on:
   workflow_dispatch:
   schedule:
-    - cron: "20 20 * * 1-5"
-    - cron: "20 21 * * 1-5"
+    # One UTC schedule safely after the regular US close in both EDT and EST.
+    # Readiness is still verified from market evidence by the runner itself.
+    - cron: "30 22 * * 1-5"
 
 permissions:
   contents: write
@@ -24,30 +25,16 @@ jobs:
           python-version: "3.12"
       - name: Install isolated research dependencies
         run: pip install -r finlab_v2/requirements.txt
-      - name: Enforce 16:20 America/New_York trigger
-        id: clock
-        shell: bash
-        run: |
-          LOCAL="$(TZ=America/New_York date +%H:%M)"
-          echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" && "$LOCAL" != "16:20" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Build fail-closed decision
-        if: steps.clock.outputs.skip == 'false'
-        id: build
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           mkdir -p /tmp/triaid-freeze
-          python gpt_async_validation/us_independent_runner.py --output /tmp/triaid-freeze/decision.json | tee /tmp/triaid-freeze/status.jsonl
-          RC=${PIPESTATUS[0]}
-          echo "rc=$RC" >> "$GITHUB_OUTPUT"
-          exit 0
+          python gpt_async_validation/us_independent_runner.py \
+            --output /tmp/triaid-freeze/decision.json \
+            | tee /tmp/triaid-freeze/status.jsonl
+          test -s /tmp/triaid-freeze/decision.json
       - name: Create immutable decision and verify readback
-        if: steps.clock.outputs.skip == 'false' && steps.build.outputs.rc == '0'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -66,7 +53,7 @@ jobs:
           fi
           gh api "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" >/tmp/triaid-freeze/readback.json
           python - <<'PY'
-          import base64,hashlib,json,sys
+          import base64,hashlib,json
           local=open("/tmp/triaid-freeze/decision.json","rb").read()
           remote=json.load(open("/tmp/triaid-freeze/readback.json"))
           got=base64.b64decode(remote["content"])
@@ -81,11 +68,22 @@ jobs:
           open("/tmp/triaid-freeze/freeze_receipt.json","w").write(json.dumps(receipt,indent=2,sort_keys=True)+"\n")
           print(json.dumps(receipt))
           PY
-      - name: Preserve failed gate as workflow artifact
-        if: always() && steps.clock.outputs.skip == 'false'
+      - name: Enforce verified freeze receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          receipt=json.load(open("/tmp/triaid-freeze/freeze_receipt.json"))
+          if receipt.get("status") != "VALID_FROZEN":
+              raise SystemExit("FREEZE_NOT_VERIFIED")
+          print("TRIAID_FREEZE_VERIFIED", receipt["path"], receipt["decision_bytes_sha256"])
+          PY
+      - name: Preserve decision evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gpt-independent-us-${{ github.run_id }}
           path: /tmp/triaid-freeze/
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 90
