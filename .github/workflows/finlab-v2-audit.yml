@@ -27,6 +27,12 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r finlab_v2/requirements.txt
+      - name: Run fast-state regression
+        working-directory: finlab_v2
+        run: python state_break_smoke.py
+      - name: Run underlying-exposure regression
+        working-directory: finlab_v2
+        run: python exposure_guard_smoke.py
       - name: Run canonical release audit
         working-directory: finlab_v2
         run: python release_audit.py build
