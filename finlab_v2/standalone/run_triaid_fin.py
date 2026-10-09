@@ -213,6 +213,34 @@ def run_market(engine: RiskAwareEvolutionLabEngine, market: str) -> dict:
     }
 
 
+def classify_overall_status(rows: list[dict], storage: dict) -> dict:
+    storage_ok = bool(storage.get("integrity_ok"))
+    failed = [row for row in rows if row.get("action") == "FAILED"]
+    no_freeze = [row for row in rows if row.get("action") == "NO_FREEZE"]
+    requested = len(rows)
+
+    if not storage_ok or (requested > 0 and len(failed) == requested):
+        status = "FAILED"
+    elif failed:
+        status = "DEGRADED"
+    else:
+        status = "HEALTHY"
+
+    return {
+        "status": status,
+        "storage_integrity_ok": storage_ok,
+        "requested_market_count": requested,
+        "failed_market_count": len(failed),
+        "failed_markets": [str(row.get("market")) for row in failed],
+        "no_freeze_market_count": len(no_freeze),
+        "no_freeze_markets": [str(row.get("market")) for row in no_freeze],
+        "semantics": (
+            "NO_FREEZE is not a failure when the latest daily bar is incomplete. "
+            "DEGRADED means at least one requested market failed while local storage remains usable."
+        ),
+    }
+
+
 def write_report(report_dir: Path, payload: dict) -> tuple[Path, Path]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     json_path = report_dir / f"TRIAID_FIN_{stamp}.json"
@@ -222,8 +250,11 @@ def write_report(report_dir: Path, payload: dict) -> tuple[Path, Path]:
         encoding="utf-8",
     )
 
+    overall = dict(payload.get("overall") or {})
     lines = [
         f"TRIAID FIN standalone report {payload['generated_at']}",
+        f"overall_status={overall.get('status')}",
+        f"failed_markets={overall.get('failed_markets')}",
         f"storage_integrity_ok={payload['storage'].get('integrity_ok')}",
         f"recovered_stale_runs={payload['recovery'].get('recovered_count')}",
         f"configured_markets={payload['profile'].get('markets')}",
@@ -256,6 +287,11 @@ def write_report(report_dir: Path, payload: dict) -> tuple[Path, Path]:
 def run_once(config: dict) -> dict:
     data_dir, report_dir = ensure_local_storage(config)
     engine = RiskAwareEvolutionLabEngine()
+
+    initial_storage = engine.store.status()
+    if not bool(initial_storage.get("integrity_ok")):
+        raise RuntimeError(f"standalone_store_integrity_failed:{initial_storage}")
+
     profile = configure_local_profile(engine, config)
     recovery = engine.recover_stale_runs()
     markets = profile["markets"]
@@ -272,8 +308,10 @@ def run_once(config: dict) -> dict:
                 "latest_run": summarize_run(engine.latest_run(market)),
             })
 
+    storage = engine.store.status()
+    overall = classify_overall_status(rows, storage)
     payload = {
-        "version": "triaid-fin-standalone@0.2.0",
+        "version": "triaid-fin-standalone@0.2.1",
         "generated_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
         "research_only": True,
         "broker_execution_enabled": False,
@@ -281,7 +319,8 @@ def run_once(config: dict) -> dict:
         "report_dir": str(report_dir),
         "profile": profile,
         "recovery": recovery,
-        "storage": engine.store.status(),
+        "storage": storage,
+        "overall": overall,
         "markets": rows,
     }
     json_path, txt_path = write_report(report_dir, payload)
@@ -306,9 +345,10 @@ def main() -> int:
     while True:
         payload = run_once(config)
         print(json.dumps({
-            "status": "OK",
+            "status": payload["overall"]["status"],
             "generated_at": payload["generated_at"],
             "report_files": payload["report_files"],
+            "failed_markets": payload["overall"]["failed_markets"],
             "markets": [
                 {
                     "market": row.get("market"),
@@ -319,7 +359,11 @@ def main() -> int:
             ],
         }, ensure_ascii=False))
         if not args.watch:
-            return 0
+            return {
+                "HEALTHY": 0,
+                "DEGRADED": 2,
+                "FAILED": 3,
+            }.get(str(payload["overall"]["status"]), 3)
         time.sleep(poll_minutes * 60)
 
 
