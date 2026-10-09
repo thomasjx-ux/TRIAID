@@ -8,7 +8,7 @@ from .storage_backend import build_storage_backend
 
 
 class RunStore:
-    version = "run-store@0.4.0"
+    version = "run-store@0.5.0"
 
     def __init__(self, root: str | None = None) -> None:
         self.backend=build_storage_backend(root)
@@ -18,6 +18,10 @@ class RunStore:
             self.runs_dir.mkdir(parents=True,exist_ok=True)
         self._lock=RLock()
         self.integrity_errors:list[str]=[]
+        # Run status endpoints must never re-download the historical run corpus.
+        # The cache is populated by list_runs during engine bootstrap and kept in
+        # sync on subsequent save_run calls.
+        self._known_run_ids:set[str]|None=None
 
     @property
     def persistent_mount_detected(self) -> bool:
@@ -29,6 +33,8 @@ class RunStore:
             f"runs/{run.run_id}.json",
             json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2),
         )
+        if self._known_run_ids is not None:
+            self._known_run_ids.add(str(run.run_id))
 
     def load_run(self, run_id: str) -> RunRecord:
         return RunRecord.model_validate_json(
@@ -45,6 +51,7 @@ class RunStore:
                 errors.append(f"run_parse_error:{name}:{type(exc).__name__}:{exc}")
         self.integrity_errors=[x for x in self.integrity_errors if not x.startswith("run_parse_error:")]
         self.integrity_errors.extend(errors)
+        self._known_run_ids={str(r.run_id) for r in rows}
         return sorted(rows,key=lambda r:r.created_at)
 
     def save_json(self, name: str, payload: dict) -> None:
@@ -54,10 +61,14 @@ class RunStore:
         )
 
     def load_json(self, name: str, default: dict | None = None) -> dict:
-        if not self.backend.exists(name):
+        # A remote read already communicates not-found. Avoid the old
+        # exists_object + read_object double round-trip for every state file.
+        try:
+            raw=self.backend.read_text(name)
+        except FileNotFoundError:
             return {} if default is None else default
         try:
-            value=json.loads(self.backend.read_text(name))
+            value=json.loads(raw)
         except Exception as exc:
             message=f"json_state_corrupt:{name}:{type(exc).__name__}:{exc}"
             self.integrity_errors.append(message)
@@ -94,6 +105,19 @@ class RunStore:
         self.integrity_errors.extend(parse_errors)
         return rows
 
+    def _run_count(self)->int:
+        if self._known_run_ids is not None:
+            return len(self._known_run_ids)
+        # Cold status calls use object names only. Never use list_runs here:
+        # Supabase run objects are hundreds of KB each and status may be polled.
+        names=self.backend.list_names("runs/",".json")
+        self._known_run_ids={
+            str(name)[len("runs/"):-len(".json")]
+            for name in names
+            if str(name).startswith("runs/") and str(name).endswith(".json")
+        }
+        return len(self._known_run_ids)
+
     def status(self) -> dict:
         return {
             "version":self.version,
@@ -101,7 +125,8 @@ class RunStore:
             "persistent_mount_detected":self.persistent_mount_detected,
             "durability":self.backend.durability,
             "backend":self.backend.status(),
-            "run_count":len(self.list_runs()),
+            "run_count":self._run_count(),
             "integrity_errors":list(self.integrity_errors[-100:]),
             "integrity_ok":not bool(self.integrity_errors),
+            "status_semantics":"LIGHTWEIGHT_NO_RUN_CONTENT_DOWNLOAD",
         }
