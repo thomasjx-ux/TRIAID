@@ -28,7 +28,9 @@ fi
 rm -f "$TRIAID_RELEASE_AUDIT_RECEIPT_PATH"
 rm -f "$TRIAID_WRITER_ACTIVATION_RECEIPT_PATH"
 
-"$UVICORN_BIN" app:app --host 0.0.0.0 --port "${PORT:-8080}" &
+# The state-aware wrapper swaps only the US market-specific route adapter.
+# app.py and all common engine modules remain the canonical runtime surface.
+"$UVICORN_BIN" stateaware_app:app --host 0.0.0.0 --port "${PORT:-8080}" &
 SERVER_PID=$!
 
 cleanup() {
