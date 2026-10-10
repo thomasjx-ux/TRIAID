@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from math import prod, sqrt
 from statistics import pstdev
 from typing import Any, Iterable
@@ -8,11 +7,12 @@ from typing import Any, Iterable
 from .contracts import StrategyState
 
 
-VERSION = "us-prediction-adjustment@0.1.0"
+VERSION = "us-prediction-adjustment@0.2.0"
 HORIZONS = (1, 5, 20)
 TRADING_DAYS = 252.0
 SIGMA_CAP_MULTIPLE = 2.0
 MIN_DAILY_NOISE_FLOOR = 0.0025
+INCOMPLETE_DAILY_PHASES = {"OPEN", "BREAK"}
 
 
 def _compound(values: Iterable[float]) -> float:
@@ -23,13 +23,26 @@ def _compound(values: Iterable[float]) -> float:
 
 
 def _annualized_state_to_horizon(value: float, horizon: int) -> float:
-    """Convert the legacy annualized state estimate onto the requested horizon scale.
-
-    The source field is a historical state-return estimate, not a calibrated forecast.
-    Linear horizon scaling is intentionally simple and avoids inventing compounding
-    precision that the source metric does not contain.
-    """
+    """Convert the legacy annualized state estimate onto the requested horizon scale."""
     return float(value) * float(horizon) / TRADING_DAYS
+
+
+def _completed_returns(values: Iterable[float], input_phase: str | None) -> tuple[list[float], bool]:
+    recent = [float(x) for x in values]
+    phase = str(input_phase or "").upper()
+    dropped = bool(recent and phase in INCOMPLETE_DAILY_PHASES)
+    if dropped:
+        recent = recent[:-1]
+    return recent, dropped
+
+
+def _completed_prices(values: Iterable[float], input_phase: str | None) -> tuple[list[float], bool]:
+    prices = [float(x) for x in values]
+    phase = str(input_phase or "").upper()
+    dropped = bool(prices and phase in INCOMPLETE_DAILY_PHASES)
+    if dropped:
+        prices = prices[:-1]
+    return prices, dropped
 
 
 def _trailing_daily_vol(recent_returns: list[float], lookback: int = 20) -> float:
@@ -46,8 +59,8 @@ def _clip(value: float, cap: float) -> float:
     return max(-float(cap), min(float(cap), float(value)))
 
 
-def _horizon_forecast(state: StrategyState, horizon: int) -> dict:
-    recent = [float(x) for x in state.recent_returns]
+def _horizon_forecast(state: StrategyState, horizon: int, input_phase: str | None) -> dict:
+    recent, incomplete_dropped = _completed_returns(state.recent_returns, input_phase)
     anchor = _annualized_state_to_horizon(float(state.expected_net_return), horizon)
 
     if horizon == 1:
@@ -73,6 +86,7 @@ def _horizon_forecast(state: StrategyState, horizon: int) -> dict:
         "amplitude_cap_abs_return": float(cap),
         "calibrated_horizon_return": float(calibrated),
         "cap_applied": bool(abs(raw) > cap + 1e-15),
+        "incomplete_latest_observation_dropped": incomplete_dropped,
         "blend_semantics": blend,
     }
 
@@ -94,15 +108,12 @@ def _sign_state(value: float | None) -> str:
     return "NEUTRAL"
 
 
-def build_market_horizon_state(panel: Any) -> dict:
-    """Return independent sign-only H1/H5/H20 market state diagnostics.
-
-    Each horizon is computed from its own return window. No shorter horizon is
-    allowed to rewrite a longer-horizon state. These are state diagnostics, not
-    forecast probabilities and not promotion signals.
-    """
+def build_market_horizon_state(panel: Any, input_phase: str | None = None) -> dict:
+    """Return independent sign-only H1/H5/H20 market state diagnostics."""
     benchmark = str(panel.spec.benchmark)
-    benchmark_close = [float(x) for x in panel.close.get(benchmark, [])]
+    benchmark_close, benchmark_dropped = _completed_prices(
+        panel.close.get(benchmark, []), input_phase
+    )
     risk_assets = [
         str(asset) for asset in getattr(panel.spec, "risk_assets", ())
         if str(asset) in panel.close
@@ -114,7 +125,8 @@ def build_market_horizon_state(panel: Any) -> dict:
         observed = 0
         positive = 0
         for asset in risk_assets:
-            asset_ret = _price_window_return([float(x) for x in panel.close.get(asset, [])], horizon)
+            prices, _ = _completed_prices(panel.close.get(asset, []), input_phase)
+            asset_ret = _price_window_return(prices, horizon)
             if asset_ret is None:
                 continue
             observed += 1
@@ -131,12 +143,14 @@ def build_market_horizon_state(panel: Any) -> dict:
         }
 
     return {
-        "version": "market-horizon-state@0.1.0",
+        "version": "market-horizon-state@0.2.0",
         "benchmark": benchmark,
+        "input_phase": str(input_phase or "").upper() or None,
+        "incomplete_latest_observation_dropped": benchmark_dropped,
         "horizons": horizons,
         "semantics": (
-            "SIGN-ONLY INDEPENDENT HORIZON STATE. H1 CANNOT REWRITE H5 OR H20; "
-            "H5 CANNOT REWRITE H20. NOT A FORECAST PROBABILITY OR PROMOTION SIGNAL."
+            "SIGN-ONLY INDEPENDENT HORIZON STATE. OPEN/BREAK DAILY OBSERVATIONS ARE TREATED AS INCOMPLETE. "
+            "H1 CANNOT REWRITE H5 OR H20; H5 CANNOT REWRITE H20. NOT A FORECAST PROBABILITY OR PROMOTION SIGNAL."
         ),
     }
 
@@ -157,13 +171,14 @@ def build_us_prediction_adjustment(
     states: list[StrategyState],
     candidate_selection_scores: list[dict],
     max_strategy_weight: float,
+    input_phase: str | None = None,
 ) -> dict:
     """Build an isolated H1/H5/H20 prediction layer for the US internal route.
 
     H20 is the only horizon allowed to promote or demote strategies. H5 is used
     only as an exact tie-break after H20. H1 is diagnostic-only and can never
-    reverse H20 ordering. Immediate switching cost is subtracted in horizon-return
-    units rather than annualized and mixed with the legacy state estimate.
+    reverse H20 ordering. During OPEN/BREAK the newest daily observation is
+    excluded because it is not a complete bar.
     """
     state_map = {str(s.strategy_id): s for s in states}
     cost_map = {
@@ -178,6 +193,7 @@ def build_us_prediction_adjustment(
         return {
             "version": VERSION,
             "status": "NO_ADMISSIBLE_STRATEGIES",
+            "input_phase": str(input_phase or "").upper() or None,
             "target_strategy_weights": {"P28_CASH": 1.0},
             "selected_strategy_id": "P28_CASH",
             "selected_strategy_ids": [],
@@ -187,7 +203,10 @@ def build_us_prediction_adjustment(
     rows = []
     for sid in admissible_ids:
         state = state_map[sid]
-        horizons = {str(h): _horizon_forecast(state, h) for h in HORIZONS}
+        horizons = {
+            str(h): _horizon_forecast(state, h, input_phase)
+            for h in HORIZONS
+        }
         switch_cost = float(cost_map.get(sid, 0.0))
         h20_net = float(horizons["20"]["calibrated_horizon_return"]) - switch_cost
         h5_net = float(horizons["5"]["calibrated_horizon_return"]) - switch_cost
@@ -226,10 +245,14 @@ def build_us_prediction_adjustment(
     if remaining > 1e-12:
         weights["P28_CASH"] = remaining
 
-    selected = [sid for sid, weight in weights.items() if sid != "P28_CASH" and float(weight) > 1e-12]
+    selected = [
+        sid for sid, weight in weights.items()
+        if sid != "P28_CASH" and float(weight) > 1e-12
+    ]
     return {
         "version": VERSION,
         "status": "READY",
+        "input_phase": str(input_phase or "").upper() or None,
         "primary_horizon_days": 20,
         "secondary_tie_break_horizon_days": 5,
         "diagnostic_only_horizon_days": 1,
@@ -237,6 +260,10 @@ def build_us_prediction_adjustment(
             "H1": "DIAGNOSTIC_ONLY_NO_PROMOTION_NO_DIRECTION_OVERRIDE",
             "H5": "EXACT_H20_TIE_BREAK_ONLY",
             "H20": "PRIMARY_PROMOTION_AND_CROSS_SECTIONAL_RANKING",
+        },
+        "completed_data_guard": {
+            "incomplete_daily_phases": sorted(INCOMPLETE_DAILY_PHASES),
+            "drop_latest_observation_in_those_phases": True,
         },
         "amplitude_calibration": {
             "method": "TWO_SIGMA_TRAILING_DAILY_VOLATILITY_CAP",
