@@ -5,13 +5,14 @@ from .risk_aware_us import RiskAwareUSReturnMaxRoute
 
 
 class RiskAwareEvolutionLabEngine(EvolutionLabEngine):
-    """EvolutionLabEngine with the canonical risk-aware US route enabled.
+    """EvolutionLabEngine with the canonical internal US prediction/risk route.
 
-    This subclass exists so cloud validation and standalone execution can share
-    one risk overlay without forking the base engine implementation.
+    The subclass keeps one shared route for standalone and validation execution so
+    H1/H5/H20 isolation, prediction calibration, state-break braking, and exposure
+    guards cannot drift into separate implementations.
     """
 
-    risk_overlay_version = "fin-risk-aware-engine@0.1.0"
+    risk_overlay_version = "fin-risk-aware-engine@0.2.0"
 
     def __init__(self) -> None:
         super().__init__()
