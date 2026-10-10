@@ -22,8 +22,8 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
     state-break brake and underlying-exposure limits.
     """
 
-    version = "us-return-max-route@0.8.0"
-    overlay_version = "us-risk-overlay@0.2.0"
+    version = "us-return-max-route@0.8.1"
+    overlay_version = "us-risk-overlay@0.2.1"
 
     def _rebuild_capacity(self, panel: Any, input_phase: str | None, target_assets: dict[str, float]) -> dict:
         completed_i = self._completed_index(panel, input_phase)
@@ -137,10 +137,11 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             states,
             list(result.get("candidate_selection_scores") or []),
             float(result.get("max_strategy_weight_constraint") or 1.0),
+            input_phase=input_phase,
         )
         predicted_strategy_weights = dict(prediction.get("target_strategy_weights") or {"P28_CASH": 1.0})
 
-        market_horizon_state = build_market_horizon_state(panel)
+        market_horizon_state = build_market_horizon_state(panel, input_phase=input_phase)
         transition = detect_state_break(panel)
         braked_strategy_weights, brake_diag = apply_fast_brake(
             predicted_strategy_weights,
@@ -192,8 +193,9 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             "blends it without fitted coefficients with same-horizon realized strategy momentum, and caps amplitude at "
             "two trailing daily-volatility sigmas with a fixed minimum noise floor. H20 alone controls promotion and "
             "cross-sectional ordering. H5 is consulted only when H20 net scores are equal to numerical precision. H1 is "
-            "diagnostic-only and may not promote, reverse direction, or overwrite H20. Immediate switching cost is "
-            "subtracted directly in horizon-return units and is not annualized. The fast state-break layer remains "
+            "diagnostic-only and may not promote, reverse direction, or overwrite H20. During OPEN/BREAK the newest "
+            "daily observation is excluded from the prediction horizons because it is incomplete. Immediate switching "
+            "cost is subtracted directly in horizon-return units and is not annualized. The fast state-break layer remains "
             "brake-only and can reduce risk after selection. No coefficient is retuned from realized post-decision outcomes."
         )
         result["projected_field_semantics"] = (
