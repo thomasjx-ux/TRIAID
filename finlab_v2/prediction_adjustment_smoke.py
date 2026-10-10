@@ -49,6 +49,24 @@ def main() -> None:
     h20 = cap_result["rows"][0]["horizons"]["20"]
     assert abs(h20["calibrated_horizon_return"]) <= h20["amplitude_cap_abs_return"] + 1e-12
 
+    # The newest daily observation must be ignored during OPEN/BREAK. This guards
+    # against intraday partial bars contaminating H1/H5/H20 selection.
+    f = _state("F", 0.08, [0.002] * 20 + [-0.20])
+    g = _state("G", 0.08, [0.001] * 21)
+    open_result = build_us_prediction_adjustment(
+        [f, g],
+        [
+            {"strategy_id": "F", "meta_switch_cost_fraction": 0.0},
+            {"strategy_id": "G", "meta_switch_cost_fraction": 0.0},
+        ],
+        1.0,
+        input_phase="OPEN",
+    )
+    assert open_result["selected_strategy_id"] == "F", open_result
+    f_row = next(row for row in open_result["rows"] if row["strategy_id"] == "F")
+    assert f_row["horizons"]["1"]["incomplete_latest_observation_dropped"] is True
+    assert abs(f_row["horizons"]["1"]["same_horizon_realized_momentum"] - 0.002) < 1e-12
+
     class Spec:
         benchmark = "SPY"
         risk_assets = ("SPY", "QQQ")
@@ -56,11 +74,12 @@ def main() -> None:
     class Panel:
         spec = Spec()
         close = {
-            "SPY": [100.0 + i * 0.2 for i in range(25)],
-            "QQQ": [100.0 + i * 0.25 for i in range(25)],
+            "SPY": [100.0 + i * 0.2 for i in range(25)] + [80.0],
+            "QQQ": [100.0 + i * 0.25 for i in range(25)] + [80.0],
         }
 
-    horizon_state = build_market_horizon_state(Panel())
+    horizon_state = build_market_horizon_state(Panel(), input_phase="OPEN")
+    assert horizon_state["incomplete_latest_observation_dropped"] is True
     assert horizon_state["horizons"]["H1"]["state"] == "POSITIVE"
     assert horizon_state["horizons"]["H5"]["state"] == "POSITIVE"
     assert horizon_state["horizons"]["H20"]["state"] == "POSITIVE"
