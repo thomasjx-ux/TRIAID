@@ -1,0 +1,47 @@
+{
+  "protocol_id": "US_PREDICTION_VALIDATION_V1",
+  "status": "FROZEN",
+  "frozen_on": "2026-10-10",
+  "baseline_commit": "127159f769d7a9df3efaa522c438ca3fcb65940c",
+  "route_version": "us-return-max-route@0.8.1",
+  "prediction_adjustment_version": "us-prediction-adjustment@0.2.0",
+  "risk_overlay_version": "us-risk-overlay@0.2.1",
+  "engine_version": "fin-risk-aware-engine@0.2.0",
+  "primary_horizon_days": 20,
+  "secondary_tie_break_horizon_days": 5,
+  "diagnostic_only_horizon_days": 1,
+  "rules": {
+    "H20": "PRIMARY_PROMOTION_AND_CROSS_SECTIONAL_RANKING",
+    "H5": "EXACT_H20_TIE_BREAK_ONLY",
+    "H1": "DIAGNOSTIC_ONLY_NO_PROMOTION_NO_DIRECTION_OVERRIDE",
+    "incomplete_daily_bar_guard": true,
+    "amplitude_cap": "TWO_SIGMA_TRAILING_DAILY_VOLATILITY_CAP",
+    "switch_cost": "IMMEDIATE_META_SWITCH_COST_SUBTRACTED_IN_HORIZON_RETURN_UNITS",
+    "post_outcome_retuning_allowed": false,
+    "same_day_rewrite_allowed": false,
+    "broker_execution_enabled": false,
+    "research_only": true
+  },
+  "evaluation": {
+    "direction": ["H1", "H5", "H20"],
+    "amplitude": ["H1", "H5", "H20"],
+    "cross_sectional_ranking": ["H20"],
+    "secondary_tie_break_check": ["H5"],
+    "metrics": [
+      "direction_hit_rate",
+      "absolute_error",
+      "signed_error",
+      "spearman_rank_correlation",
+      "pairwise_ordering_accuracy",
+      "top1_hit",
+      "top3_overlap"
+    ],
+    "required_comparison_order": [
+      "FROZEN_PREDICTION_VS_ACTUAL",
+      "MARKET_STATE_AND_DRIVERS",
+      "TRIAID_STATE_CHANGE",
+      "FAILURE_CONDITIONS_AND_ADJUSTMENT_CANDIDATES"
+    ]
+  },
+  "discipline": "Any change to prediction logic, horizon authority, amplitude calibration, cost semantics, or incomplete-bar handling creates a new protocol version and may not rewrite outcomes attributed to this baseline."
+}
