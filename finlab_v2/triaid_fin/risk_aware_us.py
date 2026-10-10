@@ -4,19 +4,26 @@ import math
 from typing import Any
 
 from .contracts import StrategyGroup, StrategyState, TriaidDecision
+from .prediction_adjustment import (
+    VERSION as PREDICTION_ADJUSTMENT_VERSION,
+    build_market_horizon_state,
+    build_us_prediction_adjustment,
+)
 from .risk_transition import apply_fast_brake, detect_state_break, enforce_asset_concentration
 from .us_return_max import USReturnMaxRoute
 
 
 class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
-    """US route overlay that adds state-break braking and underlying exposure limits.
+    """US route with isolated prediction horizons plus hard risk constraints.
 
-    The parent route still owns the return ranking. This layer only adds hard
-    execution constraints after that ranking, preserving the objective hierarchy.
+    The base route remains the compatibility and control path. This overlay replaces
+    promotion/ranking with an internal H20-primary forecast adjustment, keeps H5 as
+    an exact tie-break only, keeps H1 diagnostic-only, then applies the existing
+    state-break brake and underlying-exposure limits.
     """
 
-    version = "us-return-max-route@0.7.0"
-    overlay_version = "us-risk-overlay@0.1.0"
+    version = "us-return-max-route@0.8.0"
+    overlay_version = "us-risk-overlay@0.2.0"
 
     def _rebuild_capacity(self, panel: Any, input_phase: str | None, target_assets: dict[str, float]) -> dict:
         completed_i = self._completed_index(panel, input_phase)
@@ -103,7 +110,7 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             "impact_coefficient_bps": float(spec.impact_coefficient_bps),
             "max_participation_adv": float(spec.max_participation_adv),
             "impact_formula": "impact_bps = impact_coefficient_bps * sqrt(executed_notional / observed_ADV_notional)",
-            "parameter_provenance": "EXISTING_US_MARKET_SPEC_REUSED_NOT_RETUNED_FOR_RISK_OVERLAY",
+            "parameter_provenance": "EXISTING_US_MARKET_SPEC_REUSED_NOT_RETUNED_FOR_PREDICTION_OR_RISK_OVERLAY",
             "broker_specific_fees_included": False,
             "sleeves": sleeves,
         }
@@ -125,10 +132,18 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             input_phase,
             previous_decision=previous_decision,
         )
-        transition = detect_state_break(panel)
 
+        prediction = build_us_prediction_adjustment(
+            states,
+            list(result.get("candidate_selection_scores") or []),
+            float(result.get("max_strategy_weight_constraint") or 1.0),
+        )
+        predicted_strategy_weights = dict(prediction.get("target_strategy_weights") or {"P28_CASH": 1.0})
+
+        market_horizon_state = build_market_horizon_state(panel)
+        transition = detect_state_break(panel)
         braked_strategy_weights, brake_diag = apply_fast_brake(
-            dict(result.get("target_strategy_weights") or {}),
+            predicted_strategy_weights,
             float(transition.get("risk_cap") or 1.0),
         )
         visible_i = len(panel.ts) - 1
@@ -141,9 +156,23 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
         )
 
         state_map = {s.strategy_id: s for s in states}
+        selected_ids = [
+            sid for sid, weight in predicted_strategy_weights.items()
+            if sid != "P28_CASH" and float(weight) > 1e-12
+        ]
         result["route_version"] = self.version
         result["base_route_version"] = USReturnMaxRoute.version
         result["risk_overlay_version"] = self.overlay_version
+        result["prediction_adjustment_version"] = PREDICTION_ADJUSTMENT_VERSION
+        result["selection_source"] = "ISOLATED_H20_PREDICTION_ADJUSTMENT_NET_OF_IMMEDIATE_SWITCH_COST"
+        result["strategy_selection_mode"] = "H20_PRIMARY_H5_EXACT_TIE_BREAK_H1_DIAGNOSTIC_ONLY_UNDER_HARD_CONSTRAINTS"
+        result["selected_strategy_id"] = str(prediction.get("selected_strategy_id") or "P28_CASH")
+        result["selected_strategy_ids"] = selected_ids
+        result["selected_strategy_count"] = len(selected_ids)
+        result["tie_break_order"] = ["H20_NET_RETURN", "H5_NET_RETURN_EXACT_TIE_ONLY", "meta_switch_cost", "strategy_id"]
+        result["prediction_adjustment"] = prediction
+        result["market_horizon_state"] = market_horizon_state
+        result["target_strategy_weights_before_fast_brake"] = predicted_strategy_weights
         result["target_strategy_weights"] = braked_strategy_weights
         result["projected_annualized_expected_net_return"] = self._weighted_expected(
             braked_strategy_weights, state_map
@@ -153,13 +182,22 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
         result["state_break"] = transition
         result["fast_brake"] = brake_diag
         result["underlying_exposure_guard"] = exposure_diag
-        result["execution_target_source"] = "FROZEN_STRATEGY_MIX_PLUS_STATE_BREAK_AND_UNDERLYING_EXPOSURE_GUARD"
+        result["execution_target_source"] = "H20_PREDICTION_MIX_PLUS_STATE_BREAK_AND_UNDERLYING_EXPOSURE_GUARD"
         result["capital_capacity"] = self._rebuild_capacity(panel, input_phase, target_assets)
+        if isinstance(result.get("fast_challenger"), dict):
+            result["fast_challenger"]["selection_relation"] = "DIAGNOSTIC_ONLY_NOT_USED_BY_H20_PREDICTION_SELECTION"
         result["selection_metric_semantics"] = (
-            str(result.get("selection_metric_semantics") or "")
-            + " Fast 1/3/5-day evidence is brake-only: it can reduce risk but cannot reverse "
-              "direction or promote a strategy. Final execution weights also pass a hard "
-              "underlying-asset concentration guard so multiple strategies cannot hide the "
-              "same concentrated exposure."
+            "The internal prediction overlay no longer treats StrategyState.expected_net_return as a future forecast. "
+            "For H20 and H5 it first rescales that legacy historical annualized state estimate to the matching horizon, "
+            "blends it without fitted coefficients with same-horizon realized strategy momentum, and caps amplitude at "
+            "two trailing daily-volatility sigmas with a fixed minimum noise floor. H20 alone controls promotion and "
+            "cross-sectional ordering. H5 is consulted only when H20 net scores are equal to numerical precision. H1 is "
+            "diagnostic-only and may not promote, reverse direction, or overwrite H20. Immediate switching cost is "
+            "subtracted directly in horizon-return units and is not annualized. The fast state-break layer remains "
+            "brake-only and can reduce risk after selection. No coefficient is retuned from realized post-decision outcomes."
+        )
+        result["projected_field_semantics"] = (
+            "Legacy projected_annualized_expected_net_return fields remain for API compatibility and still contain "
+            "weighted historical state-return estimates. Calibrated horizon outputs live only under prediction_adjustment."
         )
         return result
