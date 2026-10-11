@@ -20,7 +20,9 @@ export TRIAID_DECISION_AUTOMATION=1
 rm -rf "$TRIAID_DATA_DIR"
 
 # Prediction adjustment is a release gate because horizon leakage, incomplete
-# bars, cost-unit mixing, or H1 promotion would invalidate prospective evidence.
+# bars, cost-unit mixing, H1 promotion, or market-profile leakage would invalidate
+# prospective evidence.
 python prediction_adjustment_smoke.py
+python all_market_prediction_gate_smoke.py
 
 exec python release_audit.py build
