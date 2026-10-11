@@ -24,9 +24,14 @@ def main() -> None:
         ],
         1.0,
     )
+    assert result["version"] == "us-prediction-adjustment@0.3.0", result
     assert result["selected_strategy_id"] == "B", result
     assert result["rows"][0]["strategy_id"] == "B", result["rows"]
     assert result["rows"][0]["h1_used_for_selection"] is False
+    assert result["market_opportunity_state"]["horizon_isolation"] == "H20_ONLY"
+    assert result["market_opportunity_state"]["trade_enabled"] is True
+    assert 0.0 < result["target_strategy_weights"]["B"] <= 1.0
+    assert result["target_strategy_weights"].get("P28_CASH", 0.0) >= 0.0
 
     c = _state("C", 0.25, [0.003] * 20)
     d = _state("D", 0.22, [0.003] * 20)
@@ -66,6 +71,46 @@ def main() -> None:
     f_row = next(row for row in open_result["rows"] if row["strategy_id"] == "F")
     assert f_row["horizons"]["1"]["incomplete_latest_observation_dropped"] is True
     assert abs(f_row["horizons"]["1"]["same_horizon_realized_momentum"] - 0.002) < 1e-12
+
+    # A weak isolated positive edge must not force a trade. No-trade is an
+    # explicit decision when market opportunity density remains below the gate.
+    weak = _state("WEAK", 0.01, [0.0001] * 20)
+    neg1 = _state("NEG1", -0.10, [-0.001] * 20)
+    neg2 = _state("NEG2", -0.08, [-0.0015] * 20)
+    weak_result = build_us_prediction_adjustment(
+        [weak, neg1, neg2],
+        [
+            {"strategy_id": "WEAK", "meta_switch_cost_fraction": 0.0},
+            {"strategy_id": "NEG1", "meta_switch_cost_fraction": 0.0},
+            {"strategy_id": "NEG2", "meta_switch_cost_fraction": 0.0},
+        ],
+        1.0,
+    )
+    assert weak_result["decision_state"] == "NO_TRADE", weak_result
+    assert weak_result["selected_strategy_id"] == "P28_CASH", weak_result
+    assert weak_result["target_strategy_weights"] == {"P28_CASH": 1.0}, weak_result
+    assert weak_result["market_opportunity_state"]["regime_level"] < 2, weak_result
+    assert weak_result["pre_gate_target_strategy_weights"].get("WEAK", 0.0) > 0.0, weak_result
+
+    # A strong but narrow edge can pass the gate while exposure is reduced rather
+    # than treated as equivalent to an extreme opportunity regime.
+    strong = _state("STRONG", 0.30, [0.004] * 20)
+    narrow_result = build_us_prediction_adjustment(
+        [strong, neg1, neg2],
+        [
+            {"strategy_id": "STRONG", "meta_switch_cost_fraction": 0.0},
+            {"strategy_id": "NEG1", "meta_switch_cost_fraction": 0.0},
+            {"strategy_id": "NEG2", "meta_switch_cost_fraction": 0.0},
+        ],
+        1.0,
+    )
+    assert narrow_result["selected_strategy_id"] == "STRONG", narrow_result
+    assert narrow_result["market_opportunity_state"]["regime_level"] == 3, narrow_result
+    assert abs(narrow_result["target_strategy_weights"]["STRONG"] - 0.75) < 1e-12, narrow_result
+    assert abs(narrow_result["target_strategy_weights"]["P28_CASH"] - 0.25) < 1e-12, narrow_result
+    strong_row = next(row for row in narrow_result["rows"] if row["strategy_id"] == "STRONG")
+    assert strong_row["candidate_state"] in {"LONG", "STRONG_LONG"}
+    assert strong_row["invalidation"]["status"] == "ARMED"
 
     class Spec:
         benchmark = "SPY"
