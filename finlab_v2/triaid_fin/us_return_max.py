@@ -135,15 +135,13 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
             previous_decision,
         )
 
-        # Do not fabricate persistence from an annualized anchor when completed
-        # strategy history is absent. Old/synthetic callers remain on the proven
-        # legacy route until at least one risky candidate has a full H20 window.
         prediction_ready = any(
             str(state.strategy_id) != "P28_CASH" and len(state.recent_returns) >= 20
             for state in states
         )
         if not prediction_ready:
             legacy.update({
+                "route_version": _LegacyUSReturnMaxRoute.version,
                 "prediction_adjustment_ready": False,
                 "prediction_adjustment_version": None,
                 "prediction_framework_version": None,
