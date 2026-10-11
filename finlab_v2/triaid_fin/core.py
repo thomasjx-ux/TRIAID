@@ -7,6 +7,7 @@ from typing import Iterable
 from .objective import PRIMARY_OBJECTIVE, OBJECTIVE_CONSTITUTION
 from .contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState, TriaidDecision
 from .evolution import CoreParameters
+from .prediction_adjustment import build_market_prediction_adjustment
 
 
 def _normalize_capped(raw: dict[str, float], cap: float = 0.28) -> dict[str, float]:
@@ -35,20 +36,12 @@ def _normalize_capped(raw: dict[str, float], cap: float = 0.28) -> dict[str, flo
         weights["P28_CASH"]=max(0.0,remaining)
         remaining=0.0
     elif remaining>1e-12 and weights:
-        # No explicit cash strategy was supplied. Keep exposure below 100%;
-        # the unallocated residual is treated as cash by the evaluation layer.
         pass
     return {k:v for k,v in weights.items() if v>1e-12}
 
 
 class TriaidCoreModule:
-    """Evolvable TRIAID Core boundary.
-
-    Strategy Population decides which strategies are admissible.
-    Core decides whether and how strongly to alter the group's baseline weights.
-    Parameters are versioned by EvolutionModule and can be replaced without changing
-    Market Data, Strategy Population, Evaluation, Review or Audit.
-    """
+    """Evolvable TRIAID Core boundary with all-market prediction gating."""
 
     interface_version = "triaid-core-contract@1"
 
@@ -85,9 +78,6 @@ class TriaidCoreModule:
                 or not s.concentration_ok
             ):
                 continue
-            # Primary objective is return. Risk, liquidity, capacity and
-            # concentration are admission constraints, not additive penalties
-            # that can silently overturn the return ordering.
             score=float(s.expected_net_return)-max(0.0,float(s.estimated_cost))
             ranked.append((strategy_id,score))
 
@@ -109,10 +99,7 @@ class TriaidCoreModule:
         else:
             multiplier=1.5 if severe_risk else 1.0 if risk_off else 0.0
             selection_threshold=float(selection_median)+multiplier*float(selection_mad or 0.0)
-            kept=[
-                row for row in ranked
-                if row[1]>=selection_threshold-1e-15
-            ]
+            kept=[row for row in ranked if row[1]>=selection_threshold-1e-15]
             if not kept:
                 kept=[ranked[0]]
             regime_policy=(
@@ -122,6 +109,7 @@ class TriaidCoreModule:
                 if risk_off
                 else "MIXED_ADAPTIVE_RETURN_THRESHOLD"
             )
+
         raw={}
         score_temperature=None
         if kept:
@@ -143,10 +131,54 @@ class TriaidCoreModule:
 
         position_cap=float((group.diagnostics or {}).get("max_strategy_weight_constraint",0.28) or 0.28)
         position_cap=max(1e-9,min(1.0,position_cap))
-        target=_normalize_capped(raw,position_cap) if raw else ({"P28_CASH":1.0} if "P28_CASH" in group.members else {})
+        legacy_target=_normalize_capped(raw,position_cap) if raw else ({"P28_CASH":1.0} if "P28_CASH" in group.members else {})
+
+        market_key=str(market.market_id or "").upper()
+        prediction_adjustment=None
+        prediction_ready=False
+        if market_key in {"US","CN","HK"}:
+            candidate_states=[
+                state_map[sid]
+                for sid in group.members
+                if sid in state_map and sid!="P28_CASH"
+            ]
+            prediction_ready=any(len(s.recent_returns)>=20 for s in candidate_states)
+            if prediction_ready:
+                phase=str((market.metadata or {}).get("session_phase") or (market.metadata or {}).get("input_phase") or "") or None
+                zero_cost_rows=[
+                    {"strategy_id":sid,"meta_switch_cost_fraction":0.0}
+                    for sid in group.members
+                    if sid in state_map
+                ]
+                prediction_adjustment=build_market_prediction_adjustment(
+                    market_key,
+                    list(state_map.values()),
+                    zero_cost_rows,
+                    position_cap,
+                    phase,
+                )
+
+        target=dict(legacy_target)
+        selection_source="LEGACY_RETURN_MAX_CORE"
+        if prediction_adjustment is not None:
+            target=dict(prediction_adjustment.get("target_strategy_weights") or {})
+            if "P28_CASH" not in group.members:
+                target.pop("P28_CASH",None)
+            selection_source="MARKET_PREDICTION_ADJUSTMENT"
+            regime_policy=f"{regime_policy}+{prediction_adjustment.get('decision_state','UNKNOWN')}"
+
         strength=max(0.0,min(1.0,self.params.intervention_strength))
+        effective_strength=(
+            1.0
+            if prediction_adjustment is not None
+            and prediction_adjustment.get("decision_state")=="NO_TRADE"
+            else strength
+        )
         keys=set(before)|set(target)
-        after={k:(1-strength)*before.get(k,0.0)+strength*target.get(k,0.0) for k in keys}
+        after={
+            k:(1-effective_strength)*before.get(k,0.0)+effective_strength*target.get(k,0.0)
+            for k in keys
+        }
         after={k:max(0.0,v) for k,v in after.items() if v>1e-12}
 
         risk_budget=float((market.metadata or {}).get("account_risk_budget",1.0) or 1.0)
@@ -169,27 +201,38 @@ class TriaidCoreModule:
             b=before.get(strategy_id,0.0)
             a=after.get(strategy_id,0.0)
             delta=a-b
+            no_trade=bool(
+                prediction_adjustment is not None
+                and prediction_adjustment.get("decision_state")=="NO_TRADE"
+            )
             if strategy_id=="P28_CASH":
-                if abs(delta)<1e-7:
+                if no_trade and a>0:
+                    zh="当前市场机会密度不足，No Trade 门已触发，风险预算转为现金等待新的有效状态。"
+                    en="Market opportunity density is insufficient. The No Trade gate is active and risk budget is held in cash until a valid state reappears."
+                elif abs(delta)<1e-7:
                     zh="现金只保留未被高质量风险策略合理占用的剩余资金，本轮没有需要调整的剩余风险预算。"
                     en="Cash represents only residual risk budget not justified by higher-return admissible strategies; no material residual change is required in this state."
                 elif delta>0:
-                    zh="当前状态提高了策略进入门槛，受单策略上限和可交易约束影响后留下剩余风险预算，因此现金被动上升；现金比例不是固定模板。"
-                    en="The current state raises the admission threshold; after position caps and tradability constraints a residual risk budget remains, so cash rises mechanically rather than from a fixed cash template."
+                    zh="当前状态提高了策略进入门槛，受机会密度、单策略上限和可交易约束影响后留下剩余风险预算，因此现金上升。"
+                    en="The current state raises the admission threshold; opportunity density, position caps and tradability leave residual risk budget, so cash rises."
                 else:
-                    zh="当前高收益可交易策略足以吸收更多风险预算，因此减少剩余现金。"
-                    en="Higher-return admissible strategies can absorb more of the risk budget, so residual cash falls."
+                    zh="当前高质量可交易机会足以吸收更多风险预算，因此减少剩余现金。"
+                    en="Higher-quality admissible opportunities can absorb more risk budget, so residual cash falls."
+            elif no_trade:
+                zh="当前市场机会密度低于可交易门槛，系统主动进入 No Trade 状态并撤回该策略风险预算。"
+                en="Market opportunity density is below the tradable threshold, so the system enters No Trade and withdraws risk budget from this strategy."
             elif abs(delta)<1e-7:
-                zh="该策略在当前收益排序和约束下无需调整。"
-                en="No material change is required for this strategy under the current return ranking and constraints."
+                zh="该策略在当前收益排序、持续性和机会密度约束下无需调整。"
+                en="No material change is required under the current return ranking, persistence and opportunity-density constraints."
             elif delta>0:
-                zh="该策略在当前可交易策略中具有更高的净收益排序，因此获得更多风险预算。"
-                en="The strategy ranks higher on the current realizable net-return proxy and receives more risk budget."
+                zh="该策略在当前 H20 状态、持续性和可交易约束下具有更高优先级，因此获得更多风险预算。"
+                en="The strategy has higher priority under the current H20 state, persistence and tradability constraints, so it receives more risk budget."
             else:
-                zh="该策略当前净收益排序落后，或在更严格的状态门槛下未进入优先集合，因此降低配置。"
-                en="The strategy ranks lower on the current net-return proxy or falls outside the stricter state-dependent priority set, so its allocation is reduced."
+                zh="该策略当前 H20 优先级落后、持续性不足，或市场机会密度下降，因此降低配置。"
+                en="The strategy has lower H20 priority, insufficient persistence, or faces lower market opportunity density, so its allocation is reduced."
             reasons[strategy_id]=BilingualText(zh=zh,en=en)
 
+        opportunity_state=(prediction_adjustment or {}).get("market_opportunity_state")
         return TriaidDecision(
             core_version=self.version,
             weights_before=before,
@@ -197,10 +240,30 @@ class TriaidCoreModule:
             reasons=reasons,
             diagnostics={
                 "interface_version":self.interface_version,
-                "implementation_version":"triaid-core-return-max@0.4.0",
+                "implementation_version":"triaid-core-return-max@0.5.0",
                 "objective":PRIMARY_OBJECTIVE,
                 "objective_constitution":OBJECTIVE_CONSTITUTION,
                 "intervention_strength":self.params.intervention_strength,
+                "effective_intervention_strength":effective_strength,
+                "selection_source":selection_source,
+                "prediction_adjustment_ready":prediction_ready,
+                "prediction_adjustment_version":(
+                    prediction_adjustment.get("version") if prediction_adjustment else None
+                ),
+                "prediction_framework_version":(
+                    prediction_adjustment.get("framework_version") if prediction_adjustment else None
+                ),
+                "prediction_decision_state":(
+                    prediction_adjustment.get("decision_state") if prediction_adjustment else None
+                ),
+                "market_opportunity_state":opportunity_state,
+                "prediction_selected_strategy_ids":(
+                    prediction_adjustment.get("selected_strategy_ids") if prediction_adjustment else []
+                ),
+                "prediction_invalidation_contract":(
+                    prediction_adjustment.get("invalidation_contract") if prediction_adjustment else None
+                ),
+                "legacy_target_weights":legacy_target,
                 "legacy_co_objective_parameters_ignored":[
                     "risk_penalty",
                     "uncertainty_penalty",
@@ -225,4 +288,3 @@ class TriaidCoreModule:
                 "risk_role":"HARD_ADMISSION_AND_STATE_THRESHOLD_CONSTRAINT_NOT_CO_EQUAL_OBJECTIVE",
             },
         )
-
