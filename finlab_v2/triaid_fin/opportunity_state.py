@@ -101,6 +101,7 @@ def build_opportunity_state_from_components(
     else:
         gate_reason = "OPPORTUNITY_GATE_OPEN"
 
+    scope = str(evidence_scope)
     return {
         "version": VERSION,
         "market_id": profile["market_id"],
@@ -117,7 +118,8 @@ def build_opportunity_state_from_components(
         "history_coverage": float(coverage),
         "persistence_quality": float(persistence),
         "gate_reason": gate_reason,
-        "evidence_scope": str(evidence_scope),
+        "evidence_scope": scope,
+        "horizon_isolation": "H20_ONLY" if scope == "H20_ONLY" else scope,
         "thresholds": list(thresholds),
         "exposure_by_level": exposure_by_level,
         "parameter_provenance": profile["parameter_provenance"],
