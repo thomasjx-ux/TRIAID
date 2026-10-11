@@ -5,11 +5,16 @@ from typing import Any
 
 from .contracts import StrategyGroup, StrategyState, TriaidDecision
 from .prediction_adjustment import build_market_prediction_adjustment
+from . import us_return_max_legacy as _legacy_us
 from .us_return_max_legacy import (
     USD_CAPITAL_SLEEVES,
     USReturnMaxLedger,
     USReturnMaxRoute as _LegacyUSReturnMaxRoute,
 )
+
+# Compatibility surface for internal/standalone regression hooks that patch
+# triaid_fin.us_return_max.policy_positions directly.
+policy_positions = _legacy_us.policy_positions
 
 
 class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
@@ -126,14 +131,19 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
         input_phase: str | None,
         previous_decision: dict | None = None,
     ) -> dict:
-        legacy = super().decide(
-            panel,
-            group,
-            generic_decision,
-            states,
-            input_phase,
-            previous_decision,
-        )
+        original_policy_positions = _legacy_us.policy_positions
+        _legacy_us.policy_positions = policy_positions
+        try:
+            legacy = super().decide(
+                panel,
+                group,
+                generic_decision,
+                states,
+                input_phase,
+                previous_decision,
+            )
+        finally:
+            _legacy_us.policy_positions = original_policy_positions
 
         prediction_ready = any(
             str(state.strategy_id) != "P28_CASH" and len(state.recent_returns) >= 20
@@ -210,4 +220,4 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
         return legacy
 
 
-__all__ = ["USD_CAPITAL_SLEEVES", "USReturnMaxRoute", "USReturnMaxLedger"]
+__all__ = ["USD_CAPITAL_SLEEVES", "USReturnMaxRoute", "USReturnMaxLedger", "policy_positions"]
