@@ -134,6 +134,27 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
             input_phase,
             previous_decision,
         )
+        legacy["route_version"] = self.version
+
+        # Do not fabricate persistence from an annualized anchor when completed
+        # strategy history is absent. Old/synthetic callers remain on the proven
+        # legacy route until at least one risky candidate has a full H20 window.
+        prediction_ready = any(
+            str(state.strategy_id) != "P28_CASH" and len(state.recent_returns) >= 20
+            for state in states
+        )
+        if not prediction_ready:
+            legacy.update({
+                "prediction_adjustment_ready": False,
+                "prediction_adjustment_version": None,
+                "prediction_framework_version": None,
+                "prediction_decision_state": None,
+                "market_opportunity_state": None,
+                "prediction_selected_strategy_ids": [],
+                "prediction_invalidation_contract": None,
+            })
+            return legacy
+
         hard_cap = max(
             1e-12,
             min(1.0, float(legacy.get("max_strategy_weight_constraint") or 1.0)),
@@ -162,7 +183,7 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
         selected_primary = str(adjustment.get("selected_strategy_id") or "P28_CASH")
 
         legacy.update({
-            "route_version": self.version,
+            "prediction_adjustment_ready": True,
             "selection_source": "H20_PREDICTION_ADJUSTMENT_NET_OF_META_SWITCH_COST",
             "strategy_selection_mode": "H20_PRIMARY_PLUS_MARKET_OPPORTUNITY_GATE_WITH_US_EXECUTION_CONSTRAINTS",
             "selected_strategy_id": selected_primary,
@@ -182,7 +203,7 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
             "prediction_selected_strategy_ids": adjustment.get("selected_strategy_ids"),
             "prediction_invalidation_contract": adjustment.get("invalidation_contract"),
             "selection_metric_semantics": (
-                "US primary selection now uses the isolated H20 prediction-adjustment layer. "
+                "US primary selection uses the isolated H20 prediction-adjustment layer when a complete H20 strategy history exists. "
                 "Immediate meta-switch cost is subtracted on the same H20 return scale; H5 is an exact H20 tie-break only; "
                 "H1 remains diagnostic-only. Opportunity Density can reduce exposure or produce an explicit No Trade state. "
                 "Risk, liquidity, capacity and concentration remain feasibility constraints rather than co-equal objectives."
