@@ -66,6 +66,9 @@ jobs:
       - name: Verify prediction horizon isolation
         working-directory: finlab_v2
         run: python prediction_adjustment_smoke.py
+      - name: Verify all-market opportunity integration
+        working-directory: finlab_v2
+        run: python all_market_prediction_gate_smoke.py
       - name: Run canonical release audit
         working-directory: finlab_v2
         run: python release_audit.py build
