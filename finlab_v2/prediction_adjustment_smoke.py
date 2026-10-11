@@ -24,7 +24,8 @@ def main() -> None:
         ],
         1.0,
     )
-    assert result["version"] == "us-prediction-adjustment@0.3.0", result
+    assert result["version"] == "us-prediction-adjustment@0.4.0", result
+    assert result["framework_version"] == "market-prediction-adjustment@0.4.0", result
     assert result["selected_strategy_id"] == "B", result
     assert result["rows"][0]["strategy_id"] == "B", result["rows"]
     assert result["rows"][0]["h1_used_for_selection"] is False
@@ -54,8 +55,6 @@ def main() -> None:
     h20 = cap_result["rows"][0]["horizons"]["20"]
     assert abs(h20["calibrated_horizon_return"]) <= h20["amplitude_cap_abs_return"] + 1e-12
 
-    # The newest daily observation must be ignored during OPEN/BREAK. This guards
-    # against intraday partial bars contaminating H1/H5/H20 selection.
     f = _state("F", 0.08, [0.002] * 20 + [-0.20])
     g = _state("G", 0.08, [0.001] * 21)
     open_result = build_us_prediction_adjustment(
@@ -72,8 +71,6 @@ def main() -> None:
     assert f_row["horizons"]["1"]["incomplete_latest_observation_dropped"] is True
     assert abs(f_row["horizons"]["1"]["same_horizon_realized_momentum"] - 0.002) < 1e-12
 
-    # A weak isolated positive edge must not force a trade. No-trade is an
-    # explicit decision when market opportunity density remains below the gate.
     weak = _state("WEAK", 0.01, [0.0001] * 20)
     neg1 = _state("NEG1", -0.10, [-0.001] * 20)
     neg2 = _state("NEG2", -0.08, [-0.0015] * 20)
@@ -92,8 +89,6 @@ def main() -> None:
     assert weak_result["market_opportunity_state"]["regime_level"] < 2, weak_result
     assert weak_result["pre_gate_target_strategy_weights"].get("WEAK", 0.0) > 0.0, weak_result
 
-    # A strong but narrow edge can pass the gate while exposure is reduced rather
-    # than treated as equivalent to an extreme opportunity regime.
     strong = _state("STRONG", 0.30, [0.004] * 20)
     narrow_result = build_us_prediction_adjustment(
         [strong, neg1, neg2],
