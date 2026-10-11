@@ -5,10 +5,15 @@ from statistics import pstdev
 from typing import Any, Iterable
 
 from .contracts import StrategyState
-from .opportunity_state import build_opportunity_state
+from .opportunity_state import build_opportunity_state, opportunity_profile
 
 
-VERSION = "us-prediction-adjustment@0.3.0"
+VERSION = "market-prediction-adjustment@0.4.0"
+MARKET_VERSIONS = {
+    "US": "us-prediction-adjustment@0.4.0",
+    "CN": "cn-prediction-adjustment@0.4.0",
+    "HK": "hk-prediction-adjustment@0.4.0",
+}
 HORIZONS = (1, 5, 20)
 TRADING_DAYS = 252.0
 SIGMA_CAP_MULTIPLE = 2.0
@@ -24,7 +29,6 @@ def _compound(values: Iterable[float]) -> float:
 
 
 def _annualized_state_to_horizon(value: float, horizon: int) -> float:
-    """Convert the legacy annualized state estimate onto the requested horizon scale."""
     return float(value) * float(horizon) / TRADING_DAYS
 
 
@@ -110,7 +114,6 @@ def _sign_state(value: float | None) -> str:
 
 
 def build_market_horizon_state(panel: Any, input_phase: str | None = None) -> dict:
-    """Return independent sign-only H1/H5/H20 market state diagnostics."""
     benchmark = str(panel.spec.benchmark)
     benchmark_close, benchmark_dropped = _completed_prices(
         panel.close.get(benchmark, []), input_phase
@@ -174,7 +177,6 @@ def _persistence_score(
     input_phase: str | None,
     lookback: int = 20,
 ) -> float:
-    """Estimate directional persistence without allowing H1/H5 promotion leakage."""
     recent, _ = _completed_returns(state.recent_returns, input_phase)
     sample = recent[-lookback:]
     if not sample or abs(float(forecast_return)) <= 1e-15:
@@ -201,36 +203,41 @@ def _candidate_state(row: dict) -> str:
     return "LONG"
 
 
-def _apply_opportunity_exposure_gate(
+def apply_market_opportunity_gate(
     weights: dict[str, float],
     opportunity_state: dict,
+    cash_id: str = "P28_CASH",
 ) -> dict[str, float]:
+    """Apply market-level opportunity exposure without changing relative risky weights."""
     if not bool(opportunity_state.get("trade_enabled")):
-        return {"P28_CASH": 1.0}
+        return {cash_id: 1.0}
     multiplier = max(0.0, min(1.0, float(opportunity_state.get("exposure_multiplier") or 0.0)))
-    gated = {
+    risky = {
         sid: max(0.0, float(weight)) * multiplier
         for sid, weight in weights.items()
-        if sid != "P28_CASH" and float(weight) > 1e-12
+        if sid != cash_id and float(weight) > 1e-12
     }
-    risky_total = sum(gated.values())
-    gated["P28_CASH"] = max(0.0, 1.0 - risky_total)
-    return {sid: weight for sid, weight in gated.items() if weight > 1e-12}
+    risky_total = sum(risky.values())
+    risky[cash_id] = max(0.0, 1.0 - risky_total)
+    return {sid: weight for sid, weight in risky.items() if weight > 1e-12}
 
 
-def build_us_prediction_adjustment(
+def build_market_prediction_adjustment(
+    market_id: str,
     states: list[StrategyState],
     candidate_selection_scores: list[dict],
     max_strategy_weight: float,
     input_phase: str | None = None,
 ) -> dict:
-    """Build the isolated US prediction layer with market opportunity gating.
+    """Build H1/H5/H20 prediction adjustment for US, CN, or HK.
 
-    H20 remains the only horizon allowed to promote or demote strategies. H5 is
-    used only as an exact tie-break after H20. H1 is diagnostic-only. The new
-    opportunity gate is also H20-only, so it cannot reintroduce short-horizon
-    leakage through exposure control.
+    H20 is the only promotion and market-opportunity horizon. H5 is an exact
+    H20 tie-break only. H1 is diagnostic-only. Market-specific opportunity
+    profiles alter gating and exposure, not horizon semantics.
     """
+    key = str(market_id or "").upper()
+    profile = opportunity_profile(key)
+    version = MARKET_VERSIONS[key]
     state_map = {str(s.strategy_id): s for s in states}
     cost_map = {
         str(row.get("strategy_id")): max(0.0, float(row.get("meta_switch_cost_fraction") or 0.0))
@@ -242,7 +249,9 @@ def build_us_prediction_adjustment(
     ]
     if not admissible_ids:
         return {
-            "version": VERSION,
+            "version": version,
+            "framework_version": VERSION,
+            "market_id": key,
             "status": "NO_ADMISSIBLE_STRATEGIES",
             "decision_state": "NO_TRADE",
             "input_phase": str(input_phase or "").upper() or None,
@@ -250,17 +259,15 @@ def build_us_prediction_adjustment(
             "pre_gate_target_strategy_weights": {"P28_CASH": 1.0},
             "selected_strategy_id": "P28_CASH",
             "selected_strategy_ids": [],
-            "market_opportunity_state": build_opportunity_state([]),
+            "market_opportunity_state": build_opportunity_state([], key),
+            "market_profile": profile,
             "rows": [],
         }
 
     rows = []
     for sid in admissible_ids:
         state = state_map[sid]
-        horizons = {
-            str(h): _horizon_forecast(state, h, input_phase)
-            for h in HORIZONS
-        }
+        horizons = {str(h): _horizon_forecast(state, h, input_phase) for h in HORIZONS}
         switch_cost = float(cost_map.get(sid, 0.0))
         h20_net = float(horizons["20"]["calibrated_horizon_return"]) - switch_cost
         h5_net = float(horizons["5"]["calibrated_horizon_return"]) - switch_cost
@@ -315,19 +322,19 @@ def build_us_prediction_adjustment(
     if remaining > 1e-12:
         pre_gate_weights["P28_CASH"] = remaining
 
-    opportunity_state = build_opportunity_state(ranked)
-    weights = _apply_opportunity_exposure_gate(pre_gate_weights, opportunity_state)
-
+    opportunity_state = build_opportunity_state(ranked, key)
+    weights = apply_market_opportunity_gate(pre_gate_weights, opportunity_state)
     selected = [
         sid for sid, weight in weights.items()
         if sid != "P28_CASH" and float(weight) > 1e-12
     ]
-    decision_state = "ACTIVE" if selected else "NO_TRADE"
 
     return {
-        "version": VERSION,
+        "version": version,
+        "framework_version": VERSION,
+        "market_id": key,
         "status": "READY",
-        "decision_state": decision_state,
+        "decision_state": "ACTIVE" if selected else "NO_TRADE",
         "input_phase": str(input_phase or "").upper() or None,
         "primary_horizon_days": 20,
         "secondary_tie_break_horizon_days": 5,
@@ -354,6 +361,7 @@ def build_us_prediction_adjustment(
         "pre_gate_target_strategy_weights": pre_gate_weights,
         "target_strategy_weights": weights,
         "market_opportunity_state": opportunity_state,
+        "market_profile": profile,
         "no_trade_is_valid_decision": True,
         "invalidation_contract": {
             "soft_invalidation": "MARKET_OPPORTUNITY_REGIME_LEVEL_LT_2",
@@ -363,3 +371,48 @@ def build_us_prediction_adjustment(
         },
         "rows": ranked,
     }
+
+
+def build_us_prediction_adjustment(
+    states: list[StrategyState],
+    candidate_selection_scores: list[dict],
+    max_strategy_weight: float,
+    input_phase: str | None = None,
+) -> dict:
+    return build_market_prediction_adjustment(
+        "US",
+        states,
+        candidate_selection_scores,
+        max_strategy_weight,
+        input_phase,
+    )
+
+
+def build_cn_prediction_adjustment(
+    states: list[StrategyState],
+    candidate_selection_scores: list[dict],
+    max_strategy_weight: float,
+    input_phase: str | None = None,
+) -> dict:
+    return build_market_prediction_adjustment(
+        "CN",
+        states,
+        candidate_selection_scores,
+        max_strategy_weight,
+        input_phase,
+    )
+
+
+def build_hk_prediction_adjustment(
+    states: list[StrategyState],
+    candidate_selection_scores: list[dict],
+    max_strategy_weight: float,
+    input_phase: str | None = None,
+) -> dict:
+    return build_market_prediction_adjustment(
+        "HK",
+        states,
+        candidate_selection_scores,
+        max_strategy_weight,
+        input_phase,
+    )
