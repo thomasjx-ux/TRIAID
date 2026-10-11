@@ -165,7 +165,6 @@ class TriaidCoreModule:
             if "P28_CASH" not in group.members:
                 target.pop("P28_CASH",None)
             selection_source="MARKET_PREDICTION_ADJUSTMENT"
-            regime_policy=f"{regime_policy}+{prediction_adjustment.get('decision_state','UNKNOWN')}"
 
         strength=max(0.0,min(1.0,self.params.intervention_strength))
         effective_strength=(
