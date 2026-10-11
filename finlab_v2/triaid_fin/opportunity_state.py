@@ -4,7 +4,7 @@ from statistics import mean
 from typing import Any
 
 
-VERSION = "market-opportunity-state@0.2.0"
+VERSION = "market-opportunity-state@0.3.0"
 
 MARKET_PROFILES: dict[str, dict[str, Any]] = {
     "US": {
@@ -61,80 +61,41 @@ def _regime_level(opportunity_density: float, thresholds: tuple[float, float, fl
     return 4, "EXTREME_OPPORTUNITY"
 
 
-def build_opportunity_state(rows: list[dict[str, Any]], market_id: str = "US") -> dict[str, Any]:
-    """Build a market-level opportunity gate from H20 evidence only.
-
-    H1 and H5 are excluded by construction. Market-specific thresholds and
-    exposure multipliers encode execution structure without retuning against
-    posterior outcomes.
-    """
+def build_opportunity_state_from_components(
+    market_id: str,
+    positive_edge_breadth: float,
+    edge_quality: float,
+    history_coverage: float,
+    persistence_quality: float,
+    positive_edge_count: int,
+    admissible_count: int,
+    evidence_scope: str,
+) -> dict[str, Any]:
     profile = opportunity_profile(market_id)
     thresholds = profile["thresholds"]
     exposure_by_level = profile["exposure_by_level"]
+    breadth = _clip01(positive_edge_breadth)
+    edge = _clip01(edge_quality)
+    coverage = _clip01(history_coverage)
+    persistence = _clip01(persistence_quality)
+    positive_count = max(0, int(positive_edge_count))
+    admissible = max(0, int(admissible_count))
 
-    if not rows:
-        return {
-            "version": VERSION,
-            "market_id": profile["market_id"],
-            "profile_version": profile["profile_version"],
-            "opportunity_density": 0.0,
-            "regime_level": 0,
-            "regime": "FROZEN",
-            "trade_enabled": False,
-            "exposure_multiplier": 0.0,
-            "positive_edge_breadth": 0.0,
-            "positive_edge_count": 0,
-            "admissible_count": 0,
-            "edge_quality": 0.0,
-            "history_coverage": 0.0,
-            "persistence_quality": 0.0,
-            "gate_reason": "NO_ADMISSIBLE_STRATEGIES",
-            "horizon_isolation": "H20_ONLY",
-            "thresholds": list(thresholds),
-            "exposure_by_level": exposure_by_level,
-            "parameter_provenance": profile["parameter_provenance"],
-            "market_structure_note": profile["market_structure_note"],
-        }
-
-    positive_rows = [row for row in rows if float(row.get("h20_net_after_switch_cost") or 0.0) > 0.0]
-    positive_breadth = len(positive_rows) / float(len(rows))
-
-    edge_quality_values: list[float] = []
-    for row in positive_rows:
-        h20 = row.get("horizons", {}).get("20", {})
-        cap = max(1e-12, float(h20.get("amplitude_cap_abs_return") or 0.0))
-        edge = max(0.0, float(row.get("h20_net_after_switch_cost") or 0.0))
-        edge_quality_values.append(_clip01(edge / cap))
-    edge_quality = mean(edge_quality_values) if edge_quality_values else 0.0
-
-    coverage_values = [
-        _clip01(float(row.get("horizons", {}).get("20", {}).get("history_coverage") or 0.0))
-        for row in rows
-    ]
-    history_coverage = mean(coverage_values) if coverage_values else 0.0
-
-    persistence_values = [
-        _clip01(float(row.get("persistence_score") or 0.0))
-        for row in positive_rows
-    ]
-    persistence_quality = mean(persistence_values) if persistence_values else 0.0
-
-    if not positive_rows:
-        opportunity_density = 0.0
+    if admissible <= 0 or positive_count <= 0:
+        density = 0.0
     else:
-        opportunity_density = _clip01(
-            0.55 * positive_breadth
-            + 0.20 * edge_quality
-            + 0.15 * history_coverage
-            + 0.10 * persistence_quality
+        density = _clip01(
+            0.55 * breadth
+            + 0.20 * edge
+            + 0.15 * coverage
+            + 0.10 * persistence
         )
-
-    regime_level, regime = _regime_level(opportunity_density, thresholds)
-    trade_enabled = bool(positive_rows) and regime_level >= 2
-    exposure_multiplier = float(exposure_by_level[regime_level])
-
-    if not positive_rows:
-        gate_reason = "NO_POSITIVE_H20_EDGE"
+    regime_level, regime = _regime_level(density, thresholds)
+    trade_enabled = positive_count > 0 and regime_level >= 2
+    if admissible <= 0:
+        gate_reason = "NO_ADMISSIBLE_STRATEGIES"
+    elif positive_count <= 0:
+        gate_reason = "NO_POSITIVE_EDGE"
     elif not trade_enabled:
         gate_reason = "POSITIVE_EDGE_EXISTS_BUT_MARKET_OPPORTUNITY_DENSITY_IS_TOO_LOW"
     else:
@@ -144,19 +105,19 @@ def build_opportunity_state(rows: list[dict[str, Any]], market_id: str = "US") -
         "version": VERSION,
         "market_id": profile["market_id"],
         "profile_version": profile["profile_version"],
-        "opportunity_density": float(opportunity_density),
+        "opportunity_density": float(density),
         "regime_level": int(regime_level),
         "regime": regime,
-        "trade_enabled": trade_enabled,
-        "exposure_multiplier": exposure_multiplier,
-        "positive_edge_breadth": float(positive_breadth),
-        "positive_edge_count": len(positive_rows),
-        "admissible_count": len(rows),
-        "edge_quality": float(edge_quality),
-        "history_coverage": float(history_coverage),
-        "persistence_quality": float(persistence_quality),
+        "trade_enabled": bool(trade_enabled),
+        "exposure_multiplier": float(exposure_by_level[regime_level]),
+        "positive_edge_breadth": float(breadth),
+        "positive_edge_count": positive_count,
+        "admissible_count": admissible,
+        "edge_quality": float(edge),
+        "history_coverage": float(coverage),
+        "persistence_quality": float(persistence),
         "gate_reason": gate_reason,
-        "horizon_isolation": "H20_ONLY",
+        "evidence_scope": str(evidence_scope),
         "thresholds": list(thresholds),
         "exposure_by_level": exposure_by_level,
         "parameter_provenance": profile["parameter_provenance"],
@@ -168,3 +129,44 @@ def build_opportunity_state(rows: list[dict[str, Any]], market_id: str = "US") -
             "persistence_quality": 0.10,
         },
     }
+
+
+def build_opportunity_state(rows: list[dict[str, Any]], market_id: str = "US") -> dict[str, Any]:
+    if not rows:
+        return build_opportunity_state_from_components(
+            market_id,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0,
+            0,
+            "H20_ONLY",
+        )
+
+    positive_rows = [row for row in rows if float(row.get("h20_net_after_switch_cost") or 0.0) > 0.0]
+    positive_breadth = len(positive_rows) / float(len(rows))
+    edge_quality_values: list[float] = []
+    for row in positive_rows:
+        h20 = row.get("horizons", {}).get("20", {})
+        cap = max(1e-12, float(h20.get("amplitude_cap_abs_return") or 0.0))
+        edge = max(0.0, float(row.get("h20_net_after_switch_cost") or 0.0))
+        edge_quality_values.append(_clip01(edge / cap))
+    coverage_values = [
+        _clip01(float(row.get("horizons", {}).get("20", {}).get("history_coverage") or 0.0))
+        for row in rows
+    ]
+    persistence_values = [
+        _clip01(float(row.get("persistence_score") or 0.0))
+        for row in positive_rows
+    ]
+    return build_opportunity_state_from_components(
+        market_id,
+        positive_breadth,
+        mean(edge_quality_values) if edge_quality_values else 0.0,
+        mean(coverage_values) if coverage_values else 0.0,
+        mean(persistence_values) if persistence_values else 0.0,
+        len(positive_rows),
+        len(rows),
+        "H20_ONLY",
+    )
