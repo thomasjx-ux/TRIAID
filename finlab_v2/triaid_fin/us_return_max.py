@@ -134,7 +134,6 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
             input_phase,
             previous_decision,
         )
-        legacy["route_version"] = self.version
 
         # Do not fabricate persistence from an annualized anchor when completed
         # strategy history is absent. Old/synthetic callers remain on the proven
@@ -183,6 +182,7 @@ class USReturnMaxRoute(_LegacyUSReturnMaxRoute):
         selected_primary = str(adjustment.get("selected_strategy_id") or "P28_CASH")
 
         legacy.update({
+            "route_version": self.version,
             "prediction_adjustment_ready": True,
             "selection_source": "H20_PREDICTION_ADJUSTMENT_NET_OF_META_SWITCH_COST",
             "strategy_selection_mode": "H20_PRIMARY_PLUS_MARKET_OPPORTUNITY_GATE_WITH_US_EXECUTION_CONSTRAINTS",
