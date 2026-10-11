@@ -34,6 +34,7 @@ class HKReturnMaxRoute(_LegacyHKReturnMaxRoute):
         prediction_version = diagnostics.get("prediction_adjustment_version")
         if not prediction_version:
             result.update({
+                "route_version": _LegacyHKReturnMaxRoute.version,
                 "prediction_adjustment_ready": False,
                 "prediction_adjustment_version": None,
                 "prediction_framework_version": None,
