@@ -2,6 +2,9 @@ from pathlib import Path
 
 smoke=Path("production_api_smoke.py").read_text(encoding="utf-8")
 route=Path("triaid_fin/us_return_max.py").read_text(encoding="utf-8")
+legacy_route=Path("triaid_fin/us_return_max_legacy.py").read_text(encoding="utf-8")
+core=Path("triaid_fin/core.py").read_text(encoding="utf-8")
+opportunity=Path("triaid_fin/opportunity_state.py").read_text(encoding="utf-8")
 
 for needle in [
     "TRIAID 相对收益差",
@@ -14,6 +17,8 @@ for needle in [
 ]:
     assert needle in smoke,needle
 
+# The old US implementation is preserved verbatim as a compatibility module;
+# the active wrapper adds H20 opportunity gating on top of it.
 for needle in [
     "PRIMARY_OBJECTIVE",
     "OBJECTIVE_CONSTITUTION",
@@ -24,10 +29,36 @@ for needle in [
     "risk_used_as_secondary_objective",
     "uncertainty_used_as_secondary_objective",
 ]:
+    assert needle in legacy_route,needle
+
+for needle in [
+    'version = "us-return-max-route@0.7.0"',
+    "build_market_prediction_adjustment",
+    "H20_PREDICTION_ADJUSTMENT_NET_OF_META_SWITCH_COST",
+    "prediction_adjustment_ready",
+    "market_opportunity_state",
+    "prediction_invalidation_contract",
+]:
     assert needle in route,needle
 
-assert "TRIAID 增益" not in smoke
+for needle in [
+    "MARKET_PREDICTION_ADJUSTMENT",
+    "prediction_adjustment_version",
+    "prediction_decision_state",
+    "market_opportunity_state",
+]:
+    assert needle in core,needle
 
+for needle in [
+    '"US"',
+    '"CN"',
+    '"HK"',
+    "MARKET_SPECIFIC_FIXED_DESIGN_PRIOR_NOT_OUTCOME_RETUNED",
+    "NO_POSITIVE_EDGE",
+]:
+    assert needle in opportunity,needle
+
+assert "TRIAID 增益" not in smoke
 
 smoke_text=Path("production_api_smoke.py").read_text(encoding="utf-8")
 assert 'TRIAID_PRODUCTION_SMOKE_MUTATIONS","0"' in smoke_text

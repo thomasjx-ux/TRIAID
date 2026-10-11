@@ -70,7 +70,7 @@ panel=MarketPanel(
 
 core=RecoveryWaveCore(CoreParameters(version="selftest",risk_off_multiplier=0.55))
 decision=core.decide(panel,"risk_off",None,"POSTCLOSE")
-assert decision["core_version"]=="recovery-wave-core@0.4.0"
+assert decision["core_version"]=="recovery-wave-core@0.5.0"
 assert decision["research_only"] is True
 assert decision["soft_recovery_shadow"]["shadow_only"] is True
 assert decision["soft_recovery_shadow"]["applied_to_weights"] is False
@@ -82,6 +82,8 @@ assert decision["execution_discipline"]["same_bar_execution_allowed"] is False
 assert decision["execution_discipline"]["execution_rule"]=="DECISION_AT_T_APPLIES_FROM_NEXT_COMPLETE_TRADABLE_BAR"
 assert set(decision["first_order_states"])==set(spec.risk_assets)
 assert len(decision["trade_opinions"])==4
+assert decision["market_opportunity_state"]["market_id"]=="CN"
+assert decision["decision_state"] in {"ACTIVE","NO_TRADE"}
 allocated=sum(x["target_weight"] for x in decision["trade_opinions"])
 assert decision["second_order"]["base_risk_budget"]==0.55
 assert 0.0<=decision["second_order"]["evidence_strength"]<=1.0
@@ -95,6 +97,7 @@ assert len(decision["capital_capacity"]["sleeves"])==4
 for row in decision["trade_opinions"]:
     assert row["action"] in {"INITIATE","ADD","HOLD","REDUCE","EXIT","WAIT"}
     assert row["analog_samples"]<=20
+    assert "pre_opportunity_target_weight" in row
     if row["expected_reversal_horizon_days"] is not None:
         assert row["expected_reversal_horizon_days"] in {3,5,10,20}
 
@@ -111,7 +114,7 @@ assert dup["decision_hash"]==first["decision_hash"]
 assert first["previous_decision_id"]==legacy_same_snapshot["decision_id"]
 assert first["previous_decision_hash"]==legacy_same_snapshot["decision_hash"]
 assert legacy_same_snapshot["decision_id"]!=first["decision_id"]
-assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.4.0")["decision_id"]==first["decision_id"]
+assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.5.0")["decision_id"]==first["decision_id"]
 assert ledger.by_snapshot("CN","CN:SNAP:1","recovery-wave-core@0.1.1")["decision_id"]==legacy_same_snapshot["decision_id"]
 
 products=[x["symbol"] for x in first["trade_opinions"]]
