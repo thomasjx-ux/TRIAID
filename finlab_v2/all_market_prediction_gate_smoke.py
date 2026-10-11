@@ -3,8 +3,11 @@ from __future__ import annotations
 from triaid_fin.contracts import BilingualText, MarketSnapshot, StrategyGroup, StrategyState
 from triaid_fin.core import TriaidCoreModule
 from triaid_fin.evolution import CoreParameters
+from triaid_fin.hk_return_max import HKReturnMaxRoute
 from triaid_fin.opportunity_state import opportunity_profile
 from triaid_fin.prediction_adjustment import build_market_prediction_adjustment
+from triaid_fin.recovery_core import RecoveryWaveCore
+from triaid_fin.us_return_max import USReturnMaxRoute
 
 
 def _state(strategy_id: str, expected: float, returns: list[float]) -> StrategyState:
@@ -30,6 +33,12 @@ def _group() -> StrategyGroup:
 
 
 def main() -> None:
+    # Primary routes must point at the upgraded implementations, not merely the
+    # common helper layer.
+    assert USReturnMaxRoute.version == "us-return-max-route@0.7.0"
+    assert RecoveryWaveCore.version == "recovery-wave-core@0.5.0"
+    assert HKReturnMaxRoute.version == "hk-return-max-route@0.3.0"
+
     strong = _state("A", 0.30, [0.004] * 20)
     weak = _state("B", -0.10, [-0.001] * 20)
     cash = _state("P28_CASH", 0.0, [0.0] * 20)
