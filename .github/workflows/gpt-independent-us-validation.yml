@@ -46,11 +46,20 @@ jobs:
           if gh api "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" >/dev/null 2>&1; then
             echo "Existing immutable freeze found. Verifying exact readback."
           else
-            CONTENT="$(base64 -w0 /tmp/triaid-freeze/decision.json)"
+            export FREEZE_T0="$T0"
+            python - <<'PY' >/tmp/triaid-freeze/create-request.json
+          import base64,json,os
+          content=base64.b64encode(open("/tmp/triaid-freeze/decision.json","rb").read()).decode("ascii")
+          payload={
+              "message":f"Freeze independent US prospective decision {os.environ['FREEZE_T0']}",
+              "content":content,
+              "branch":os.environ["GITHUB_REF_NAME"],
+          }
+          print(json.dumps(payload,separators=(",",":")))
+          PY
             gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" \
-              -f message="Freeze independent US prospective decision $T0" \
-              -f content="$CONTENT" \
-              -f branch="${GITHUB_REF_NAME}" >/tmp/triaid-freeze/create-response.json
+              --input /tmp/triaid-freeze/create-request.json \
+              >/tmp/triaid-freeze/create-response.json
           fi
           gh api "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" >/tmp/triaid-freeze/readback.json
           python - <<'PY'
