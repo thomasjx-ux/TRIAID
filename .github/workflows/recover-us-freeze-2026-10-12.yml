@@ -1,0 +1,79 @@
+name: Recover US Freeze 2026-10-12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/recover-us-freeze-2026-10-12.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download original failed-run evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/triaid-recovery
+          gh run download 38337609803 \
+            -n gpt-independent-us-38337609803 \
+            -D /tmp/triaid-recovery
+          test -s /tmp/triaid-recovery/decision.json
+      - name: Validate and freeze original decision bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          p='/tmp/triaid-recovery/decision.json'
+          raw=open(p,'rb').read()
+          obj=json.loads(raw)
+          assert obj.get('validity_status') == 'READY_TO_FREEZE'
+          assert obj.get('t0_trade_date') == '2026-10-12'
+          assert obj.get('target_t1_trade_date') == '2026-10-13'
+          got=hashlib.sha256(raw).hexdigest()
+          expected='1c1ba40c7a3ebc2e5e4c71c070488836420b12667e74306c28bf259059ec6209'
+          assert got == expected, (got, expected)
+          print('ORIGINAL_DECISION_VALID', len(raw), got)
+          PY
+          T0="2026-10-12"
+          PATH_IN_REPO="gpt_async_validation/ledger/US/$T0/decision.json"
+          if gh api "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" >/tmp/triaid-recovery/existing.json 2>/dev/null; then
+            echo "Existing freeze found; verifying exact bytes."
+          else
+            export FREEZE_T0="$T0"
+            python - <<'PY' >/tmp/triaid-recovery/create-request.json
+          import base64,json,os
+          content=base64.b64encode(open('/tmp/triaid-recovery/decision.json','rb').read()).decode('ascii')
+          payload={
+              'message':f"Recover immutable US prospective decision {os.environ['FREEZE_T0']} from run 38337609803",
+              'content':content,
+              'branch':os.environ['GITHUB_REF_NAME'],
+          }
+          print(json.dumps(payload,separators=(',',':')))
+          PY
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" \
+              --input /tmp/triaid-recovery/create-request.json \
+              >/tmp/triaid-recovery/create-response.json
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/contents/${PATH_IN_REPO}" >/tmp/triaid-recovery/readback.json
+          python - <<'PY'
+          import base64,hashlib,json
+          local=open('/tmp/triaid-recovery/decision.json','rb').read()
+          remote=json.load(open('/tmp/triaid-recovery/readback.json'))
+          got=base64.b64decode(remote['content'])
+          if got != local:
+              raise SystemExit('RECOVERY_FAILED: readback bytes differ from original artifact')
+          digest=hashlib.sha256(got).hexdigest()
+          if digest != '1c1ba40c7a3ebc2e5e4c71c070488836420b12667e74306c28bf259059ec6209':
+              raise SystemExit('RECOVERY_FAILED: SHA256 mismatch')
+          print('RECOVERY_VALID_FROZEN', remote['path'], remote['sha'], digest)
+          PY
