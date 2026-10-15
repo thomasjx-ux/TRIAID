@@ -28,6 +28,7 @@ jobs:
           python -m py_compile \
             finlab_v2/standalone/run_triaid_fin.py \
             finlab_v2/standalone/adaptive_v36.py \
+            finlab_v2/standalone/action_evaluation_v36.py \
             finlab_v2/standalone/run_triaid_fin_v36.py \
             finlab_v2/standalone/adaptive_v36_smoke.py
       - name: Run adaptive V3.6 smoke
