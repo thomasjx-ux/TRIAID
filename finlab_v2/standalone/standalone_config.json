@@ -16,5 +16,63 @@
     "max_strategy_weight": null,
     "max_drawdown_constraint": null,
     "execution_profile": {}
+  },
+  "adaptive_v36": {
+    "enabled": true,
+    "poll_seconds_active": 60,
+    "poll_seconds_idle": 300,
+    "core_policy_version": "FIN_CORE_V3.6",
+    "evidence_contract_version": "STANDARD_EVIDENCE_V1",
+    "driver_governance": {
+      "score_weights": {
+        "index_weight_score": 0.20,
+        "market_impact_score": 0.25,
+        "propagation_score": 0.25,
+        "liquidity_score": 0.15,
+        "incremental_info_score": 0.10,
+        "stability_score": 0.05
+      },
+      "markets": {
+        "US": {
+          "admission_percentile": 0.75,
+          "retention_percentile": 0.50,
+          "probation_sessions": 3,
+          "exit_reviews": 2,
+          "candidates": [
+            {"symbol": "NVDA", "name": "NVIDIA", "sector": "Semiconductors", "index_weight_score": null},
+            {"symbol": "AAPL", "name": "Apple", "sector": "Technology Hardware", "index_weight_score": null},
+            {"symbol": "MSFT", "name": "Microsoft", "sector": "Software", "index_weight_score": null},
+            {"symbol": "AMZN", "name": "Amazon", "sector": "Consumer/Cloud", "index_weight_score": null},
+            {"symbol": "GOOGL", "name": "Alphabet", "sector": "Internet/AI", "index_weight_score": null},
+            {"symbol": "AVGO", "name": "Broadcom", "sector": "Semiconductors", "index_weight_score": null},
+            {"symbol": "META", "name": "Meta Platforms", "sector": "Internet/AI", "index_weight_score": null}
+          ]
+        },
+        "CN": {
+          "admission_percentile": 0.75,
+          "retention_percentile": 0.50,
+          "probation_sessions": 3,
+          "exit_reviews": 2,
+          "candidates": []
+        },
+        "HK": {
+          "admission_percentile": 0.75,
+          "retention_percentile": 0.50,
+          "probation_sessions": 3,
+          "exit_reviews": 2,
+          "candidates": []
+        }
+      }
+    },
+    "action_levels": {
+      "rule_version": "VOL_BAND_V1",
+      "trigger_sigma_mult": 0.25,
+      "execute_sigma_mult": 0.25,
+      "invalidation_sigma_mult": 0.75,
+      "target1_sigma_mult": 1.00,
+      "target2_sigma_mult": 1.75,
+      "max_slippage_pct": 0.003,
+      "valid_minutes": 90
+    }
   }
 }
