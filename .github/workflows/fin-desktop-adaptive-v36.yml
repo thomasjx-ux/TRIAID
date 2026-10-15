@@ -1,0 +1,40 @@
+name: FIN Desktop Adaptive V3.6
+
+on:
+  push:
+    branches:
+      - fin-desktop-adaptive-v36-20261016
+  pull_request:
+    paths:
+      - "finlab_v2/standalone/**"
+      - ".github/workflows/fin-desktop-adaptive-v36.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FIN dependencies
+        run: pip install -r finlab_v2/requirements.txt
+      - name: Compile standalone adaptive modules
+        run: |
+          python -m py_compile \
+            finlab_v2/standalone/run_triaid_fin.py \
+            finlab_v2/standalone/adaptive_v36.py \
+            finlab_v2/standalone/run_triaid_fin_v36.py \
+            finlab_v2/standalone/adaptive_v36_smoke.py
+      - name: Run adaptive V3.6 smoke
+        run: python finlab_v2/standalone/adaptive_v36_smoke.py
+      - name: Verify new entrypoint imports
+        run: python finlab_v2/standalone/run_triaid_fin_v36.py --help
+      - name: Preserve legacy FIN risk transition smoke
+        run: python finlab_v2/risk_transition_smoke.py
+      - name: Verify base standalone remains importable
+        run: python finlab_v2/standalone/run_triaid_fin.py --help
