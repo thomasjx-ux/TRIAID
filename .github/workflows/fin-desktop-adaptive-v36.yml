@@ -29,12 +29,14 @@ jobs:
             finlab_v2/standalone/run_triaid_fin.py \
             finlab_v2/standalone/adaptive_v36.py \
             finlab_v2/standalone/action_evaluation_v36.py \
+            finlab_v2/standalone/action_evaluation_runner_v36.py \
             finlab_v2/standalone/run_triaid_fin_v36.py \
+            finlab_v2/standalone/run_triaid_fin_desktop.py \
             finlab_v2/standalone/adaptive_v36_smoke.py
       - name: Run adaptive V3.6 smoke
         run: python finlab_v2/standalone/adaptive_v36_smoke.py
-      - name: Verify new entrypoint imports
-        run: python finlab_v2/standalone/run_triaid_fin_v36.py --help
+      - name: Verify final desktop entrypoint imports
+        run: python finlab_v2/standalone/run_triaid_fin_desktop.py --help
       - name: Preserve legacy FIN risk transition smoke
         run: python finlab_v2/risk_transition_smoke.py
       - name: Verify base standalone remains importable
