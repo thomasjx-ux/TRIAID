@@ -47,14 +47,16 @@ if errorlevel 1 goto :deps_failed
 :dependencies_ready
 if "%CHECK_ONLY%"=="1" goto :check_only
 
-echo [TRIAID FIN] Starting standalone research runtime...
-"%PY%" finlab_v2\standalone\run_triaid_fin.py --watch
+echo [TRIAID FIN] Starting standalone adaptive V3.6 research runtime...
+"%PY%" finlab_v2\standalone\run_triaid_fin_v36.py --watch
 exit /b %errorlevel%
 
 :check_only
-echo [TRIAID FIN] Verifying standalone launcher and runtime imports...
-"%PY%" finlab_v2\standalone\run_triaid_fin.py --help >nul
+echo [TRIAID FIN] Verifying standalone adaptive V3.6 launcher and runtime imports...
+"%PY%" finlab_v2\standalone\run_triaid_fin_v36.py --help >nul
 if errorlevel 1 exit /b 20
+"%PY%" finlab_v2\standalone\adaptive_v36_smoke.py
+if errorlevel 1 exit /b 21
 echo [TRIAID FIN] Windows launcher check passed.
 exit /b 0
 
