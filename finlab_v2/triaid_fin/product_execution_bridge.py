@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 
-VERSION = "product-execution-bridge@0.1.0"
+VERSION = "product-execution-bridge@0.2.0"
 DEFAULT_MAX_QUOTE_AGE_SECONDS = 15 * 60
 EXECUTION_PHASES = {"OPEN"}
 
@@ -14,6 +15,68 @@ def _positive_weights(weights: dict[str, float] | None) -> dict[str, float]:
         for symbol, weight in (weights or {}).items()
         if float(weight) > 1e-12
     }
+
+
+def _as_positive_float(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if result > 0.0 else None
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def quote_receipts_from_l1(payload: dict | None, now: datetime | None = None) -> dict[str, dict]:
+    """Normalize provider L1 quotes into freshness receipts used by the gate."""
+    raw = payload or {}
+    provider = raw.get("provider")
+    rows = raw.get("symbols") or {}
+    observed_at = now or datetime.now(timezone.utc)
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    observed_at = observed_at.astimezone(timezone.utc)
+
+    receipts: dict[str, dict] = {}
+    for symbol, quote in rows.items():
+        bid = _as_positive_float((quote or {}).get("bid_price"))
+        ask = _as_positive_float((quote or {}).get("ask_price"))
+        if bid is not None and ask is not None:
+            reference_price = (bid + ask) / 2.0
+            spread_bps = ((ask - bid) / reference_price * 10000.0) if reference_price > 0.0 else None
+        else:
+            reference_price = ask or bid
+            spread_bps = None
+        source_timestamp = (quote or {}).get("timestamp")
+        parsed_timestamp = _parse_timestamp(source_timestamp)
+        age_seconds = (
+            (observed_at - parsed_timestamp).total_seconds()
+            if parsed_timestamp is not None
+            else None
+        )
+        receipts[str(symbol)] = {
+            "price": reference_price,
+            "bid_price": bid,
+            "ask_price": ask,
+            "spread_bps": spread_bps,
+            "age_seconds": age_seconds,
+            "source": provider,
+            "source_timestamp": source_timestamp,
+            "receipt_timestamp": observed_at.isoformat(),
+            "execution_grade": bool(raw.get("execution_grade", False)),
+        }
+    return receipts
 
 
 def _capacity_rows(capital_capacity: dict | None) -> dict[str, list[dict]]:
@@ -81,10 +144,14 @@ def _quote_state(
         "status": status,
         "verified": verified,
         "price": price_value if price_value > 0.0 else None,
+        "bid_price": receipt.get("bid_price"),
+        "ask_price": receipt.get("ask_price"),
+        "spread_bps": receipt.get("spread_bps"),
         "age_seconds": age_value,
         "source": receipt.get("source"),
         "source_timestamp": receipt.get("source_timestamp"),
         "receipt_timestamp": receipt.get("receipt_timestamp"),
+        "execution_grade": bool(receipt.get("execution_grade", False)),
     }
 
 
