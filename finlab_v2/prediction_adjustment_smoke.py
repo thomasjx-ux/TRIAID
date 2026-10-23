@@ -24,8 +24,10 @@ def main() -> None:
         ],
         1.0,
     )
-    assert result["version"] == "us-prediction-adjustment@0.4.0", result
-    assert result["framework_version"] == "market-prediction-adjustment@0.4.0", result
+    assert result["version"] == "us-prediction-adjustment@0.5.0", result
+    assert result["framework_version"] == "market-prediction-adjustment@0.5.0", result
+    assert result["amplitude_calibration"]["method"] == "MAX_TWO_SIGMA_AND_EMPIRICAL_ABS_TAIL_FLOOR"
+    assert result["amplitude_calibration"]["outcome_specific_retuning"] is False
     assert result["selected_strategy_id"] == "B", result
     assert result["rows"][0]["strategy_id"] == "B", result["rows"]
     assert result["rows"][0]["h1_used_for_selection"] is False
@@ -54,6 +56,18 @@ def main() -> None:
     )
     h20 = cap_result["rows"][0]["horizons"]["20"]
     assert abs(h20["calibrated_horizon_return"]) <= h20["amplitude_cap_abs_return"] + 1e-12
+    assert h20["amplitude_cap_abs_return"] >= h20["amplitude_gaussian_daily_cap"] * (20.0 ** 0.5) - 1e-12
+    assert h20["amplitude_tail_observation_count"] == 20
+
+    fat_tail = _state("TAIL", 0.20, [0.001] * 45 + [0.015] * 10 + [0.04] * 8)
+    tail_result = build_us_prediction_adjustment(
+        [fat_tail],
+        [{"strategy_id": "TAIL", "meta_switch_cost_fraction": 0.0}],
+        1.0,
+    )
+    tail_h20 = tail_result["rows"][0]["horizons"]["20"]
+    assert tail_h20["amplitude_empirical_abs_tail_daily"] > 0.0
+    assert tail_h20["amplitude_cap_abs_return"] >= tail_h20["amplitude_gaussian_daily_cap"] * (20.0 ** 0.5) - 1e-12
 
     f = _state("F", 0.08, [0.002] * 20 + [-0.20])
     g = _state("G", 0.08, [0.001] * 21)
