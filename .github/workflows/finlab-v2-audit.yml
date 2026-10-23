@@ -69,6 +69,9 @@ jobs:
       - name: Verify buyable-product execution bridge
         working-directory: finlab_v2
         run: python product_execution_bridge_smoke.py
+      - name: Verify cross-sectional structural risk brake
+        working-directory: finlab_v2
+        run: python structural_risk_smoke.py
       - name: Verify all-market opportunity integration
         working-directory: finlab_v2
         run: python all_market_prediction_gate_smoke.py
