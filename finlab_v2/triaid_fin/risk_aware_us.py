@@ -11,6 +11,7 @@ from .prediction_adjustment import (
 )
 from .product_execution_bridge import build_product_execution_plan
 from .risk_transition import apply_fast_brake, detect_state_break, enforce_asset_concentration
+from .structural_risk import build_cross_sectional_risk_brake
 from .us_return_max import USReturnMaxRoute
 
 
@@ -19,12 +20,12 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
 
     The base route remains the compatibility and control path. This overlay replaces
     promotion/ranking with an internal H20-primary forecast adjustment, keeps H5 as
-    an exact tie-break only, keeps H1 diagnostic-only, then applies the existing
-    state-break brake and underlying-exposure limits.
+    an exact tie-break only, keeps H1 diagnostic-only, then applies benchmark and
+    cross-sectional brake layers plus underlying-exposure limits.
     """
 
-    version = "us-return-max-route@0.9.0"
-    overlay_version = "us-risk-overlay@0.3.0"
+    version = "us-return-max-route@0.10.0"
+    overlay_version = "us-risk-overlay@0.4.0"
 
     def _rebuild_capacity(self, panel: Any, input_phase: str | None, target_assets: dict[str, float]) -> dict:
         completed_i = self._completed_index(panel, input_phase)
@@ -144,10 +145,23 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
 
         market_horizon_state = build_market_horizon_state(panel, input_phase=input_phase)
         transition = detect_state_break(panel)
+        structural_brake = build_cross_sectional_risk_brake(panel, input_phase=input_phase)
+        benchmark_cap = float(transition.get("risk_cap") or 1.0)
+        structural_cap = float(structural_brake.get("risk_cap") or 1.0)
+        effective_risk_cap = min(benchmark_cap, structural_cap)
         braked_strategy_weights, brake_diag = apply_fast_brake(
             predicted_strategy_weights,
-            float(transition.get("risk_cap") or 1.0),
+            effective_risk_cap,
         )
+        brake_diag["benchmark_state_break_risk_cap"] = benchmark_cap
+        brake_diag["cross_sectional_risk_cap"] = structural_cap
+        brake_diag["effective_risk_cap"] = effective_risk_cap
+        brake_diag["effective_cap_source"] = (
+            "CROSS_SECTIONAL"
+            if structural_cap < benchmark_cap - 1e-12
+            else "BENCHMARK_OR_EQUAL"
+        )
+
         visible_i = len(panel.ts) - 1
         raw_assets = self._asset_targets(panel, visible_i, braked_strategy_weights)
         target_assets, exposure_diag = enforce_asset_concentration(
@@ -190,9 +204,10 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
         result["target_asset_weights"] = target_assets
         result["cash_residual_weight"] = max(0.0, 1.0 - sum(target_assets.values()))
         result["state_break"] = transition
+        result["cross_sectional_risk_brake"] = structural_brake
         result["fast_brake"] = brake_diag
         result["underlying_exposure_guard"] = exposure_diag
-        result["execution_target_source"] = "H20_PREDICTION_MIX_PLUS_STATE_BREAK_AND_UNDERLYING_EXPOSURE_GUARD"
+        result["execution_target_source"] = "H20_PREDICTION_MIX_PLUS_DUAL_FAST_BRAKE_AND_UNDERLYING_EXPOSURE_GUARD"
         result["capital_capacity"] = capacity
         result["product_execution_plan"] = product_plan
         result["product_execution_status"] = product_plan.get("status")
@@ -211,8 +226,8 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             "scores are equal to numerical precision. H1 is diagnostic-only and may not promote, reverse direction, or "
             "overwrite H20. During OPEN/BREAK the newest daily observation is excluded from the prediction horizons because "
             "it is incomplete. Immediate switching cost is subtracted directly in horizon-return units and is not annualized. "
-            "The fast state-break layer remains brake-only and can reduce risk after selection. No coefficient is retuned "
-            "from realized post-decision outcomes."
+            "Benchmark state-break and cross-sectional concentration signals are both brake-only; the tighter risk cap wins. "
+            "No coefficient is retuned from realized post-decision outcomes."
         )
         result["projected_field_semantics"] = (
             "Legacy projected_annualized_expected_net_return fields remain for API compatibility and still contain "
