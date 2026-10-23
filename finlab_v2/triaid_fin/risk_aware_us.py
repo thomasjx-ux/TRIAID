@@ -9,6 +9,7 @@ from .prediction_adjustment import (
     build_market_horizon_state,
     build_us_prediction_adjustment,
 )
+from .product_execution_bridge import build_product_execution_plan
 from .risk_transition import apply_fast_brake, detect_state_break, enforce_asset_concentration
 from .us_return_max import USReturnMaxRoute
 
@@ -22,8 +23,8 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
     state-break brake and underlying-exposure limits.
     """
 
-    version = "us-return-max-route@0.8.1"
-    overlay_version = "us-risk-overlay@0.2.1"
+    version = "us-return-max-route@0.9.0"
+    overlay_version = "us-risk-overlay@0.3.0"
 
     def _rebuild_capacity(self, panel: Any, input_phase: str | None, target_assets: dict[str, float]) -> dict:
         completed_i = self._completed_index(panel, input_phase)
@@ -161,6 +162,14 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
             sid for sid, weight in predicted_strategy_weights.items()
             if sid != "P28_CASH" and float(weight) > 1e-12
         ]
+        capacity = self._rebuild_capacity(panel, input_phase, target_assets)
+        product_plan = build_product_execution_plan(
+            target_assets,
+            capacity,
+            input_phase,
+            quote_receipts=None,
+        )
+
         result["route_version"] = self.version
         result["base_route_version"] = USReturnMaxRoute.version
         result["risk_overlay_version"] = self.overlay_version
@@ -184,19 +193,26 @@ class RiskAwareUSReturnMaxRoute(USReturnMaxRoute):
         result["fast_brake"] = brake_diag
         result["underlying_exposure_guard"] = exposure_diag
         result["execution_target_source"] = "H20_PREDICTION_MIX_PLUS_STATE_BREAK_AND_UNDERLYING_EXPOSURE_GUARD"
-        result["capital_capacity"] = self._rebuild_capacity(panel, input_phase, target_assets)
+        result["capital_capacity"] = capacity
+        result["product_execution_plan"] = product_plan
+        result["product_execution_status"] = product_plan.get("status")
+        result["product_execution_semantics"] = (
+            "TARGET_ASSET_WEIGHTS ARE INTENT ONLY. A DOWNSTREAM FRESH L1 RECEIPT MUST REBUILD THE PRODUCT PLAN "
+            "BEFORE ANY SIMULATED FILL CAN BE RECORDED. BROKER EXECUTION REMAINS DISABLED."
+        )
         if isinstance(result.get("fast_challenger"), dict):
             result["fast_challenger"]["selection_relation"] = "DIAGNOSTIC_ONLY_NOT_USED_BY_H20_PREDICTION_SELECTION"
         result["selection_metric_semantics"] = (
             "The internal prediction overlay no longer treats StrategyState.expected_net_return as a future forecast. "
             "For H20 and H5 it first rescales that legacy historical annualized state estimate to the matching horizon, "
             "blends it without fitted coefficients with same-horizon realized strategy momentum, and caps amplitude at "
-            "two trailing daily-volatility sigmas with a fixed minimum noise floor. H20 alone controls promotion and "
-            "cross-sectional ordering. H5 is consulted only when H20 net scores are equal to numerical precision. H1 is "
-            "diagnostic-only and may not promote, reverse direction, or overwrite H20. During OPEN/BREAK the newest "
-            "daily observation is excluded from the prediction horizons because it is incomplete. Immediate switching "
-            "cost is subtracted directly in horizon-return units and is not annualized. The fast state-break layer remains "
-            "brake-only and can reduce risk after selection. No coefficient is retuned from realized post-decision outcomes."
+            "the larger of two trailing daily-volatility sigmas and a fixed empirical absolute-tail floor from completed "
+            "observations. H20 alone controls promotion and cross-sectional ordering. H5 is consulted only when H20 net "
+            "scores are equal to numerical precision. H1 is diagnostic-only and may not promote, reverse direction, or "
+            "overwrite H20. During OPEN/BREAK the newest daily observation is excluded from the prediction horizons because "
+            "it is incomplete. Immediate switching cost is subtracted directly in horizon-return units and is not annualized. "
+            "The fast state-break layer remains brake-only and can reduce risk after selection. No coefficient is retuned "
+            "from realized post-decision outcomes."
         )
         result["projected_field_semantics"] = (
             "Legacy projected_annualized_expected_net_return fields remain for API compatibility and still contain "
