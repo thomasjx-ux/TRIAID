@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from triaid_fin.product_execution_bridge import build_product_execution_plan
+from datetime import datetime, timezone
+
+from triaid_fin.product_execution_bridge import (
+    build_product_execution_plan,
+    quote_receipts_from_l1,
+)
 
 
 def _capacity() -> dict:
@@ -57,28 +62,47 @@ def main() -> None:
     spy = next(row for row in stale["products"] if row["symbol"] == "SPY")
     assert spy["quote_verification"]["status"] == "STALE"
 
+    now = datetime(2026, 10, 23, 14, 30, tzinfo=timezone.utc)
+    normalized = quote_receipts_from_l1(
+        {
+            "provider": "alpaca-market-data@test",
+            "execution_grade": False,
+            "symbols": {
+                "SPY": {
+                    "bid_price": 699.90,
+                    "ask_price": 700.10,
+                    "timestamp": "2026-10-23T14:29:30Z",
+                },
+                "QQQ": {
+                    "bid_price": 599.90,
+                    "ask_price": 600.10,
+                    "timestamp": "2026-10-23T14:29:40Z",
+                },
+            },
+        },
+        now=now,
+    )
+    assert abs(normalized["SPY"]["price"] - 700.0) < 1e-12
+    assert abs(normalized["SPY"]["age_seconds"] - 30.0) < 1e-12
+    assert normalized["SPY"]["spread_bps"] > 0.0
+
     fresh = build_product_execution_plan(
         weights,
         _capacity(),
         "OPEN",
-        {
-            "SPY": {"price": 700.0, "age_seconds": 30, "source": "test"},
-            "QQQ": {"price": 600.0, "age_seconds": 20, "source": "test"},
-        },
+        normalized,
     )
     assert fresh["status"] == "READY_FOR_SIMULATED_EXECUTION", fresh
     assert fresh["all_required_quotes_verified"] is True
     assert fresh["all_capacity_verified"] is True
     assert all(row["product_state"] == "READY" for row in fresh["products"])
+    assert fresh["broker_execution_enabled"] is False
 
     outside = build_product_execution_plan(
         weights,
         _capacity(),
         "POSTCLOSE",
-        {
-            "SPY": {"price": 700.0, "age_seconds": 30, "source": "test"},
-            "QQQ": {"price": 600.0, "age_seconds": 20, "source": "test"},
-        },
+        normalized,
     )
     assert outside["status"] == "REVIEW_ONLY_OUTSIDE_EXECUTION_SESSION", outside
 
