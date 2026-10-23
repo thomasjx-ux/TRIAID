@@ -8,16 +8,19 @@ from .contracts import StrategyState
 from .opportunity_state import build_opportunity_state, opportunity_profile
 
 
-VERSION = "market-prediction-adjustment@0.4.0"
+VERSION = "market-prediction-adjustment@0.5.0"
 MARKET_VERSIONS = {
-    "US": "us-prediction-adjustment@0.4.0",
-    "CN": "cn-prediction-adjustment@0.4.0",
-    "HK": "hk-prediction-adjustment@0.4.0",
+    "US": "us-prediction-adjustment@0.5.0",
+    "CN": "cn-prediction-adjustment@0.5.0",
+    "HK": "hk-prediction-adjustment@0.5.0",
 }
 HORIZONS = (1, 5, 20)
 TRADING_DAYS = 252.0
 SIGMA_CAP_MULTIPLE = 2.0
 MIN_DAILY_NOISE_FLOOR = 0.0025
+TAIL_LOOKBACK = 63
+TAIL_QUANTILE = 0.90
+TAIL_MULTIPLIER = 1.25
 INCOMPLETE_DAILY_PHASES = {"OPEN", "BREAK"}
 
 
@@ -55,9 +58,42 @@ def _trailing_daily_vol(recent_returns: list[float], lookback: int = 20) -> floa
     return pstdev(sample) if len(sample) > 1 else 0.0
 
 
+def _abs_quantile(values: list[float], quantile: float) -> float:
+    sample = sorted(abs(float(x)) for x in values)
+    if not sample:
+        return 0.0
+    q = max(0.0, min(1.0, float(quantile)))
+    if len(sample) == 1:
+        return sample[0]
+    position = q * (len(sample) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(sample) - 1)
+    fraction = position - lower
+    return sample[lower] * (1.0 - fraction) + sample[upper] * fraction
+
+
+def _amplitude_components(recent_returns: list[float], horizon: int) -> dict:
+    sigma_daily = max(_trailing_daily_vol(recent_returns), MIN_DAILY_NOISE_FLOOR)
+    gaussian_daily_cap = SIGMA_CAP_MULTIPLE * sigma_daily
+    tail_sample = [float(x) for x in recent_returns[-TAIL_LOOKBACK:]]
+    empirical_abs_tail = _abs_quantile(tail_sample, TAIL_QUANTILE)
+    empirical_daily_cap = TAIL_MULTIPLIER * empirical_abs_tail
+    daily_cap = max(gaussian_daily_cap, empirical_daily_cap)
+    cap = daily_cap * sqrt(float(horizon))
+    return {
+        "sigma_daily": float(sigma_daily),
+        "gaussian_daily_cap": float(gaussian_daily_cap),
+        "empirical_abs_tail_daily": float(empirical_abs_tail),
+        "empirical_daily_cap": float(empirical_daily_cap),
+        "daily_cap": float(daily_cap),
+        "horizon_cap": float(cap),
+        "tail_floor_applied": bool(empirical_daily_cap > gaussian_daily_cap + 1e-15),
+        "tail_observation_count": len(tail_sample),
+    }
+
+
 def _amplitude_cap(recent_returns: list[float], horizon: int) -> float:
-    sigma = max(_trailing_daily_vol(recent_returns), MIN_DAILY_NOISE_FLOOR)
-    return SIGMA_CAP_MULTIPLE * sigma * sqrt(float(horizon))
+    return float(_amplitude_components(recent_returns, horizon)["horizon_cap"])
 
 
 def _clip(value: float, cap: float) -> float:
@@ -80,7 +116,8 @@ def _horizon_forecast(state: StrategyState, horizon: int, input_phase: str | Non
         raw = (anchor + coverage * momentum) / (1.0 + coverage)
         blend = "LEGACY_STATE_ANCHOR_PLUS_SAME_HORIZON_REALIZED_MOMENTUM"
 
-    cap = _amplitude_cap(recent, horizon)
+    amplitude = _amplitude_components(recent, horizon)
+    cap = float(amplitude["horizon_cap"])
     calibrated = _clip(raw, cap)
     return {
         "horizon_days": int(horizon),
@@ -89,6 +126,12 @@ def _horizon_forecast(state: StrategyState, horizon: int, input_phase: str | Non
         "history_coverage": float(coverage),
         "raw_horizon_return": float(raw),
         "amplitude_cap_abs_return": float(cap),
+        "amplitude_sigma_daily": amplitude["sigma_daily"],
+        "amplitude_gaussian_daily_cap": amplitude["gaussian_daily_cap"],
+        "amplitude_empirical_abs_tail_daily": amplitude["empirical_abs_tail_daily"],
+        "amplitude_empirical_daily_cap": amplitude["empirical_daily_cap"],
+        "amplitude_tail_floor_applied": amplitude["tail_floor_applied"],
+        "amplitude_tail_observation_count": amplitude["tail_observation_count"],
         "calibrated_horizon_return": float(calibrated),
         "cap_applied": bool(abs(raw) > cap + 1e-15),
         "incomplete_latest_observation_dropped": incomplete_dropped,
@@ -349,10 +392,15 @@ def build_market_prediction_adjustment(
             "drop_latest_observation_in_those_phases": True,
         },
         "amplitude_calibration": {
-            "method": "TWO_SIGMA_TRAILING_DAILY_VOLATILITY_CAP",
+            "method": "MAX_TWO_SIGMA_AND_EMPIRICAL_ABS_TAIL_FLOOR",
             "sigma_multiple": SIGMA_CAP_MULTIPLE,
             "minimum_daily_noise_floor": MIN_DAILY_NOISE_FLOOR,
+            "tail_lookback_completed_observations": TAIL_LOOKBACK,
+            "tail_quantile": TAIL_QUANTILE,
+            "tail_multiplier": TAIL_MULTIPLIER,
+            "horizon_scaling": "SQRT_TIME",
             "outcome_specific_retuning": False,
+            "prospective_discipline": "PARAMETERS_FIXED_BEFORE_FUTURE_OUTCOME_OBSERVATION",
         },
         "switch_cost_semantics": "IMMEDIATE_META_SWITCH_COST_SUBTRACTED_DIRECTLY_FROM_HORIZON_RETURN; NOT ANNUALIZED",
         "max_strategy_weight_constraint": hard_cap,
@@ -367,7 +415,7 @@ def build_market_prediction_adjustment(
             "soft_invalidation": "MARKET_OPPORTUNITY_REGIME_LEVEL_LT_2",
             "hard_invalidation": "SELECTED_STRATEGY_H20_NET_AFTER_SWITCH_COST_LE_0_OR_ADMISSIBILITY_FAILURE",
             "latency_metric": "INVALIDATION_LATENCY_IN_COMPLETED_OBSERVATIONS",
-            "future_outcome_requirement": "LATENCY_IS_NOT FABRICATED BEFORE SEQUENTIAL EVIDENCE EXISTS",
+            "future_outcome_requirement": "LATENCY_IS_NOT_FABRICATED_BEFORE_SEQUENTIAL_EVIDENCE_EXISTS",
         },
         "rows": ranked,
     }
