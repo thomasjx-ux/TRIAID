@@ -16,8 +16,9 @@ if str(FINLAB) not in sys.path:
 
 from triaid_fin.core import TriaidCoreModule
 from triaid_fin.evolution import CoreParameters
-from triaid_fin.market_lab import prepare_live_market
+from triaid_fin.market_lab import market_data_latest_quotes, prepare_live_market
 from triaid_fin.market_registry import MARKETS
+from triaid_fin.product_execution_bridge import build_product_execution_plan, quote_receipts_from_l1
 from triaid_fin.risk_aware_us import RiskAwareUSReturnMaxRoute
 from triaid_fin.strategy_population import StrategyPopulationModule
 from triaid_fin.trading_calendar import VERSION as CALENDAR_VERSION, trading_day_info
@@ -26,7 +27,7 @@ from triaid_fin.value_frontier_shadow_v2 import allocate_shadow, VERSION as SHAD
 PROTOCOL_VERSION = "gpt-forward-validation@1.1.0"
 RISK_OVERLAY_PROTOCOL_VERSION = "gpt-risk-overlay@0.1.0"
 CONSTITUTION_VERSION = "triaid-constitution@1.0.0"
-RUNNER_VERSION = "gpt-us-independent-runner@1.1.0"
+RUNNER_VERSION = "gpt-us-independent-runner@1.2.0"
 EVALUATION_VERSION = "gpt-forward-evaluation@1.0.0"
 CAPITAL_CASES = (100_000.0, 1_000_000.0, 10_000_000.0, 100_000_000.0)
 
@@ -124,6 +125,50 @@ def main() -> int:
         previous_decision=None,
     )
 
+    target_assets = {
+        str(symbol): float(weight)
+        for symbol, weight in (route.get("target_asset_weights") or {}).items()
+        if float(weight) > 1e-12
+    }
+    quote_payload = {
+        "available": False,
+        "market_id": "US",
+        "product": "QUOTE_L1",
+        "provider": None,
+        "symbols": {},
+        "reason": "NO_TARGET_PRODUCTS",
+    }
+    quote_error = None
+    if target_assets:
+        try:
+            quote_payload = market_data_latest_quotes("US", list(target_assets))
+        except Exception as exc:
+            quote_error = f"{type(exc).__name__}:{exc}"
+            quote_payload = {
+                "available": False,
+                "market_id": "US",
+                "product": "QUOTE_L1",
+                "provider": None,
+                "symbols": {},
+                "reason": "QUOTE_L1_FETCH_FAILED",
+            }
+    quote_receipts = quote_receipts_from_l1(quote_payload, now=now)
+    product_execution_plan = build_product_execution_plan(
+        target_assets,
+        route.get("capital_capacity"),
+        meta.get("session_phase"),
+        quote_receipts,
+    )
+    route["product_execution_plan"] = product_execution_plan
+    route["product_execution_status"] = product_execution_plan.get("status")
+    route["quote_l1_evidence"] = {
+        "available": bool(quote_payload.get("available")),
+        "provider": quote_payload.get("provider"),
+        "target_symbols": sorted(target_assets),
+        "received_symbols": sorted(quote_receipts),
+        "error": quote_error,
+    }
+
     shadow = allocate_shadow(
         "US",
         states,
@@ -217,8 +262,11 @@ def main() -> int:
         "selection_diagnostics": route.get("candidate_selection_scores"),
         "core_diagnostics": generic.diagnostics,
         "state_break": route.get("state_break"),
+        "cross_sectional_risk_brake": route.get("cross_sectional_risk_brake"),
         "fast_brake": route.get("fast_brake"),
         "underlying_exposure_guard": route.get("underlying_exposure_guard"),
+        "product_execution_plan": product_execution_plan,
+        "quote_l1_evidence": route.get("quote_l1_evidence"),
         "us_route": route,
         "modeled_turnover": shadow.get("modeled_turnover"),
         "modeled_cost": shadow.get("modeled_execution_cost"),
@@ -240,6 +288,7 @@ def main() -> int:
             "turnover",
             "modeled_cost",
             "capacity_status",
+            "product_execution_status",
             "missed_opportunity",
         ],
         "research_only": True,
@@ -259,7 +308,9 @@ def main() -> int:
                 "t0_trade_date": payload["t0_trade_date"],
                 "target_t1_trade_date": payload["target_t1_trade_date"],
                 "state_break_level": (payload.get("state_break") or {}).get("level"),
-                "risk_cap": (payload.get("state_break") or {}).get("risk_cap"),
+                "cross_sectional_risk_status": (payload.get("cross_sectional_risk_brake") or {}).get("status"),
+                "risk_cap": (payload.get("fast_brake") or {}).get("effective_risk_cap"),
+                "product_execution_status": product_execution_plan.get("status"),
                 "canonical_payload_sha256": payload["canonical_payload_sha256"],
             }
         )
