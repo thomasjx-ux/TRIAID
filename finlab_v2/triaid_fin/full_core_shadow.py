@@ -13,12 +13,13 @@ from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
 from .contracts import StrategyState
+from .multi_scale_prediction import build_multiscale_prediction
 from .strategy_population import StrategyPopulationModule
 from .strategy_registry import POLICY_IDS
 from .value_frontier_shadow_v2 import allocate_shadow
 
 
-VERSION = "full-core-shadow@0.1.0"
+VERSION = "full-core-shadow@0.2.0"
 LIFECYCLE_VERSION = "independent-lifecycle@0.1.0"
 ESTABLISHED_POLICY_IDS = frozenset(POLICY_IDS)
 
@@ -40,6 +41,7 @@ class FullCoreShadowDecision:
     shadow_weights: dict[str, float]
     weight_delta: dict[str, float]
     allocation: dict[str, Any]
+    multi_scale_prediction: dict[str, Any]
     configured_risk_budget: float
     allocation_risk_budget: float
     risk_budget_basis: str
@@ -125,6 +127,7 @@ def run_full_core_shadow(
     *,
     production_weights: Mapping[str, float],
     previous_weights: Mapping[str, float] | None = None,
+    previous_multiscale: Mapping[str, Any] | None = None,
     population: StrategyPopulationModule | None = None,
     max_members: int = 10,
     risk_budget: float = 1.0,
@@ -134,6 +137,11 @@ def run_full_core_shadow(
 ) -> FullCoreShadowDecision:
     frozen_states=list(states)
     shadow_states,lifecycle_reasons,lifecycle_changes=independent_lifecycle(frozen_states)
+    multi_scale=build_multiscale_prediction(
+        market_id,
+        shadow_states,
+        previous=previous_multiscale,
+    )
     population=population or StrategyPopulationModule()
 
     group=population.select(
@@ -199,6 +207,7 @@ def run_full_core_shadow(
         shadow_weights=shadow,
         weight_delta={sid:shadow.get(sid,0.0)-production.get(sid,0.0) for sid in ids},
         allocation=allocation.to_dict(),
+        multi_scale_prediction=multi_scale.to_dict(),
         configured_risk_budget=float(risk_budget),
         allocation_risk_budget=allocation_risk_budget,
         risk_budget_basis=risk_budget_basis,
